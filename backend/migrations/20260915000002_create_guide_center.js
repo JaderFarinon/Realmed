@@ -47,7 +47,7 @@ exports.up = async (knex) => {
     t.enu('document_type', ['CONSULTATION_GUIDE','PHYSIOTHERAPY_GUIDE','PHYSIO_ASSESSMENT','ELECTROSTIMULATION','INSURANCE_CARD','OTHER']).notNullable()
     t.string('file_path', 255).notNullable(); t.string('original_name', 255).notNullable(); t.string('mime_type', 100).notNullable(); t.bigInteger('file_size').unsigned().notNullable()
     t.enu('source', ['UPLOADED','GENERATED','IMPORTED']).notNullable().defaultTo('UPLOADED'); t.integer('uploaded_by').unsigned().notNullable().references('id').inTable('users').onDelete('RESTRICT')
-    t.integer('replaced_by_document_id').unsigned(); t.timestamp('deleted_at'); timestamp(t, knex); t.index(['guide_process_id','document_type','deleted_at'], 'idx_guide_docs_active')
+    t.integer('replaced_by_document_id').unsigned(); t.dateTime('deleted_at').nullable(); timestamp(t, knex); t.index(['guide_process_id','document_type','deleted_at'], 'idx_guide_docs_active')
   })
   await knex.schema.alterTable('guide_process_documents', (t) => t.foreign('replaced_by_document_id').references('id').inTable('guide_process_documents').onDelete('SET NULL'))
   await knex.schema.createTable('guide_authorizations', (t) => {
@@ -58,7 +58,7 @@ exports.up = async (knex) => {
   })
   await knex.schema.createTable('guide_process_pending_items', (t) => {
     t.increments('id').primary(); t.integer('guide_process_id').unsigned().notNullable().references('id').inTable('guide_processes').onDelete('CASCADE'); t.string('description', 255).notNullable(); t.enu('status', ['OPEN','RESOLVED']).notNullable().defaultTo('OPEN')
-    t.integer('created_by').unsigned().notNullable().references('id').inTable('users').onDelete('RESTRICT'); t.integer('resolved_by').unsigned().references('id').inTable('users').onDelete('RESTRICT'); t.timestamp('created_at').notNullable().defaultTo(knex.fn.now()); t.timestamp('resolved_at'); t.text('notes'); t.index(['guide_process_id','status'])
+    t.integer('created_by').unsigned().notNullable().references('id').inTable('users').onDelete('RESTRICT'); t.integer('resolved_by').unsigned().references('id').inTable('users').onDelete('RESTRICT'); t.timestamp('created_at').notNullable().defaultTo(knex.fn.now()); t.dateTime('resolved_at').nullable(); t.text('notes'); t.index(['guide_process_id','status'])
   })
   await knex.schema.createTable('guide_process_history', (t) => {
     t.bigIncrements('id').primary(); t.integer('guide_process_id').unsigned().notNullable().references('id').inTable('guide_processes').onDelete('CASCADE'); t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('RESTRICT')
