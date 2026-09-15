@@ -15,7 +15,9 @@
       </RouterLink>
       <nav class="space-y-2">
         <RouterLink to="/dashboard" class="menu-link">Dashboard</RouterLink>
-        <RouterLink to="/central-de-guias" class="menu-link">Central de Guias</RouterLink>
+        <p class="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Central de Guias</p>
+        <RouterLink to="/central-de-guias/novo" class="menu-link sub">Novo Tratamento</RouterLink>
+        <RouterLink to="/central-de-guias/tratamentos" class="menu-link sub">Gestão de Tratamentos</RouterLink>
         <RouterLink to="/pacientes" class="menu-link">Pacientes</RouterLink>
         <p class="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Cadastros</p>
         <RouterLink to="/cadastros/convenios" class="menu-link sub">Convênios</RouterLink>

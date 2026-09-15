@@ -1,12 +1,12 @@
 <template>
-  <PageShell title="Central de Guias" subtitle="Fila operacional de preparação e liberação de processos">
+  <PageShell title="Gestão de Tratamentos" subtitle="Fila do faturamento para liberação dos tratamentos">
     <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Filas da Central de Guias">
       <button v-for="tab in tabs" :key="tab.key" class="whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-semibold" :class="activeTab === tab.key ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 bg-white text-gray-600'" @click="selectTab(tab.key)">{{ tab.label }}</button>
     </nav>
 
     <section class="panel space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 class="font-semibold text-gray-900">{{ currentTabLabel }}</h2><p class="text-sm text-gray-500">{{ total }} processo(s) nesta visão</p></div>
+        <div><h2 class="font-semibold text-gray-900">{{ currentTabLabel }}</h2><p class="text-sm text-gray-500">{{ total }} tratamento(s) nesta visão</p></div>
         <button class="btn-secondary" :aria-expanded="showFilters" @click="showFilters = !showFilters">⚙ Filtros <span v-if="activeFilterCount" class="ml-1 rounded-full bg-brand-100 px-2 text-brand-700">{{ activeFilterCount }}</span></button>
       </div>
       <form v-show="showFilters" class="grid gap-3 border-t pt-4 sm:grid-cols-2 xl:grid-cols-4" @submit.prevent="load(1)">
@@ -30,8 +30,8 @@
 
     <div class="panel overflow-x-auto p-0">
       <table class="table"><thead><tr><th>Paciente</th><th>Convênio</th><th>Fisioterapeuta</th><th>Avaliação</th><th>Início previsto</th><th>Sessões</th><th>Documentação</th><th>Liberação</th><th>Prioridade</th><th>Ação</th></tr></thead>
-        <tbody><tr v-for="item in data" :key="item.id"><td class="font-semibold text-gray-900">{{ item.patient_name }}</td><td>{{ item.insurance_name }}</td><td>{{ item.physiotherapist_name }}</td><td>{{ date(item.assessment_date) }}</td><td class="font-medium">{{ date(item.expected_start_date) }}</td><td class="whitespace-nowrap"><b>{{ item.requested_sessions }}</b> solicitadas<br><span class="text-gray-500">{{ item.authorized_sessions ?? '—' }} autorizadas</span></td><td><StatusBadge :value="item.document_status" :labels="documentStatusLabels" /></td><td><StatusBadge :value="item.authorization_status" :labels="authorizationStatusLabels" /></td><td>{{ priorityLabel(item.priority) }}</td><td><RouterLink class="btn-secondary inline-block" :to="`/central-de-guias/${item.id}`">Abrir</RouterLink></td></tr>
-        <tr v-if="!data.length"><td colspan="10" class="py-10 text-center text-gray-500">Nenhum processo encontrado nesta fila.</td></tr></tbody></table>
+        <tbody><tr v-for="item in data" :key="item.id"><td class="font-semibold text-gray-900">{{ item.patient_name }}</td><td>{{ item.insurance_name }}</td><td>{{ item.physiotherapist_name }}</td><td>{{ date(item.assessment_date) }}</td><td class="font-medium">{{ date(item.expected_start_date) }}</td><td class="whitespace-nowrap"><b>{{ item.requested_sessions }}</b> solicitadas<br><span class="text-gray-500">{{ item.authorized_sessions ?? '—' }} autorizadas</span></td><td><StatusBadge :value="item.document_status" :labels="documentStatusLabels" /></td><td><span class="whitespace-nowrap font-semibold">{{ treatmentStatusLabel(item) }}</span><p v-if="item.authorization_status === 'PENDING'" class="text-xs text-error-700">Pendência do convênio</p></td><td>{{ priorityLabel(item.priority) }}</td><td><RouterLink class="btn-secondary inline-block" :to="`/central-de-guias/tratamentos/${item.id}`">Abrir</RouterLink></td></tr>
+        <tr v-if="!data.length"><td colspan="10" class="py-10 text-center text-gray-500">Nenhum tratamento encontrado nesta fila.</td></tr></tbody></table>
       <div class="flex items-center justify-between p-4 text-sm"><button class="btn-secondary" :disabled="page <= 1" @click="load(page - 1)">Anterior</button><span>Página {{ page }} de {{ pages }}</span><button class="btn-secondary" :disabled="page >= pages" @click="load(page + 1)">Próxima</button></div>
     </div>
   </PageShell>
@@ -45,9 +45,10 @@ import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { authorizationStatusLabels, billingStatusLabels, documentStatusLabels, treatmentStatusLabels } from '@/utils/guideLabels'
+import { treatmentStatusLabel } from '@/utils/treatmentStatus'
 
 const route = useRoute(), router = useRouter(), data = ref<any[]>([]), insurers = ref<any[]>([]), professionals = ref<any[]>([]), page = ref(1), pages = ref(1), total = ref(0), showFilters = ref(false)
-const tabs = [{key:'READY',label:'Pendentes de liberação'},{key:'IN_PROGRESS',label:'Em liberação'},{key:'PENDING',label:'Com pendência'},{key:'AUTHORIZED,SESSION_TOKEN,NOT_REQUIRED',label:'Liberados'},{key:'NOT_READY',label:'Em preparação'},{key:'ALL',label:'Todos'}]
+const tabs = [{key:'READY',label:'Pendentes'},{key:'IN_PROGRESS,PENDING',label:'Encaminhados ao Convênio'},{key:'DENIED',label:'Não Liberados'},{key:'AUTHORIZED,SESSION_TOKEN,NOT_REQUIRED',label:'Liberados'},{key:'NOT_READY',label:'Faltando Documentação'},{key:'ALL',label:'Todos'}]
 const filters = reactive<Record<string,string>>({ search:'', insurance_provider_id:'', physiotherapist_id:'', requesting_doctor_id:'', authorization_status:'READY', document_status:'', treatment_status:'', billing_status:'', priority:'', assessment_date_from:'', assessment_date_to:'', expected_start_date_from:'', expected_start_date_to:'', sort:'start_asc' })
 const activeTab = computed(() => tabs.some(t => t.key === filters.authorization_status) ? filters.authorization_status : 'ALL')
 const currentTabLabel = computed(() => tabs.find(t => t.key === activeTab.value)?.label || 'Todos')

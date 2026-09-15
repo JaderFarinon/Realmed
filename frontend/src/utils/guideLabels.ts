@@ -1,15 +1,15 @@
 export const documentStatusLabels = {
-  INCOMPLETE: 'Documentação pendente',
+  INCOMPLETE: 'Faltando documentação',
   COMPLETE: 'Documentação completa',
 } as const
 
 export const authorizationStatusLabels = {
   NOT_READY: 'Em preparação',
-  READY: 'Pendente de liberação',
-  IN_PROGRESS: 'Em liberação',
+  READY: 'Pendente',
+  IN_PROGRESS: 'Encaminhado ao convênio',
   PENDING: 'Pendência do convênio',
   AUTHORIZED: 'Liberado',
-  DENIED: 'Negado',
+  DENIED: 'Não liberado',
   SESSION_TOKEN: 'Liberação por sessão / token',
   NOT_REQUIRED: 'Não requer liberação',
 } as const
@@ -39,7 +39,7 @@ export const documentTypeLabels = { CONSULTATION_GUIDE: 'Guia de consulta', PHYS
 export const pendingStatusLabels = { OPEN: 'Em aberto', RESOLVED: 'Resolvida' } as const
 
 export const historyLabels: Record<string, string> = {
-  PROCESS_CREATED: 'Processo criado', DOCUMENT_UPLOADED: 'Documento anexado', DOCUMENT_REPLACED: 'Documento substituído', DOCUMENT_REMOVED: 'Documento removido', DOCUMENT_GENERATED: 'Documento gerado', DOCUMENT_PREVIEWED: 'Documento pré-visualizado', DOCUMENT_REGENERATED: 'Documento gerado novamente', STATUS_CHANGED: 'Status alterado', FIELD_CHANGED: 'Informação alterada', AUTHORIZATION_STARTED: 'Liberação iniciada', AUTHORIZATION_CREATED: 'Liberação registrada', AUTHORIZATION_UPDATED: 'Liberação atualizada', PENDING_ITEM_CREATED: 'Pendência do convênio registrada', PENDING_ITEM_RESOLVED: 'Liberação retomada após pendência',
+  PROCESS_CREATED: 'Tratamento criado', TREATMENT_CREATED: 'Tratamento criado', DOCUMENT_RECEIVED: 'Documento recebido', DOCUMENT_MARKED_USABLE: 'Documento marcado como adequado', DOCUMENT_MARKED_NEEDS_ADJUSTMENT: 'Documento marcado como necessitando ajuste', TREATMENT_READY_FOR_AUTHORIZATION: 'Tratamento encaminhado ao faturamento', DOCUMENT_UPLOADED: 'Documento anexado', DOCUMENT_REPLACED: 'Documento substituído', DOCUMENT_REMOVED: 'Documento removido', DOCUMENT_GENERATED: 'Documento gerado', DOCUMENT_PREVIEWED: 'Documento pré-visualizado', DOCUMENT_REGENERATED: 'Documento gerado novamente', STATUS_CHANGED: 'Status alterado', FIELD_CHANGED: 'Informação alterada', AUTHORIZATION_STARTED: 'Liberação iniciada', SENT_TO_INSURANCE: 'Encaminhado ao convênio', AUTHORIZATION_PENDING: 'Pendência do convênio registrada', AUTHORIZED: 'Tratamento liberado', DENIED: 'Tratamento não liberado', AUTHORIZATION_CREATED: 'Liberação registrada', AUTHORIZATION_UPDATED: 'Liberação atualizada', PENDING_ITEM_CREATED: 'Pendência do convênio registrada', PENDING_ITEM_RESOLVED: 'Liberação retomada após pendência',
 }
 
 export type LabelMap = Record<string, string>
