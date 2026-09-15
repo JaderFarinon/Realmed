@@ -8,15 +8,15 @@ const auth = require('../middleware/auth')
 const { modulePermission } = require('../middleware/permission')
 const { knex, history, handle, id, documents } = require('./guide-center')
 const { syncDocumentStatus } = require('../services/guideWorkflow')
+const { validateImageUpload } = require('../services/imageAssetService')
 
 const router = express.Router()
 const storage = path.resolve(__dirname, '../../storage')
 roots.generated = path.join(storage, 'generated')
 const documentTypes = new Set(['CONSULTATION_GUIDE','PHYSIOTHERAPY_GUIDE','ELECTROSTIMULATION','OTHER'])
-const png = (b) => b.length > 8 && b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
-const jpg = (b) => b.length > 4 && b[0] === 0xff && b[1] === 0xd8 && b[b.length-2] === 0xff && b[b.length-1] === 0xd9
 const pdf = (b) => b.length > 5 && b.subarray(0,5).toString() === '%PDF-'
 const raw = express.raw({type:['application/pdf','image/png','image/jpeg'], limit:'10mb'})
+const imageRaw = express.raw({ type: ['image/png', 'image/jpeg'], limit: '5mb' })
 const originalName = (req) => path.basename(decodeURIComponent(String(req.headers['x-file-name'] || 'arquivo')))
 
 router.use(auth)
@@ -25,20 +25,20 @@ async function replaceAsset(req, res, config) {
   const trx = await knex.transaction(); let target
   try {
     const ownerId=id(req.params.id), mime=String(req.headers['content-type']||'').split(';')[0], body=req.body
-    if (!Buffer.isBuffer(body) || !body.length || !config.accept[mime]?.(body)) throw Object.assign(new Error(config.error), {status:400})
+    const validated = validateImageUpload({ buffer: body, mimeType: mime, originalName: req.headers['x-file-name'], allowedMimeTypes: config.allowedMimeTypes })
     const owner=await trx(config.ownerTable).where({id:ownerId}).first(); if(!owner) throw Object.assign(new Error('Cadastro não encontrado.'),{status:404})
     if(config.doctor && owner.type!=='DOCTOR') throw Object.assign(new Error('Somente médicos podem possuir assinatura.'),{status:422})
-    await fs.mkdir(config.root,{recursive:true}); const filename=`${crypto.randomUUID()}${mime==='image/png'?'.png':'.jpg'}`; target=safeFile(config.root,filename); await fs.writeFile(target,body,{flag:'wx'})
+    await fs.mkdir(config.root,{recursive:true}); const filename=`${crypto.randomUUID()}${validated.extension}`; target=safeFile(config.root,filename); await fs.writeFile(target,body,{flag:'wx'})
     await trx(config.table).where(config.ownerKey,ownerId).where({active:true}).update({active:false})
-    const data={[config.ownerKey]:ownerId,file_path:filename,original_name:originalName(req),mime_type:mime,active:true}; if(config.createdBy)data.created_by=req.user.id; if(config.assetType)data.asset_type=config.assetType
+    const data={[config.ownerKey]:ownerId,file_path:filename,original_name:validated.originalName,mime_type:mime,active:true,created_by:req.user.id}; if(config.fileSize)data.file_size=body.length; if(config.assetType)data.asset_type=config.assetType
     const [assetId]=await trx(config.table).insert(data); await trx.commit(); res.status(201).json({id:assetId,original_name:data.original_name,mime_type:mime,active:true})
   } catch(e){await trx.rollback();if(target)await fs.unlink(target).catch(()=>{});handle(res,e)}
 }
-const signatureConfig={table:'professional_signatures',ownerTable:'professionals',ownerKey:'professional_id',root:roots.signatures,doctor:true,createdBy:true,accept:{'image/png':png},error:'A assinatura deve ser um PNG válido.'}
-const logoConfig={table:'insurance_provider_assets',ownerTable:'insurance_providers',ownerKey:'insurance_provider_id',root:roots.logos,assetType:'LOGO',accept:{'image/png':png,'image/jpeg':jpg},error:'A logo deve ser um PNG ou JPG válido.'}
+const signatureConfig={table:'professional_signatures',ownerTable:'professionals',ownerKey:'professional_id',root:roots.signatures,doctor:true,allowedMimeTypes:['image/png']}
+const logoConfig={table:'insurance_provider_assets',ownerTable:'insurance_providers',ownerKey:'insurance_provider_id',root:roots.logos,assetType:'LOGO',fileSize:true,allowedMimeTypes:['image/png','image/jpeg']}
 router.post('/professionals/:id/signature',modulePermission('professionals','edit'),raw,(req,res)=>replaceAsset(req,res,signatureConfig))
 router.get('/professionals/:id/signature',modulePermission('professionals'),async(req,res)=>serveAsset(res,'professional_signatures','professional_id',id(req.params.id),roots.signatures))
-router.post('/insurance-providers/:id/logo',modulePermission('insurance_providers','edit'),raw,(req,res)=>replaceAsset(req,res,logoConfig))
+router.post('/insurance-providers/:id/logo',modulePermission('insurance_providers','edit'),imageRaw,(req,res)=>replaceAsset(req,res,logoConfig))
 router.get('/insurance-providers/:id/logo',modulePermission('insurance_providers'),async(req,res)=>serveAsset(res,'insurance_provider_assets','insurance_provider_id',id(req.params.id),roots.logos,{asset_type:'LOGO'}))
 async function serveAsset(res,table,key,value,root,extra={}){try{const row=await knex(table).where({[key]:value,active:true,...extra}).orderBy('created_at','desc').first();if(!row)throw Object.assign(new Error('Arquivo não encontrado.'),{status:404});res.type(row.mime_type).sendFile(safeFile(root,row.file_path))}catch(e){handle(res,e)}}
 
@@ -63,6 +63,7 @@ async function generationContext(processId,templateId){
   const signature=template.fields.some(f=>f.field_key==='DOCTOR_SIGNATURE')?await knex('professional_signatures').where({professional_id:process.requesting_doctor_id,active:true}).orderBy('created_at','desc').first():null
   const logo=template.fields.some(f=>f.field_key==='INSURANCE_LOGO')?await knex('insurance_provider_assets').where({insurance_provider_id:process.insurance_provider_id,asset_type:'LOGO',active:true}).orderBy('created_at','desc').first():null
   for(const f of template.fields){let options=f.options;if(typeof options==='string')try{options=JSON.parse(options)}catch{options={}};if(options?.required&&f.field_key==='DOCTOR_SIGNATURE'&&!signature)missing.push('assinatura do médico');if(options?.required&&f.field_key==='INSURANCE_LOGO'&&!logo)missing.push('logo do convênio')}
+  if(missing.includes('logo do convênio'))throw Object.assign(new Error('Este modelo exige a logo do convênio, mas nenhuma logo está cadastrada.'),{status:422,missing:['logo do convênio']})
   if(missing.length)throw Object.assign(new Error(`Não foi possível gerar. Campos faltantes: ${[...new Set(missing)].join(', ')}.`),{status:422,missing:[...new Set(missing)]})
   return {process,template,procedures,signature,logo}
 }

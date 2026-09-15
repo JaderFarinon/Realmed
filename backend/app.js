@@ -40,6 +40,7 @@ function createApp() {
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }))
   app.use((error, _req, res, _next) => {
+    if (error?.type === 'entity.too.large') return res.status(413).json({ error: 'O arquivo excede o limite permitido de 5 MB.' })
     console.error('[API] Erro não tratado:', error)
     res.status(500).json({ error: 'Erro interno do servidor.' })
   })
