@@ -83,9 +83,28 @@ const canManageRole = (currentRole, targetRole) => {
   return currentLevel > targetLevel;
 };
 
+const db = require('../db');
+const modulePermission = (moduleKey, action = 'view') => async (req, res, next) => {
+  if (normalizeRoleValue(req.user?.role) === 'masteradmin') return next();
+  const column = { view: 'can_view', create: 'can_create', edit: 'can_edit', delete: 'can_delete' }[action];
+  if (!column) return res.status(500).json({ error: 'Ação de permissão inválida.' });
+  try {
+    const [rows] = await db.query(
+      `SELECT ${column} AS allowed FROM user_permissions WHERE user_id = ? AND module_key = ? LIMIT 1`,
+      [req.user.id, moduleKey],
+    );
+    if (!rows[0]?.allowed) return res.status(403).json({ error: DEFAULT_DENIED_MESSAGE });
+    return next();
+  } catch (error) {
+    console.error('[Permissões] Falha ao validar módulo:', error);
+    return res.status(500).json({ error: 'Não foi possível validar a permissão.' });
+  }
+};
+
 module.exports = {
   permissionMiddleware,
   canManageRole,
   ROLE_LEVEL,
   normalizeRoleValue,
+  modulePermission,
 };

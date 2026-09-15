@@ -16,6 +16,12 @@
       </RouterLink>
       <nav class="space-y-2">
         <RouterLink to="/dashboard" class="menu-link">Dashboard</RouterLink>
+        <RouterLink to="/central-de-guias" class="menu-link">Central de Guias</RouterLink>
+        <RouterLink to="/pacientes" class="menu-link">Pacientes</RouterLink>
+        <p class="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Cadastros</p>
+        <RouterLink to="/cadastros/convenios" class="menu-link sub">Convênios</RouterLink>
+        <RouterLink to="/cadastros/profissionais" class="menu-link sub">Profissionais</RouterLink>
+        <RouterLink to="/cadastros/procedimentos" class="menu-link sub">Procedimentos</RouterLink>
         <RouterLink v-if="isAdmin" to="/usuarios" class="menu-link">Usuários</RouterLink>
       </nav>
     </aside>
@@ -59,7 +65,7 @@ const logout = () => {
   clearUser()
   router.push('/login')
 }
-</script>
+;</script>
 <style scoped>
 .menu-link {
   display: block;
@@ -75,4 +81,5 @@ const logout = () => {
 .dark .menu-link {
   color: #d0d5dd;
 }
+.menu-link.sub { padding-left: 2rem; font-size: .9rem; }
 </style>

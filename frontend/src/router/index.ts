@@ -20,6 +20,13 @@ const router = createRouter({
       component: () => import('@/views/Configuracoes/UsuariosView.vue'),
       meta: { title: 'Usuários', admin: true },
     },
+    { path: '/central-de-guias', component: () => import('@/views/Guides/GuideList.vue'), meta: { title: 'Central de Guias' } },
+    { path: '/central-de-guias/:id', component: () => import('@/views/Guides/GuideDetail.vue'), meta: { title: 'Processo' } },
+    { path: '/pacientes', component: () => import('@/views/Patients/PatientsView.vue'), meta: { title: 'Pacientes' } },
+    { path: '/pacientes/:id', component: () => import('@/views/Patients/PatientDetail.vue'), meta: { title: 'Paciente' } },
+    { path: '/cadastros/convenios', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Convênios', catalog: 'insurance' } },
+    { path: '/cadastros/profissionais', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Profissionais', catalog: 'professionals' } },
+    { path: '/cadastros/procedimentos', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Procedimentos', catalog: 'procedures' } },
     {
       path: '/:pathMatch(.*)*',
       component: () => import('@/views/NotFound.vue'),
