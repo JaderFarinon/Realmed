@@ -134,3 +134,9 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Private generated/user content (keep directory structure only)
+storage/**
+!storage/README.md
+!storage/**/.gitkeep
+backend/uploads/
