@@ -49,3 +49,19 @@ JSON http://localhost:3001/api-docs-json
 
 DOC https://documenter.getpostman.com/view/4934061/2sB2qfBKeU
 
+
+## Central de Guias
+
+Os módulos administrativos usam as chaves `guide_processes`, `patients`,
+`insurance_providers`, `professionals`, `procedures`, `authorizations` e `reports`
+em `user_permissions`. O perfil `masteradmin` mantém acesso integral.
+
+Os arquivos são enviados como corpo binário para
+`POST /api/guide-processes/:id/documents?documentType=...`, com `Content-Type` e
+`X-File-Name`. Somente PDF, JPEG e PNG de até 10 MB são aceitos. O conteúdo fica
+em `storage/documents`, com nome UUID, e nunca é servido como diretório estático.
+A visualização usa exclusivamente `GET /api/documents/:id/download`, autenticado.
+
+Recursos REST: `/api/insurance-providers`, `/api/professionals`,
+`/api/procedures`, `/api/patients`, `/api/guide-processes` e seus sub-recursos de
+documentos, autorizações, pendências e histórico, além de `/api/dashboard`.

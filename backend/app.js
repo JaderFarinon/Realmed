@@ -7,6 +7,8 @@ const db = require('./db')
 const authRoutes = require('./routes/auth')
 const usuariosRoutes = require('./routes/usuarios')
 const permissoesRoutes = require('./routes/permissoes')
+const guideCenterRoutes = require('./routes/guide-center').router
+const guideOperationsRoutes = require('./routes/guide-operations')
 
 const PORT = Number(process.env.PORT || 3005)
 
@@ -29,6 +31,8 @@ function createApp() {
   app.use('/api/auth', authRoutes)
   app.use('/api/usuarios', usuariosRoutes)
   app.use('/api/permissoes', permissoesRoutes)
+  app.use('/api', guideCenterRoutes)
+  app.use('/api', guideOperationsRoutes)
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }))
   app.use((error, _req, res, _next) => {
