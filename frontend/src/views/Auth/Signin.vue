@@ -4,8 +4,8 @@
       class="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-900"
     >
       <div class="mb-8 text-center">
-        <img src="/images/logo/logo-icon.svg" class="mx-auto h-14 w-14" alt="Central de Guias" />
-        <h1 class="mt-4 text-2xl font-bold dark:text-white">Central de Guias</h1>
+        <img src="/images/logo/logo-icon.svg" class="mx-auto h-14 w-14" alt="Realmed" />
+        <h1 class="mt-4 text-2xl font-bold dark:text-white">REALMED</h1>
         <p class="mt-1 text-sm text-gray-500">Entre para acessar o sistema</p>
       </div>
       <form class="space-y-5" @submit.prevent="submit">

@@ -41,7 +41,7 @@ const router = createRouter({
   ],
 })
 router.beforeEach(async (to) => {
-  document.title = `${String(to.meta.title || 'Central de Guias')} | Central de Guias`
+  document.title = `${String(to.meta.title || 'Realmed')} | Realmed`
   const token = localStorage.getItem('token')
   if (to.meta.public) return to.path === '/login' && token ? '/dashboard' : true
   if (!token) return { path: '/login', query: { redirect: to.fullPath } }

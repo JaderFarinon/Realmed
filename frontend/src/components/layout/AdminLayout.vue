@@ -11,8 +11,7 @@
         to="/dashboard"
         class="mb-8 flex items-center gap-3 font-semibold text-gray-900 dark:text-white"
       >
-        <img src="/images/logo/logo-icon.svg" class="h-8 w-8" alt="Central de Guias" /> Central de
-        Guias
+        <img src="/images/logo/logo-icon.svg" class="h-8 w-8" alt="Realmed" /> REALMED
       </RouterLink>
       <nav class="space-y-2">
         <RouterLink to="/dashboard" class="menu-link">Dashboard</RouterLink>
