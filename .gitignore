@@ -140,3 +140,4 @@ storage/**
 !storage/README.md
 !storage/**/.gitkeep
 backend/uploads/
+cd.zip
