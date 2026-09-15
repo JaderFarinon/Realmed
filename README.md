@@ -1,6 +1,6 @@
-# Central de Guias
+# Realmed
 
-Base técnica para a Central de Guias e Autorizações, composta por frontend Vue 3, API Node.js/Express e MySQL. Nesta etapa estão disponíveis apenas autenticação, layout, dashboard e administração de usuários/permissões.
+Sistema Realmed, composto por frontend Vue 3, API Node.js/Express e MySQL. A Central de Guias é o módulo responsável pelo fluxo operacional de preparação documental e liberação junto aos convênios.
 
 ## Configuração
 

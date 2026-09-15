@@ -3,21 +3,21 @@
     <section class="panel">
       <form class="grid gap-3 md:grid-cols-4" @submit.prevent="saveTemplate">
         <input v-model="form.name" class="input" placeholder="Nome" required>
-        <select v-model="form.document_type" class="input" required><option value="" disabled>Tipo</option><option v-for="type in types" :key="type">{{ type }}</option></select>
+        <select v-model="form.document_type" class="input" required><option value="" disabled>Tipo</option><option v-for="type in types" :key="type" :value="type">{{ documentTypeLabels[type as keyof typeof documentTypeLabels] }}</option></select>
         <select v-model="form.insurance_provider_id" class="input"><option value="">Genérico (todos)</option><option v-for="i in insurances" :key="i.id" :value="i.id">{{ i.name }}</option></select>
         <button class="btn">{{ editing ? 'Salvar' : 'Criar modelo' }}</button>
       </form>
     </section>
     <section class="panel overflow-x-auto">
       <table class="table"><thead><tr><th>Nome</th><th>Tipo</th><th>Convênio</th><th>Versão</th><th>PDF cadastrado</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-        <tr v-for="item in templates" :key="item.id"><td>{{ item.name }}</td><td>{{ item.document_type }}</td><td>{{ item.insurance_name || 'Genérico' }}</td><td>v{{ item.version }}</td><td>{{ item.template_file_path ? 'Sim' : 'Não' }}</td><td>{{ item.active ? 'Ativo' : 'Inativo' }}</td><td class="space-x-2"><button class="link" @click="edit(item)">Configurar</button><label class="link">Enviar PDF<input class="hidden" type="file" accept="application/pdf" @change="uploadTemplate($event,item.id)"></label><button class="link" @click="toggle(item)">{{ item.active ? 'Desativar' : 'Ativar' }}</button></td></tr>
+        <tr v-for="item in templates" :key="item.id"><td>{{ item.name }}</td><td>{{ documentTypeLabels[item.document_type as keyof typeof documentTypeLabels] }}</td><td>{{ item.insurance_name || 'Genérico' }}</td><td>v{{ item.version }}</td><td>{{ item.template_file_path ? 'Sim' : 'Não' }}</td><td>{{ item.active ? 'Ativo' : 'Inativo' }}</td><td class="space-x-2"><button class="link" @click="edit(item)">Configurar</button><label class="link">Enviar PDF<input class="hidden" type="file" accept="application/pdf" @change="uploadTemplate($event,item.id)"></label><button class="link" @click="toggle(item)">{{ item.active ? 'Desativar' : 'Ativar' }}</button></td></tr>
       </tbody></table>
     </section>
     <section v-if="editing" class="panel">
       <h2 class="section-title">Campos do modelo</h2>
       <p class="mb-3 text-sm text-gray-500"><b>X:</b> distância da esquerda. <b>Y:</b> distância do topo. As medidas são pontos do PDF original.</p>
       <div class="overflow-x-auto"><table class="table"><thead><tr><th>Campo</th><th>Página</th><th>X</th><th>Y</th><th>Largura</th><th>Altura</th><th>Fonte</th><th>Alinhamento</th><th>Obrigatório</th><th></th></tr></thead><tbody>
-        <tr v-for="(field,index) in fields" :key="index"><td><select v-model="field.field_key" class="input min-w-64"><optgroup v-for="category in keyCategories" :key="category.label" :label="category.label"><option v-for="key in category.keys" :key="key">{{ key }}</option></optgroup></select></td><td><input v-model.number="field.page" class="input w-20" type="number" min="1"></td><td><input v-model.number="field.x" class="input w-24" type="number"></td><td><input v-model.number="field.y" class="input w-24" type="number"></td><td><input v-model.number="field.width" class="input w-24" type="number"></td><td><input v-model.number="field.height" class="input w-24" type="number"></td><td><input v-model.number="field.font_size" class="input w-24" type="number"></td><td><select v-model="field.alignment" class="input"><option>LEFT</option><option>CENTER</option><option>RIGHT</option></select></td><td class="text-center"><input v-model="field.options.required" type="checkbox"></td><td><button class="link" @click="fields.splice(index,1)">Remover</button></td></tr>
+        <tr v-for="(field,index) in fields" :key="index"><td><select v-model="field.field_key" class="input min-w-64"><optgroup v-for="category in keyCategories" :key="category.label" :label="category.label"><option v-for="key in category.keys" :key="key">{{ key }}</option></optgroup></select></td><td><input v-model.number="field.page" class="input w-20" type="number" min="1"></td><td><input v-model.number="field.x" class="input w-24" type="number"></td><td><input v-model.number="field.y" class="input w-24" type="number"></td><td><input v-model.number="field.width" class="input w-24" type="number"></td><td><input v-model.number="field.height" class="input w-24" type="number"></td><td><input v-model.number="field.font_size" class="input w-24" type="number"></td><td><select v-model="field.alignment" class="input"><option value="LEFT">Esquerda</option><option value="CENTER">Centro</option><option value="RIGHT">Direita</option></select></td><td class="text-center"><input v-model="field.options.required" type="checkbox"></td><td><button class="link" @click="fields.splice(index,1)">Remover</button></td></tr>
       </tbody></table></div>
       <div class="mt-3 flex gap-3"><button class="btn" @click="addField">Adicionar campo</button><button class="btn" @click="saveFields">Salvar campos</button></div>
     </section>
@@ -28,6 +28,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
+import { documentTypeLabels } from '@/utils/guideLabels'
 
 const types = ['CONSULTATION_GUIDE', 'PHYSIOTHERAPY_GUIDE', 'ELECTROSTIMULATION', 'OTHER']
 const keyCategories = [
