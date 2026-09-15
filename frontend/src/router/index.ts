@@ -20,6 +20,11 @@ const router = createRouter({
       component: () => import('@/views/Configuracoes/UsuariosView.vue'),
       meta: { title: 'Usuários', admin: true },
     },
+    {
+      path: '/integracoes/stenci',
+      component: () => import('@/views/Integrations/StenciView.vue'),
+      meta: { title: 'Integração Stenci', admin: true },
+    },
     { path: '/central-de-guias', component: () => import('@/views/Guides/GuideList.vue'), meta: { title: 'Central de Guias' } },
     { path: '/central-de-guias/:id', component: () => import('@/views/Guides/GuideDetail.vue'), meta: { title: 'Processo' } },
     { path: '/pacientes', component: () => import('@/views/Patients/PatientsView.vue'), meta: { title: 'Pacientes' } },

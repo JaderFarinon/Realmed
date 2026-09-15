@@ -24,6 +24,8 @@
         <RouterLink to="/cadastros/procedimentos" class="menu-link sub">Procedimentos</RouterLink>
         <RouterLink to="/cadastros/modelos-documentos" class="menu-link sub">Modelos de Documentos</RouterLink>
         <RouterLink v-if="isAdmin" to="/usuarios" class="menu-link">Usuários</RouterLink>
+        <p v-if="isAdmin" class="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Integrações</p>
+        <RouterLink v-if="isAdmin" to="/integracoes/stenci" class="menu-link sub">Stenci</RouterLink>
       </nav>
     </aside>
     <div class="lg:pl-64">
