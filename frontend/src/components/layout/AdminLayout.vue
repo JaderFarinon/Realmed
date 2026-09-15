@@ -22,6 +22,7 @@
         <RouterLink to="/cadastros/convenios" class="menu-link sub">Convênios</RouterLink>
         <RouterLink to="/cadastros/profissionais" class="menu-link sub">Profissionais</RouterLink>
         <RouterLink to="/cadastros/procedimentos" class="menu-link sub">Procedimentos</RouterLink>
+        <RouterLink to="/cadastros/modelos-documentos" class="menu-link sub">Modelos de Documentos</RouterLink>
         <RouterLink v-if="isAdmin" to="/usuarios" class="menu-link">Usuários</RouterLink>
       </nav>
     </aside>
