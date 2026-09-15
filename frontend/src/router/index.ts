@@ -26,6 +26,7 @@ const router = createRouter({
     { path: '/pacientes/:id', component: () => import('@/views/Patients/PatientDetail.vue'), meta: { title: 'Paciente' } },
     { path: '/cadastros/convenios', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Convênios', catalog: 'insurance' } },
     { path: '/cadastros/profissionais', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Profissionais', catalog: 'professionals' } },
+    { path: '/cadastros/modelos-documentos', component: () => import('@/views/Cadastros/DocumentTemplatesView.vue'), meta: { title: 'Modelos de Documentos' } },
     { path: '/cadastros/procedimentos', component: () => import('@/views/Cadastros/CatalogView.vue'), meta: { title: 'Procedimentos', catalog: 'procedures' } },
     {
       path: '/:pathMatch(.*)*',
