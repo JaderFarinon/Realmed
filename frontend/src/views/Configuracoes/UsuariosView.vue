@@ -1,289 +1,166 @@
 <template>
-  <AdminLayout>
-    <PageBreadcrumbIcons
-      page-title="Usuários"
-      :buttons="botoes"
-      @novo="abrirCriacao"
-      @editar="editarSelecionado"
-      @visualizar="editarSelecionado"
-      @excluir="confirmarExclusaoSelecionado"
-    />
-
-    <div class="flex flex-col min-h-[calc(100vh-180px)]">
-      <ComponentCard
-        title="Usuários"
-        desc="Gerencie logins e permissões dos usuários do sistema."
-        class-name="flex flex-col flex-1 mb-[15px]"
-        body-class="flex flex-col flex-1 min-h-0"
-        content-class="flex flex-col flex-1 min-h-0 gap-4"
-      >
-        <div
-          v-if="verificandoPermissoes"
-          class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-        >
-          Carregando permissões do usuário...
+  <AdminLayout
+    ><div
+      class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+    >
+      <div class="mb-5 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold dark:text-white">Usuários</h1>
+          <p class="text-sm text-gray-500">Gerencie os acessos administrativos.</p>
         </div>
-
-        <div
-          v-else-if="!podeAcessar"
-          class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-        >
-          {{ mensagemSemPermissao }}
-        </div>
-
-        <UsuariosTable
-          v-else
-          ref="tabelaRef"
-          :role-labels="roleLabels"
-          :status-options="statusOptions"
-          :filtro-role-options="filtroRoleOptions"
-          :pode-gerenciar-role="podeGerenciarRole"
-          @selecionado-change="onSelecionadoChange"
-          @erro="mostrarErroTabela"
-          @carregando-change="onCarregandoChange"
-        />
-      </ComponentCard>
+        <button class="rounded-lg bg-brand-500 px-4 py-2 text-white" @click="edit()">
+          Novo usuário
+        </button>
+      </div>
+      <p v-if="message" class="mb-4 text-sm text-red-600">{{ message }}</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b dark:border-gray-700">
+            <tr>
+              <th class="p-3">Nome</th>
+              <th class="p-3">Login</th>
+              <th class="p-3">Perfil</th>
+              <th class="p-3">Status</th>
+              <th class="p-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="loading">
+              <td colspan="5" class="p-6 text-center">Carregando...</td>
+            </tr>
+            <tr v-for="user in users" :key="user.id" class="border-b dark:border-gray-800">
+              <td class="p-3">
+                {{ user.nome }}<small class="block text-gray-500">{{ user.email }}</small>
+              </td>
+              <td class="p-3">{{ user.login }}</td>
+              <td class="p-3">{{ user.role }}</td>
+              <td class="p-3">{{ user.status }}</td>
+              <td class="p-3 text-right">
+                <button class="mr-3 text-brand-500" @click="edit(user)">Editar</button
+                ><button class="text-red-600" @click="remove(user)">Excluir</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-
-    <ModalUsuario
-      :aberto="modalAberto"
-      :usuario="usuarioSelecionado"
-      :roles-disponiveis="rolesDisponiveis"
-      @fechar="fecharModal"
-      @sucesso="aoSalvar"
-      @erro="mostrarErro"
-    />
-  </AdminLayout>
+    <div v-if="show" class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+      <form
+        class="grid w-full max-w-2xl grid-cols-1 gap-4 rounded-2xl bg-white p-6 dark:bg-gray-900 sm:grid-cols-2"
+        @submit.prevent="save"
+      >
+        <h2 class="text-xl font-semibold dark:text-white sm:col-span-2">
+          {{ form.id ? 'Editar' : 'Novo' }} usuário
+        </h2>
+        <label v-for="field in fields" :key="field.key" class="text-sm dark:text-gray-200"
+          >{{ field.label
+          }}<input
+            v-model="form[field.key]"
+            :type="field.type || 'text'"
+            :required="field.required"
+            class="mt-1 h-10 w-full rounded-lg border border-gray-300 px-3 dark:border-gray-700 dark:bg-gray-950" /></label
+        ><label class="text-sm dark:text-gray-200"
+          >Perfil<select
+            v-model="form.role"
+            class="mt-1 h-10 w-full rounded-lg border px-3 dark:bg-gray-950"
+          >
+            <option v-for="role in roles" :key="role">{{ role }}</option>
+          </select></label
+        ><label class="text-sm dark:text-gray-200"
+          >Status<select
+            v-model="form.status"
+            class="mt-1 h-10 w-full rounded-lg border px-3 dark:bg-gray-950"
+          >
+            <option value="active">Ativo</option>
+            <option value="inactive">Inativo</option>
+            <option value="blocked">Bloqueado</option>
+          </select></label
+        >
+        <div class="flex justify-end gap-3 sm:col-span-2">
+          <button type="button" class="rounded-lg border px-4 py-2" @click="show = false">
+            Cancelar</button
+          ><button class="rounded-lg bg-brand-500 px-4 py-2 text-white">Salvar</button>
+        </div>
+      </form>
+    </div></AdminLayout
+  >
 </template>
-
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
-import PageBreadcrumbIcons from '@/components/common/PageBreadcrumbIcons.vue'
-import ComponentCard from '@/components/common/ComponentCard.vue'
-import ModalUsuario from '@/components/forms/usuarios/ModalUsuario.vue'
-import UsuariosTable from '@/components/tables/usuarios/UsuariosTable.vue'
-import api from '@/plugins/axios'
-import { removerUsuario as removerUsuarioApi, type Usuario, type UsuarioRole, type UsuarioStatus } from '@/services/usuarios'
-import { useToast } from '@/composables/useToast'
-import { PERMISSION_DENIED_MESSAGE, showPermissionDeniedModal } from '@/composables/usePermissionDeniedModal'
-import { canManageRole } from '@/utils/roles'
-
-interface AuthUser {
-  id: number
-  username: string
-  role?: UsuarioRole | string
-  name?: string | null
-}
-
-const usuarioSelecionado = ref<Usuario | null>(null)
-const modalAberto = ref(false)
-const usuarioAtual = ref<AuthUser | null>(null)
-const tabelaRef = ref<InstanceType<typeof UsuariosTable> | null>(null)
-const carregandoLista = ref(false)
-const verificandoPermissoes = ref(true)
-const toast = useToast()
-const mensagemSemPermissao = PERMISSION_DENIED_MESSAGE
-
-const roleLabels: Record<UsuarioRole, string> = {
-  masteradmin: 'Master Admin',
-  admin: 'Administrador',
-  cac_coord: 'Coordenação do CAC',
-  cac: 'CAC',
-  secretaria: 'Secretaria',
-  user: 'Usuário',
-  doctor: 'Médico',
-  nurse: 'Enfermeiro(a)',
-  pharmacist: 'Farmacêutico(a)',
-  patient: 'Paciente',
-}
-
-const ordenarPorLabel = (roles: UsuarioRole[]) =>
-  [...roles].sort((a, b) => roleLabels[a].localeCompare(roleLabels[b], 'pt-BR'))
-
-const statusOptions: Array<{ value: UsuarioStatus; label: string }> = [
-  { value: 'active', label: 'Ativo' },
-  { value: 'inactive', label: 'Inativo' },
-  { value: 'blocked', label: 'Bloqueado' },
+import {
+  atualizarUsuario,
+  criarUsuario,
+  listarUsuarios,
+  removerUsuario,
+  type Usuario,
+  type UsuarioPayload,
+  type UsuarioRole,
+} from '@/services/usuarios'
+const users = ref<Usuario[]>([]),
+  loading = ref(false),
+  show = ref(false),
+  message = ref('')
+const roles: UsuarioRole[] = ['admin', 'user', 'doctor', 'nurse', 'pharmacist', 'patient']
+type Form = UsuarioPayload & { id?: number }
+const blank = (): Form => ({
+  nome: '',
+  email: '',
+  telefone: '',
+  documento: '',
+  login: '',
+  senha: '',
+  role: 'user',
+  status: 'active',
+})
+const form = reactive<Form>(blank())
+const fields: Array<{
+  key: 'nome' | 'email' | 'telefone' | 'documento' | 'login' | 'senha'
+  label: string
+  type?: string
+  required?: boolean
+}> = [
+  { key: 'nome', label: 'Nome', required: true },
+  { key: 'email', label: 'E-mail', type: 'email', required: true },
+  { key: 'telefone', label: 'Telefone' },
+  { key: 'documento', label: 'Documento', required: true },
+  { key: 'login', label: 'Login', required: true },
+  { key: 'senha', label: 'Senha (mínimo 8 caracteres)', type: 'password' },
 ]
-
-const todasRoles: UsuarioRole[] = ordenarPorLabel([
-  'masteradmin',
-  'admin',
-  'cac_coord',
-  'cac',
-  'secretaria',
-  'user',
-  'doctor',
-  'nurse',
-  'pharmacist',
-  'patient',
-])
-
-const podeAcessar = computed(() => {
-  const role = usuarioAtual.value?.role
-  return role === 'masteradmin' || role === 'admin'
-})
-
-const podeCriar = computed(() => podeAcessar.value)
-
-const rolesDisponiveis = computed<UsuarioRole[]>(() => {
-  if (usuarioAtual.value?.role === 'masteradmin') {
-    return [...todasRoles]
-  }
-
-  if (usuarioAtual.value?.role === 'admin') {
-    return ordenarPorLabel(
-      todasRoles.filter((role) => role !== 'masteradmin'),
-    )
-  }
-
-  return []
-})
-
-const filtroRoleOptions = computed(() => {
-  const permissoes =
-    usuarioAtual.value?.role === 'masteradmin'
-      ? todasRoles
-      : rolesDisponiveis.value
-  return permissoes.map((role) => ({ value: role, label: roleLabels[role] }))
-})
-
-const podeGerenciarRole = (role: UsuarioRole) =>
-  canManageRole(usuarioAtual.value?.role ?? null, role)
-
-const podeEditarUsuario = (usuario: Usuario) => podeGerenciarRole(usuario.role)
-
-const podeExcluirUsuario = (usuario: Usuario) => {
-  if (!podeGerenciarRole(usuario.role)) return false
-  return usuarioAtual.value?.id !== usuario.id
-}
-
-const botoes = computed(() => {
-  const selecionado = usuarioSelecionado.value
-  const podeEditar = selecionado ? podeEditarUsuario(selecionado) : false
-  const podeExcluir = selecionado ? podeExcluirUsuario(selecionado) : false
-
-  return {
-    novo: { visible: true, disabled: !podeCriar.value || carregandoLista.value },
-    editar: {
-      visible: true,
-      disabled: carregandoLista.value || !podeEditar,
-    },
-    excluir: {
-      visible: true,
-      disabled: carregandoLista.value || !podeExcluir,
-    },
-  }
-})
-
-const mostrarNotificacao = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
-  if (type === 'success') {
-    toast.success(message)
-  } else if (type === 'error') {
-    toast.error(message)
-  } else if (type === 'info') {
-    toast.info(message)
-  } else {
-    toast.warning(message)
-  }
-}
-
-const extrairMensagemErro = (erro: unknown, padrao: string) => {
-  if (typeof erro === 'object' && erro !== null) {
-    const resposta = (erro as { response?: { data?: { error?: unknown } } }).response
-    const mensagem = resposta?.data?.error
-    if (typeof mensagem === 'string' && mensagem.trim().length > 0) {
-      return mensagem
-    }
-  }
-
-  if (erro instanceof Error && erro.message.trim().length > 0) {
-    return erro.message
-  }
-
-  return padrao
-}
-
-const carregarUsuarioAtual = async () => {
+const errorMessage = (error: unknown, fallback: string) =>
+  (error as { response?: { data?: { error?: string } } }).response?.data?.error || fallback
+const load = async () => {
+  loading.value = true
   try {
-    const { data } = await api.get<{ user: AuthUser }>('/auth/me')
-    usuarioAtual.value = data.user
-  } catch {
-    usuarioAtual.value = null
+    users.value = await listarUsuarios()
+  } catch (error) {
+    message.value = errorMessage(error, 'Erro ao carregar usuários.')
+  } finally {
+    loading.value = false
   }
 }
-
-const abrirCriacao = () => {
-  if (!podeCriar.value || carregandoLista.value) return
-  usuarioSelecionado.value = null
-  tabelaRef.value?.limparSelecao()
-  modalAberto.value = true
+const edit = (u?: Usuario) => {
+  Object.assign(form, u ? { ...u, senha: '' } : blank())
+  show.value = true
 }
-
-const editarSelecionado = () => {
-  const usuario = usuarioSelecionado.value
-  if (!usuario || !podeEditarUsuario(usuario) || carregandoLista.value) return
-  modalAberto.value = true
-}
-
-const fecharModal = () => {
-  modalAberto.value = false
-}
-
-const aoSalvar = (usuario: Usuario) => {
-  tabelaRef.value?.atualizarUsuario(usuario)
-  usuarioSelecionado.value = usuario
-  mostrarNotificacao('success', 'Usuário salvo com sucesso.')
-}
-
-const mostrarErro = (mensagem: string) => {
-  mostrarNotificacao('error', mensagem)
-}
-
-const confirmarExclusaoSelecionado = async () => {
-  const usuario = usuarioSelecionado.value
-  if (!usuario || !podeExcluirUsuario(usuario) || carregandoLista.value) return
-
-  const confirmado = window.confirm(`Deseja realmente excluir o usuário "${usuario.nome}"?`)
-  if (!confirmado) return
-
+const save = async () => {
   try {
-    await removerUsuarioApi(usuario.id)
-    tabelaRef.value?.removerUsuario(usuario.id)
-    usuarioSelecionado.value = null
-    mostrarNotificacao('success', 'Usuário excluído com sucesso.')
-  } catch (erro: unknown) {
-    mostrarNotificacao('error', extrairMensagemErro(erro, 'Não foi possível excluir o usuário.'))
+    if (form.id) await atualizarUsuario(form.id, form)
+    else await criarUsuario(form)
+    show.value = false
+    await load()
+  } catch (error) {
+    message.value = errorMessage(error, 'Erro ao salvar usuário.')
   }
 }
-
-const mostrarErroTabela = (mensagem: string) => {
-  if (mensagem) {
-    mostrarNotificacao('error', mensagem)
+const remove = async (u: Usuario) => {
+  if (!confirm(`Excluir ${u.nome}?`)) return
+  try {
+    await removerUsuario(u.id)
+    await load()
+  } catch (error) {
+    message.value = errorMessage(error, 'Erro ao excluir usuário.')
   }
 }
-
-const onSelecionadoChange = (usuario: Usuario | null) => {
-  usuarioSelecionado.value = usuario
-}
-
-const onCarregandoChange = (valor: boolean) => {
-  carregandoLista.value = valor
-}
-
-onMounted(async () => {
-  await carregarUsuarioAtual()
-  verificandoPermissoes.value = false
-})
-
-watch(
-  [() => verificandoPermissoes.value, () => podeAcessar.value],
-  ([verificando, pode]) => {
-    if (!verificando && !pode) {
-      showPermissionDeniedModal()
-    }
-  },
-  { immediate: true },
-)
+onMounted(load)
 </script>

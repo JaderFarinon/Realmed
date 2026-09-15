@@ -11,6 +11,7 @@ exports.up = function(knex) {
       table.string('email', 150).notNullable();
       table.date('birth_date');
       table.string('phone', 20);
+      table.string('avatar_url', 500);
       table.string('blood_type', 5);
       table.string('zip_code', 10);
       table.string('street', 100);
