@@ -1,0 +1,393 @@
+﻿@page "/NovaNotificacao"
+@using TinyMCE.Blazor
+@using NexusHealth_Blazor.Pages.Global
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProtectedSessionStore
+@inject Majorsoft.Blazor.Extensions.BrowserStorage.ILocalStorageService localStorage
+@inject NavigationManager Navigation
+@layout GlobalLayout
+@inject IJSRuntime JS
+@inject DialogService DialogService
+@inject Radzen.NotificationService NotificationService
+
+    <RadzenDialog />
+    <RadzenNotification />
+    <div class="page-wrapper" style="overflow: hidden; overflow-y: hidden;">
+        <!-- Page body -->
+        <div class="page-body" style="overflow: hidden; overflow-y: hidden;">
+            <RadzenCard Style="height: calc(100vh - 100px); margin: 5px;">
+                @if(ieIniciar)
+                {
+                    <RadzenSteps CanChange="@CanChange" ShowStepsButtons="ShowStepsButtons" PreviousText="Voltar" NextText="@NextText" Style="height: 100%; width: 100%;">
+                        <Steps>
+                            <EditForm Model="@notificacao" autocomplete="on" id="form" name="form" novalidate="novalidate">
+                            @* Identificação *@
+                            <RadzenStepsItem Disabled="@Disabled">
+                                <label TextStyle="TextStyle.H6"><b>Vamos começar com seus dados...</b></label>
+                                <div class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-8 col-md-10 col-lg-11">
+                                        <label class="form-label">Nome</label>
+                                        <div class="input-group input-group-flat">
+                                            <InputText autocomplete="on" type="text" class="form-control"  maxlength="200" @bind-Value="@notificacao.NmNotificador" placeholder="Digite seu nome..." />
+                                            <span class="input-group-text">
+                                                <kbd>Opcional</kbd>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-8 col-md-10 col-lg-11">
+                                        <label class="form-label">E-mail</label>
+                                        <div class="input-group input-group-flat" autocomplete="on">
+                                            <InputText autocomplete="on" type="email" class="form-control" maxlength="150" @bind-Value="@notificacao.DsEmailNotificador" placeholder="Digite seu e-mail..." />
+                                            <span class="input-group-text">
+                                                <kbd>Opcional</kbd>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-8 col-md-10 col-lg-11">
+                                        <div>
+                                            <div class="form-label">Setor</div>
+                                            <RadzenDropDownDataGrid Placeholder="Selecione seu setor" @bind-Value=@notificacao.CdSetorNotificador Change="@(() => {setVisibility();})" Data=@listaSetores.Where(x => x.NmSetor.ToUpper() != "TESTE")  Text="Incidente"  TextProperty="@nameof(Setor.NmSetor)" ValueProperty="@nameof(Setor.Id)" AllowVirtualization="true" FilterDelay="100" FilterOperator="StringFilterOperator.Contains" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Name="DropDownDataGridBindValue" Style="display: block; width: 100%; padding: .4375rem .75rem; font-family: var(--tblr-font-sans-serif); font-size: .875rem; font-weight: 400; line-height: 1.4285714286; color: inherit; background-color: var(--tblr-bg-forms); background-clip: padding-box; border: var(--tblr-border-width) solid var(--tblr-border-color); -webkit-appearance: none; -moz-appearance: none; appearance: none; border-radius: var(--tblr-border-radius); transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out; height: 37px;">
+                                            <Columns>
+                                                    <RadzenDropDownDataGridColumn Property="@nameof(Setor.NmSetor)" Title="Setor" Width="auto"/>
+                                                </Columns>
+                                            </RadzenDropDownDataGrid>
+                                            @* <select class="form-select" style="overflow-y: auto;" value="@notificacao.CdSetorNotificador" @onchange="@((ChangeEventArgs __e) => {notificacao.CdSetorNotificador = Convert.ToInt32(__e.Value); Console.WriteLine(__e.Value); StateHasChanged();})">
+                                                <option value="0">Selecione</option>
+                                                @foreach (Setor setor in listaSetores)
+                                                {
+                                                    <option value="@setor.Id">@setor.NmSetor</option>
+                                                }
+                                            </select> *@
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-8 col-md-10 col-lg-11">
+                                        <div>
+                                            <div class="form-label">Data do Incidente</div>
+                                            <input type="date" class="form-control" @bind="notificacao.DtNotificacao" min="2015-01-01">
+                                        </div>
+                                    </div>
+                                </div>
+                            </RadzenStepsItem Disabled="@Disabled">
+                            @* Tipo de Incidente *@
+                            <RadzenStepsItem Disabled="@Disabled">
+                                <label TextStyle="TextStyle.H6"><b>Nos conte mais informações sobre o que aconteceu...</b></label>
+                                
+                                <div class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <label class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="radios-inline" checked="@ieQualidade" @onclick="((e) => {ListarTipos(); ieQualidade = true; iePesquisa = false; notificacao.CdIncidente = null; notificacao.CdSubIncidente = null; notificacao.CdPaciente = null; notificacao.DsPaciente = null; notificacao.CdMedico = null; notificacao.CdAtendimento = null; notificacao.CdProtocolo = null; notificacao.CdMedicacao = null; notificacao.DsCateter = null; notificacao.DtAtendimento = null; notificacao.DsEscalaNews = null; setVisibility();})">
+                                            <span class="form-check-label">Qualidade</span>
+                                        </label>
+                                        <label class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="radios-inline" checked="@iePesquisa" @onclick="((e) => {ListarTipos(); ieQualidade = false; iePesquisa = true; notificacao.CdIncidente = null; notificacao.CdSubIncidente = null; notificacao.CdPaciente = null; notificacao.DsPaciente = null; notificacao.CdMedico = null; notificacao.CdAtendimento= null; notificacao.CdProtocolo = null; notificacao.CdMedicacao = null; notificacao.DsCateter = null; notificacao.DtAtendimento = null; notificacao.DsEscalaNews = null; setVisibility();})">
+                                            <span class="form-check-label">Pesquisa Clínica</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Tipo de Incidente</div>
+                                            <RadzenDropDownDataGrid Placeholder="Selecione o incidente" @bind-Value=@notificacao.CdIncidente Change="@(() => {setVisibility();})" Data=@listaTipos.Where(y => y.IeSubIncidente == false).OrderBy(x => x.DsTipo)  Text="Incidente" TextProperty="@nameof(NotificacaoIncidenteTipo.DsTipo)" ValueProperty="@nameof(NotificacaoIncidenteTipo.Id)" AllowVirtualization="true" FilterDelay="100" FilterOperator="StringFilterOperator.Contains" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Name="DropDownDataGridBindValue" Style="display: block; width: 100%; padding: .4375rem .75rem; font-family: var(--tblr-font-sans-serif); font-size: .875rem; font-weight: 400; line-height: 1.4285714286; color: inherit; background-color: var(--tblr-bg-forms); background-clip: padding-box; border: var(--tblr-border-width) solid var(--tblr-border-color); -webkit-appearance: none; -moz-appearance: none; appearance: none; border-radius: var(--tblr-border-radius); transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out; height: 37px;">
+                                            <Columns>
+                                                    <RadzenDropDownDataGridColumn Property="@nameof(NotificacaoIncidenteTipo.DsTipo)" Title="Incidente" Width="auto"/>
+                                                </Columns>
+                                            </RadzenDropDownDataGrid>
+                                            @* <select class="form-select" value="@"  data-live-search="true">
+                                                <option value="0">Selecione</option>
+                                                @foreach (NotificacaoIncidenteTipo tipo in listaTipos.Where(y => y.IeSubIncidente == false).OrderBy(x => x.DsTipo))
+                                                {
+                                                    <option value="@tipo.Id">@tipo.DsTipo</option>
+                                                }
+                                            </select> *@
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@subIncidente" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Sub-Tipo de Incidente</div>
+                                            <RadzenDropDownDataGrid  Placeholder="Selecione o sub-incidente" @bind-Value=@notificacao.CdSubIncidente Change="@(() => {setVisibility();})" Data=@listaTipos.Where(x => x.IeSubIncidente == true).OrderBy(y => y.DsTipo)  Text="Incidente" TextProperty="@nameof(NotificacaoIncidenteTipo.DsTipo)" ValueProperty="@nameof(NotificacaoIncidenteTipo.Id)" AllowVirtualization="true" FilterDelay="100" FilterOperator="StringFilterOperator.Contains" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Name="DropDownDataGridBindValue" Style="display: block; width: 100%; padding: .4375rem .75rem; font-family: var(--tblr-font-sans-serif); font-size: .875rem; font-weight: 400; line-height: 1.4285714286; color: inherit; background-color: var(--tblr-bg-forms); background-clip: padding-box; border: var(--tblr-border-width) solid var(--tblr-border-color); -webkit-appearance: none; -moz-appearance: none; appearance: none; border-radius: var(--tblr-border-radius); transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out; height: 37px;">
+                                                <Columns>
+                                                    <RadzenDropDownDataGridColumn Property="@nameof(NotificacaoIncidenteTipo.DsTipo)" Title="Sub-Incidente" Width="auto"/>
+                                                </Columns>
+                                            </RadzenDropDownDataGrid>
+                                            @* <select class="form-select" value="@notificacao.CdSubIncidente" @onchange="@((ChangeEventArgs __e) => {notificacao.CdSubIncidente = Convert.ToInt32(__e?.Value); setVisibility();})">
+                                                <option value="0">Selecione</option>
+                                                @foreach (NotificacaoIncidenteTipo tipo in listaTipos.Where(x => x.IeSubIncidente == true).OrderBy(x => x.DsTipo))
+                                                {
+                                                    <option value="@tipo.Id">@tipo.DsTipo</option>
+                                                }
+                                            </select> *@
+                                        </div>
+                                    </div>
+                                </div> 
+                                <div hidden="@pacienteHidden" class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-4 col-md-2 col-lg-2">
+                                        <div>
+                                            <label class="form-label">Código</label>
+                                            <input type="text" class="form-control" readonly="" id="iptPct" value="@notificacao.CdPaciente" placeholder="Clique aqui para buscar o paciente" @onfocus="@(() => {ModalOrigem = "#modal-buscapct"; ModalBuscaPct(); })" data-bs-toggle="@Modal" data-bs-target="@NomeModal">
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-8 col-md-4 col-lg-4">
+                                        <label class="form-label">Nome</label>
+                                        <div class="input-group input-group-flat">
+                                            <input type="text" maxlength="200" class="form-control" readonly="" @bind="notificacao.DsPaciente">
+                                            @* <span class="input-group-text">
+                                                <kbd>Opcional</kbd>
+                                            </span> *@
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@medicoHidden" class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <label class="form-label">Médico</label>
+                                        <div class="input-group input-group-flat">
+                                            <select class="form-select" @bind="notificacao.CdMedico">
+                                                <option>Selecione(Opcional)</option>
+                                                @foreach (MedicoTasy medicos in listaMedicos)
+                                                {
+                                                    <option value="@medicos.Id_profissional">@medicos.Nm_profissional</option>
+                                                }
+                                            </select>
+                                            @* <span class="input-group-text">
+                                                <kbd>Opcional</kbd>
+                                            </span> *@
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@atendHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Atendimento</div>
+                                            <select class="form-select" value="@notificacao.CdAtendimento" @onchange="@((ChangeEventArgs __e) => {notificacao.CdAtendimento = Convert.ToInt32(__e?.Value); BuscaProtocolos();})">
+                                                <option value="0">Selecione</option>
+                                                @foreach (Atendimento atendimento in atendimentos)
+                                                {
+                                                    <option value="@atendimento.NrAtendimento">@atendimento.NrAtendimento</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@protocoloHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Protocolo</div>
+                                            <select class="form-select" value="@notificacao.CdProtocolo" @onchange="@((ChangeEventArgs __e) => {notificacao.CdProtocolo = Convert.ToInt32(__e?.Value); BuscaMedicacao();})">
+                                                <option value="0">Selecione</option>
+                                                @foreach (Protocolo protocolo in protocolos)
+                                                {
+                                                    <option value="@protocolo.NrProtocolo">@protocolo.DsProtocolo</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@medicacaoHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Medicação</div>
+                                            <select class="form-select" value="@notificacao.CdMedicacao" @onchange="@((ChangeEventArgs __e) => notificacao.CdMedicacao = Convert.ToInt32(__e?.Value))">
+                                                <option value="0">Selecione</option>
+                                                @foreach (MaterialMedicamento medicamento in medicamentos)
+                                                {
+                                                    <option value="@medicamento.CdMaterial">(@medicamento.CdMaterial) @medicamento.DsMaterial - @medicamento.QtDose @medicamento.UnidMedDose</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@cateterHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Implantes de Cateter</div>
+                                            <select class="form-select" value="@notificacao.DsCateter" @onchange="@((ChangeEventArgs __e) => {notificacao.DsCateter = __e?.Value?.ToString(); BuscaAtendimento();})">
+                                                <option value="0">Selecione</option>
+                                                @foreach (Cateter cateter in cateteres)
+                                                {
+                                                    <option value="@cateter.DsProcedimento - @cateter.DtLiberacao.ToString("dd/MM/yyyy")">@cateter.DsProcedimento (@cateter.DtLiberacao.ToString("dd/MM/yyyy"))</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@cateterAtendHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Atendimentos</div>
+                                            <select class="form-select" value="@notificacao.DtAtendimento" @onchange="@((ChangeEventArgs __e) => notificacao.DtAtendimento = Convert.ToDateTime(__e?.Value))">
+                                                <option value="0">Selecione</option>
+                                                @foreach (Atendimento atendimento in atendimentos)
+                                                {
+                                                    <option value="@atendimento.DtAcomodacaoPaciente">@atendimento.NrAtendimento (@atendimento.DtAcomodacaoPaciente)</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div hidden="@newsHidden" class="row mt-4" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <div>
+                                            <div class="form-label">Escala de News</div>
+                                            <select class="form-select" value="@notificacao.DsEscalaNews" @onchange="@((ChangeEventArgs __e) => notificacao.DsEscalaNews = __e?.Value?.ToString())">
+                                                <option value="0">Selecione</option>
+                                                @foreach (EscalaNews escala in escalas)
+                                                {
+                                                    <option value="@escala.DtEscala.ToString("dd/MM/yyyy HH:mm") | Atendimento: @escala.NrAtendimento | Pontuação: @escala.QtPontuacao | Risco Clínico: @escala.DsRisco">Data Escala: @escala.DtEscala.ToString("dd/MM/yyyy HH:mm") | Atendimento: @escala.NrAtendimento | Pontuação: @escala.QtPontuacao | Risco Clínico: @escala.DsRisco</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </RadzenStepsItem>
+                            @* Fato, Consequências e Ações Imediatas*@
+                            <RadzenStepsItem Disabled="@Disabled">
+                                <label TextStyle="TextStyle.H6"><b>Nos conte mais informações sobre o que aconteceu...</b></label>
+                                <div class="row mt-3" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <label class="form-label">Descreva o Fato</label>
+                                        <InputText autocomplete="on" rows="5" class="form-control"  maxlength="3000" style="resize: none;" placeholder="Descreva de forma clara o ocorrido." @bind-Value="@notificacao.DsFato" @onchange="@((ChangeEventArgs __e) => {notificacao.DsFato = __e?.Value?.ToString();})"></InputText>
+                                    </div>
+                                </div>
+                                <div class="row mt-2" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <label class="form-label">Consequências para</label>
+                                        <div>
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="radio" name="consequencias" value="Paciente" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequencias = __e?.Value?.ToString();})">
+                                                <span class="form-check-label">Paciente</span>
+                                            </label>
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="radio" name="consequencias" value="Colaborador" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequencias = __e?.Value?.ToString();})">
+                                                <span class="form-check-label">Colaborador</span>
+                                            </label>
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="radio" name="consequencias" value="Instituição" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequencias = __e?.Value?.ToString();})">
+                                                <span class="form-check-label">Instituição</span>
+                                            </label>
+                                            <label class="form-check">
+                                                <input class="form-check-input" type="radio" name="consequencias" value="Sem Consequências" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequencias = __e?.Value?.ToString(); notificacao.DsConsequenciasImediatas = null;})">
+                                                <span class="form-check-label">Sem Consequências</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                @if (notificacao.DsConsequencias == null || notificacao.DsConsequencias == "Sem Consequências") 
+                                {}
+                                else
+                                {
+                                    <div class="row mt-2" style="justify-content: center;">
+                                            <div class="col-sm-12 col-md-6 col-lg-6">
+                                                <label class="form-label">Consequências Imediatas</label>
+                                                <InputText autocomplete="on" class="form-control" maxlength="3000" style="resize: none;" placeholder="Descreva as consequências que ocorreram." @bind-Value="@notificacao.DsConsequenciasImediatas" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequenciasImediatas = __e?.Value?.ToString();})"></InputText>
+                                            </div>
+                                        </div>
+                                }
+                            <div class="row mt-2" style="justify-content: center;">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <label class="form-label">Ações Imediatas</label>
+                                        <InputText autocomplete="on" rows="5" class="form-control" maxlength="3000" style="resize: none;" placeholder="Descreva as ações tomadas para resolver o problema." @bind-Value="notificacao.DsAcoesImediatas" @onchange="@((ChangeEventArgs __e) => {notificacao.DsAcoesImediatas = __e?.Value?.ToString();})"></InputText>
+                                    </div>
+                                </div>
+                                @* <div class="row col-12 mt-5" style="display: flex; justify-content: center;" align="center">
+                                    <div class="col-sm-12 col-md-6 col-lg-6">
+                                        <button class="btn btn-icon btn-primary" @onclick="GravaNotificacao">Enviar Notificação</button>
+                                    </div>
+                                </div> *@
+                            </RadzenStepsItem>
+                            @* Finalizar tela *@
+                            <RadzenStepsItem Disabled="@Disabled">
+                                <div class="row" style="display: flex; justify-content: center;">
+                                    <div class="col-sm-12 col-md-5 col-lg-5 mt-3">
+                                        <div class="row" style="display: flex; justify-content: center;">
+                                            <img align="center" src="https://cionc.com.br/cionc/wp-content/uploads/2020/03/logo-header_blue.png" Style="width: 275px; height: 100px; margin-bottom: 30px;" />
+                                            <hr />
+                                            <img align="center" src="https://nexus.cionc.com.br/static/LogoMAzul.png" Style="width: 275px; height: 40px; margin-bottom: 30px;" />
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-12 col-md-12 col-lg-12 mt-3" align="center">
+                                        <H2><b>Muito obrigado pela sua contribuição!</b></H2>
+                                    </div>
+                                </div>
+                            </RadzenStepsItem>
+                            </EditForm>
+                        </Steps>
+                    </RadzenSteps>
+                    
+                }
+                else
+                {
+                    <div class="row" style="display: flex; justify-content: center;">
+                        <div class="col-sm-12 col-md-5 col-lg-5 mt-1">
+                            <div class="row" style="display: flex; justify-content: center;">
+                                <img align="center" src="https://cionc.com.br/cionc/wp-content/uploads/2020/03/logo-header_blue.png" Style="width: 275px; height: 100px; margin-bottom: 20px;" />
+                                <hr />
+                                <img align="center" src="https://nexus.cionc.com.br/static/LogoMAzul.png" Style="width: 275px; height: 40px; margin-bottom: 20px;" />
+                            </div>
+                        </div>
+                        <div class="col-sm-12 col-md-12 col-lg-12 mt-1" align="center">
+                            <H2><b>Olá, seja bem vindo ao registro de notificações do Nexus Health</b></H2>
+                            <H4><b>Clique em começar para realizar a notificação.</b></H4>
+                        </div>
+                        <div class="col-sm-12 col-md-12 col-lg-12 mt-1" align="center">
+                            <button class="btn btn-icon btn-primary" @onclick="(() => {ieIniciar = true;})">Começar</button>
+                        </div>
+                    </div>
+                }
+            </RadzenCard>
+        </div>
+        <div class="modal modal-blur fade" id="modal-buscapct" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <div class="flex-fill">
+                            <div class="font-weight-medium">Buscar pessoa física</div>
+                            <div class="text-muted">Pelo código ou nome da pessoa</div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" data-bs-toggle="@Modal" data-bs-target="@ModalOrigem"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-2">
+                            <div class="input-group mb-2">
+                                <input type="text" @ref="modalMultipleSerialNumbers" autofocus="autofocus" class="form-control" @bind="Pct" />
+                                <button class="btn" @onclick="((e) => {BuscaPct();})" type="button">Buscar</button>
+                            </div>
+                            <div class="col-12">
+                                <RadzenDataGrid Density="Density.Compact"
+                                                Style="height: 100%; overflow-y: auto;"
+                                                AllowColumnResize="true"
+                                                AllowFiltering="true"
+                                                AllowAlternatingRows="false"
+                                                AllowSorting="true"
+                                                PageSize="10"
+                                                AllowPaging="true"
+                                                ShowPagingSummary="true"
+                                                Data="@pacientes"
+                                                TItem="Paciente">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="Paciente" Title="Nome" Property="NmPaciente" Filterable="false" Width="155px" />
+                                        <RadzenDataGridColumn TItem="Paciente" Title="Ações" Filterable="false" Sortable="false" Width="30px">
+                                            <Template Context="data">
+                                                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center">
+                                                    <a href="#" data-bs-dismiss="modal" data-bs-toggle="@Modal" data-bs-target="@ModalOrigem" @onclick="((e) => {notificacao.CdPaciente = data.CdPaciente; notificacao.DsPaciente = data.NmPaciente; BuscaAtendimento(); BuscaCateteres();  BuscaEscalas();})">
+                                                        <RadzenButton Icon="done" ButtonStyle="ButtonStyle.Primary" Variant="Radzen.Variant.Flat" Size="Radzen.ButtonSize.ExtraSmall"></RadzenButton>
+                                                    </a>
+                                                </RadzenStack>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>

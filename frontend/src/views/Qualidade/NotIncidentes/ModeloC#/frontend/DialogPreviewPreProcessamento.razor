@@ -1,0 +1,397 @@
+﻿@page "/DialogCardPreviewPrePro/{NotificacaoID}"
+
+@layout GlobalLayout
+@using TinyMCE.Blazor
+@using NexusHealth_Blazor.Pages.Global
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using System.Linq;
+@inject ProtectedSessionStorage ProtectedSessionStore
+@inject Majorsoft.Blazor.Extensions.BrowserStorage.ILocalStorageService localStorage
+@inject NavigationManager Navigation
+@inject TooltipService TooltipService
+@inject DialogService DialogService
+@inject Radzen.NotificationService NotificationService
+@inject IJSRuntime JS
+
+<style>
+    @@media print {
+    body * {
+        visibility: hidden;
+    }
+    #printarea, #printarea * {
+        visibility: visible;
+    }
+    #printarea {
+        position: absolute;
+        left: 0;
+        top: 0;
+    }
+}
+</style>
+
+<RadzenStack Gap="1rem" Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;" id="printarea">
+    <RadzenStack>
+        <EditForm Model="@notificacao" autocomplete="on" id="form" name="form" novalidate="novalidate">
+            <div class="card">
+                <div class="card-body">
+                    <span class="badge bg-black w-100 text-black-fg">Dados da Notificação</span>
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Nome</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.NmNotificador != "" ? notificacao.NmNotificador : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Setor</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdSetorNotificador != null ? setores.FirstOrDefault(x => x.Id == notificacao.CdSetorNotificador)?.NmSetor : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Médico</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdMedico != null ? listaMedicos.FirstOrDefault(x => x.Id_profissional == notificacao.CdMedico)?.Nm_profissional : "Não Informado") </span>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Cód/Nome Paciente</div>
+                            <div class="datagrid-content">
+                                <div class="row">
+                                    <div class="col-xs-2 col-sm-2 col-md-2 col-lg-2">
+                                        <div>
+                                            <span>@(notificacao.CdPaciente != null ? notificacao.CdPaciente : "#")</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-xs-10 col-sm-10 col-md-10 col-lg-10">
+                                        <div>
+                                            <span>@(notificacao.DsPaciente != "" ? notificacao.DsPaciente : "Não Informado")</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Tipo de Incidente</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdIncidente != null ? listaTipos.FirstOrDefault(x => x.Id == notificacao.CdIncidente)?.DsTipo : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div hidden="@atendHidden" class="datagrid-item">
+                            <div class="datagrid-title">Atendimento</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdAtendimento != null ? atendimentos.FirstOrDefault(x => x.NrAtendimento == notificacao.CdAtendimento)?.NrAtendimento : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div hidden="@protocoloHidden" class="datagrid-item">
+                            <div class="datagrid-title">Protocolo</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdProtocolo != null ? protocolos.FirstOrDefault(x => x.NrProtocolo == notificacao.CdProtocolo)?.DsProtocolo : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div hidden="@medicacaoHidden" class="datagrid-item">
+                            <div class="datagrid-title">Medicação</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.CdMedicacao != null ? medicamentos.FirstOrDefault(x => x.CdMaterial == notificacao.CdMedicacao)?.DsMaterial : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div hidden="@cateterHidden" class="datagrid-item">
+                            <div class="datagrid-title">Implantes de Cateter</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.DsCateter" @onchange="@((ChangeEventArgs __e) => {notificacao.DsCateter = __e?.Value?.ToString(); BuscaAtendimento();})" disabled="">
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@cateterAtendHidden" class="datagrid-item">
+                            <div class="datagrid-title">Atendimentos</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DtAtendimento</span>
+                            </div>
+                        </div>
+                        <div hidden="@newsHidden" class="datagrid-item">
+                            <div class="datagrid-title">Escala de News</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsEscalaNews</span>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Fato</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsFato</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Consequências para</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsConsequencias</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Consequências Imediatas</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsConsequenciasImediatas</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Ações Imediatas</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsAcoesImediatas</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-2">
+                <div class="card-body">
+                    <span class="badge bg-red w-100 text-red-fg">Pré Processamento</span>
+                    <div class="datagrid mt-2">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Classificação do Incidente</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.DsClass != "" ? notificacao.DsClass : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Motivo da Classificação</div>
+                            <div class="datagrid-content">
+                                <span>@(notificacao.DsMotClass != "" ? notificacao.DsMotClass : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Responsável pela Notificação</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.CdResponsavel @(notificacao.CdResponsavel != null ? responsaveis.FirstOrDefault(x => x.Id == notificacao.CdResponsavel)?.DsResp : "Não Informado")</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Responsável pelo Pré Processamento</div>
+                            <div class="datagrid-content">@(notificacao.DsRespProc != "" ? notificacao.DsRespProc : "Não Informado")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-2">
+                <div class="card-body">
+                    <span class="badge bg-blue w-100 text-blue-fg">Pós Processamento</span>
+                    <div class="datagrid mt-2">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Classificação do Incidente</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.Gravidade</span>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Protocolo de Segurança</div>
+                            <div class="datagrid-content">
+                                <span>@notificacao.DsProtocoloSeguranca</span>
+                            </div>
+                        </div>
+                        @if (notificacao.DsProtocoloSeguranca == "Cadeia Medicamentosa")
+                        {
+                            <div class="datagrid-item">
+                                <div class="datagrid-title">Evento Relacionado</div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.DsEventoRelacao</span>
+                                </div>
+                            </div>
+
+                            <div class="datagrid-item">
+                                <div class="datagrid-title">Produto</div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.DsProdutoRelacao</span>
+                                </div>
+                            </div>
+
+                            <div class="datagrid-item">
+                                <div class="datagrid-title">Série/Lote</div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.NrLote</span>
+                                </div>
+                            </div>
+
+                            <div class="datagrid-item">
+                                <div class="datagrid-title">Reg. Anvisa</div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.NrRegistroAnvisa</span>
+                                </div>
+                            </div>
+
+                            <div class="datagrid-item">
+                                <div class="datagrid-title">Fornecedor</div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.DsFornecedor</span>
+                                </div>
+                            </div>
+
+                            <div class="datagrid-item">
+                                <div class="datagrid-title"></div>
+                                <div class="datagrid-content">
+                                    <span>@notificacao.DsRelacaoOpcional</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-2">
+                <div class="card-body">
+                    <span class="badge bg-white w-100 text-white-fg text-black">Diagramas</span>
+                    <div class="datagrid mt-2">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Ishikawa</div>
+                            <div class="datagrid-content">
+                                <div class="row w-100">
+                                    <div class="col">
+                                        <div class="row" style="justify-content: center; align-content: center;">
+                                            <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: yellowgreen; min-height: 100%;">
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-yellow text-blue-fg"><div class="p-skew">Tarefa Tecnologia</div></span></h3>
+                                                </div>
+                                                <div class="mt-1" align="right">
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsTarefa1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsTarefa1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsTarefa2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsTarefa2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: darkcyan; min-height: 100%;">
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-cyan text-blue-fg"><div class="p-skew">Ambiente</div></span></h3>
+                                                </div>
+                                                <div class="mt-1" align="right">
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsAmbiente1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsAmbiente1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsAmbiente2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsAmbiente2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: darkblue; min-height: 100%;">
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-blue text-blue-fg"><div class="p-skew">Paciente</div></span></h3>
+                                                </div>
+                                                <div class="mt-1" align="right">
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsPaciente1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsPaciente1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew">
+                                                        @if (notificacao.DsPaciente2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsPaciente2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-5" style="justify-content: center; align-content: center;">
+                                            <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: mediumpurple;">
+                                                <div class="mb-1" align="right">
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsGestao2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsGestao2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsGestao1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsGestao1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-purple text-blue-fg"><div class="p-skew-reverse">Gestão</div></span></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: lightpink;">
+                                                <div class="mb-1" align="right">
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsEquipe2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsEquipe2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsEquipe1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsEquipe1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-pink text-blue-fg"><div class="p-skew-reverse">Equipe</div></span></h3>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: red;">
+                                                <div class="mb-1" align="right">
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsIndividuo2 != null)
+                                                        {
+                                                            <h6>@notificacao.DsIndividuo2</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                    <RadzenStack class="p-skew-reverse">
+                                                        @if (notificacao.DsIndividuo1 != null)
+                                                        {
+                                                            <h6>@notificacao.DsIndividuo1</h6>
+                                                        }
+                                                    </RadzenStack>
+                                                </div>
+                                                <div class="mb-0" align="right">
+                                                    <h3><span class="badge w-75 bg-red text-blue-fg"><div class="p-skew-reverse">Indivíduo</div></span></h3>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-2" style="align-content: center;">
+                                        <div class="markdown">
+                                            @if (notificacao.DsComunica != "" || notificacao.DsComunica != null)
+                                            {
+                                                <RadzenStack>
+                                                    <h6>@notificacao.DsComunica</h6>
+                                                </RadzenStack>
+                                            }
+                                            @if (notificacao.DsComunica == null || notificacao.DsComunica == "")
+                                            {
+                                                <a data-bs-toggle="modal" data-bs-target="#modal-comunica" class="btn btn-xs btn-primary">
+                                                    Comunica
+                                                </a>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+    </RadzenStack>
+</RadzenStack>

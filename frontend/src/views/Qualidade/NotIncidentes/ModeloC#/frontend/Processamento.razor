@@ -1,0 +1,1564 @@
+﻿@page "/Processamento/"
+
+@using TinyMCE.Blazor
+@using NexusHealth_Blazor.Pages.Global
+@using NexusHealth_Blazor.Pages.Qualidade;
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using System.Linq;
+@inject ProtectedSessionStorage ProtectedSessionStore
+@inject Majorsoft.Blazor.Extensions.BrowserStorage.ILocalStorageService localStorage
+@inject NavigationManager Navigation
+@inject TooltipService TooltipService
+@inject DialogService DialogService
+@inject Radzen.NotificationService NotificationService
+@inject ContextMenuService ContextMenuService
+@layout GlobalLayout
+@inject IJSRuntime JS
+
+<style>
+    .skew {
+        -webkit-transform: skew(30deg);
+        -ms-transform: skew(30deg);
+        transform: skew(30deg); /* SKEW da div*/
+    }
+
+    .p-skew {
+        padding: 2px;
+        -webkit-transform: skew(-30deg);
+        -ms-transform: skew(-30deg);
+        transform: skew(-30deg); /* SKEW inverso para o texto não inclinar */
+    }
+
+    .skew-reverse {
+        -webkit-transform: skew(-30deg);
+        -ms-transform: skew(-30deg);
+        transform: skew(-30deg); /* SKEW da div*/
+    }
+
+    .p-skew-reverse {
+        padding: 2px;
+        -webkit-transform: skew(30deg);
+        -ms-transform: skew(30deg);
+        transform: skew(30deg); /* SKEW inverso para o texto não inclinar */
+    }
+</style>
+<EditForm Model="@notificacao" autocomplete="on" id="form" name="form" novalidate="novalidate">
+    <div class="row row-cards">
+        <div class="col-lg-3">
+            <div class="card" style="height: calc((100vh - 10px) / 2); overflow: auto;">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <div>
+                            <h3 class="lh-1">Notificação @notificacao.Id</h3>
+                        </div>
+                    </div>
+                    <h4>Dados da Notificação</h4>
+                    <ul class="list-unstyled space-y-1">
+                        <li>
+                            <div class="h4 m-0">Criado por</div>
+                            <div class="text-secondary">
+                                @NmNotificador
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Setor</div>
+                            <div class="text-secondary">
+                                @DsSetor
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Paciente</div>
+                            <div class="text-secondary">
+                                @NmPaciente
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Médico</div>
+                            <div class="text-secondary">
+                                @DsMedico
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Tipo de Incidente</div>
+                            <div class="text-secondary">
+                                @DsIncidente
+                            </div>
+                        </li>
+                        @if(DsIncidente != null && DsIncidente == "Reação medicamentosa")
+                        {
+                            <li>
+                                <div class="h4 m-0">Protocolo</div>
+                                <div class="text-secondary">
+                                    @(notificacao.CdProtocolo != 0 ? protocolos.FirstOrDefault(x => x.NrProtocolo == notificacao.CdProtocolo)?.DsProtocolo ?? "" : "")
+                                </div>
+                            </li>
+                            <li>
+                                <div class="h4 m-0">Medicação</div>
+                                <div class="text-secondary">
+                                    (@(notificacao.CdMedicacao != 0 ? medicamentos.FirstOrDefault(x => x.CdMaterial == notificacao.CdMedicacao)?.CdMaterial ?? 0 : 0)) @(notificacao.CdMedicacao != 0 ? medicamentos.FirstOrDefault(x => x.CdMaterial == notificacao.CdMedicacao)?.DsMaterial ?? "" : "")
+                                </div>
+                            </li>
+                            <li>
+                                <div class="h4 m-0">Dose</div>
+                                <div class="text-secondary">
+                                    @(notificacao.CdMedicacao != 0 ? medicamentos.FirstOrDefault(x => x.CdMaterial == notificacao.CdMedicacao)?.QtDose ?? 0 : 0)@(notificacao.CdMedicacao != 0 ? medicamentos.FirstOrDefault(x => x.CdMaterial == notificacao.CdMedicacao)?.UnidMedDose ?? "" : "")
+                                </div>
+                            </li>
+                        }
+                        <li>
+                            <div class="h4 m-0">Fato</div>
+                            <div class="text-secondary">
+                                @notificacao.DsFato
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Consequências para</div>
+                            <div class="text-secondary">
+                                @notificacao.DsConsequencias
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Consequências</div>
+                            <div class="text-secondary">
+                                @notificacao.DsConsequenciasImediatas
+                            </div>
+                        </li>
+                        <li>
+                            <div class="h4 m-0">Ação Imediata</div>
+                            <div class="text-secondary">
+                                @notificacao.DsAcoesImediatas
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="card mt-1" style="height: calc((100vh - 390px) / 2); overflow: auto;">
+                <div class="card-body">
+                    <h4>Etapa</h4>
+                    <ul class="steps steps-vertical">
+                        @if (ieEtapas.IeClassProt)
+                        {
+                            <li class="step-item">
+                                <div class="h4 m-0">Classificação</div>
+                                <small class="form-hint">
+                                    Nessa etapa iremos preencher a <b>classificação do incidente</b> que é a categorização
+                                    que define a gravidade e o impacto do incidente de segurança, ajudando a priorizar a resposta adequada e também
+                                    o <b>protocolo de segurança</b> que são as diretrizes e procedimentos pré-definidos para lidar com incidentes de segurança,
+                                    garantindo uma resposta rápida e eficaz para mitigar danos e proteger sistemas e dados.
+                                </small>
+                            </li>
+                        }
+                        else if (ieEtapas.IeDiagramas)
+                        {
+                            <li class="step-item">
+                                <div class="h4 m-0">Diagramas</div>
+                                <small class="form-hint">
+                                    Nessa etapa iremos criar os diagramas que são representações visuais que podem incluir a topologia
+                                    de rede, layouts de infraestrutura física, ou fluxogramas de processos relevantes ao incidente. Eles ajudam a visualizar o
+                                    contexto e a interconectividade dos sistemas envolvidos.
+                                </small>
+                            </li>
+                        }
+                        else if (ieEtapas.IePlanosAcao)
+                        {
+                            <li class="step-item">
+                                <div class="h4 m-0">Planos de Ação</div>
+                                <small class="form-hint">
+                                    Os planos de ação são conjuntos de medidas específicas a serem executadas para mitigar os efeitos do
+                                    incidente e restaurar a operação normal. Isso pode incluir a remediação de vulnerabilidades, restauração de backups, ou
+                                    implementação de controles adicionais.
+                                </small>
+                            </li>
+                        }
+                        else if (ieEtapas.IeAvaliacao)
+                        {
+                            <li class="step-item">
+                                <div class="h4 m-0">Avaliação</div>
+                                <small class="form-hint">
+                                    A avaliação de eficácia refere-se à revisão do incidente após a implementação dos planos de ação para determinar se as medidas
+                                    adotadas foram bem-sucedidas em mitigar o incidente e proteger contra futuras ocorrências similares.
+                                </small>
+                            </li>
+                        }
+                        else
+                        {
+                            <div style="justify-content: center;">
+                                <div class="container-tight py-4">
+                                    <div class="empty">
+                                        <p class="empty-title">Selecione uma Etapa</p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-9">
+            <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" name="btn-etapas" id="btn-etapas-1" checked="@ieEtapas.IeClassProt" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeClassProt, "IeClassProt", null, null);})">
+                    <label for="btn-etapas-1" type="button" class="btn @ieDisponibilidade.DsSucessoClassProt">Classificação</label>
+                    <input type="radio" class="btn-check" disabled="@ieDisponibilidade.IeDiagramas" name="btn-etapas" id="btn-etapas-2" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeDiagramas, "IeDiagramas", null, null);})">
+                    <label for="btn-etapas-2" type="button" class="btn @ieDisponibilidade.DsSucessoDiagramas">Diagramas</label>
+                    <input type="radio" class="btn-check" disabled="@ieDisponibilidade.IePlanosAcao" name="btn-etapas" id="btn-etapas-3" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IePlanosAcao, "IePlanosAcao", null, null);})">
+                    <label for="btn-etapas-3" type="button" class="btn @ieDisponibilidade.DsSucessoPlanosAcao">Planos de Ação</label>
+                    <input type="radio" class="btn-check" disabled="@ieDisponibilidade.IeAvaliacao" name="btn-etapas" id="btn-etapas-4" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeAvaliacao, "IeAvaliacao", null, null);})">
+                    <label for="btn-etapas-4" type="button" class="btn @ieDisponibilidade.DsSucessoAvaliacao">Avaliação</label>
+                </div>
+            <div class="card" style="height: calc(100vh - 230px);">
+                <div class="card-body" style="overflow: auto;">
+                    <form autocomplete="on">
+                        @if (ieEtapas.IeClassProt)
+                        {
+                            <div class="row">
+                                <div class="col-xl-6">
+                                    <div class="mb-3">
+                                        <div class="form-label">Classificação do Incidente</div>
+                                        <select class="form-select" value="@notificacao.Gravidade" @oninput="@((e) => {notificacao.Gravidade = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})">
+                                            <option value=""></option>
+                                            <option value="Circunstância Notificável">Circunstância Notificável</option>
+                                            <option value="Evento Adverso">Evento Adverso</option>
+                                            <option value="Near Miss">Near Miss</option>
+                                            <option value="Incidente sem dano">Incidente sem dano</option>
+                                            <option value="Não Clínico">Não Clínico</option>
+                                        </select>
+                                    </div>
+                                    @if (notificacao.Gravidade == "Evento Adverso")
+                                    {
+                                        <div class="mt-3">
+                                            <label class="form-label">
+                                                Gravidade
+                                                <small class="form-hint">
+                                                    Fonte: Ministério da Saúde
+                                                </small>
+                                            </label>
+
+                                            <div>
+                                                <label class="form-check mt-3">
+                                                    <input class="form-check-input" type="radio" name="radios" checked="@(notificacao.DsGravidades == "Leve")" value="Leve" @onchange=@(__e => {notificacao.DsGravidades = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Leve <span class="badge bg-green ms-auto"></span>
+                                                        <small class="form-hint">
+                                                            Sintomas leves, danos mínimos ou moderados, duração rápida e apenas
+                                                            intervenções mínimas. Ex. Observação extra, Revisão de tratamento, etc...
+                                                        </small>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check mt-3">
+                                                    <input class="form-check-input" type="radio" name="radios" checked="@(notificacao.DsGravidades == "Moderado")" value="Moderado" @onchange=@(__e => {notificacao.DsGravidades = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Moderado <span class="badge bg-yellow ms-auto"></span>
+                                                        <small class="form-hint">
+                                                            Paciente sintomático, com necessidade de intervenção, com aumento de tempo
+                                                            de intervenção, com dano ou perda de função permanente ou de longo prazo.
+                                                            Ex. Procedimento terapêutico, Tratamento.
+                                                        </small>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check mt-3">
+                                                    <input class="form-check-input" type="radio" name="radios" checked="@(notificacao.DsGravidades == "Grave")" value="Grave" @onchange=@(__e => {notificacao.DsGravidades = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Grave <span class="badge bg-orange ms-auto"></span>
+                                                        <small class="form-hint">
+                                                            Paciente sintomático, com necessidade de intervenção para suporte de vida, intervenção clínica/cirúrgica
+                                                            de grande porte, causando diminuição da expectativa de vida, com grande dano ou perda de função permanente ou de longo prazo.
+                                                        </small>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check mt-3">
+                                                    <input class="form-check-input" type="radio" name="radios" checked="@(notificacao.DsGravidades == "Óbito")" value="Óbito" @onchange=@(__e => {notificacao.DsGravidades = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Óbito <span class="badge bg-red ms-auto"></span>
+                                                        <small class="form-hint">
+                                                            Dentro das possibilidades, em curto prazo o evento causou ou acelerou a morte.
+                                                        </small>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-xl-6">
+                                    <div class="mb-3">
+                                        <div class="form-label">Protocolo de Segurança</div>
+                                        <select class="form-select" value="@notificacao.DsProtocoloSeguranca" @oninput="@((e) => {notificacao.DsProtocoloSeguranca = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})">
+                                            <option value=""></option>
+                                            <option value="Intercorrência">Intercorrência</option>
+                                            <option value="Identificação do Paciente">Identificação do Paciente</option>
+                                            <option value="Comunicação entre profissionais">Comunicação entre profissionais</option>
+                                            <option value="Cadeia Medicamentosa">Cadeia Medicamentosa</option>
+                                            <option value="Higiene de mãos">Higiene de mãos</option>
+                                            <option value="Risco de Queda">Risco de Queda</option>
+                                            <option value="Erro de Processo">Erro de Processo</option>
+                                            <option value="Iras">Iras</option>
+                                        </select>
+                                    </div>
+                                    @if (notificacao.DsProtocoloSeguranca == "Cadeia Medicamentosa")
+                                    {
+                                        <div class="mt-3">
+                                            <label class="form-label">
+                                                Evento Relacionado
+                                            </label>
+                                            <div>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-evento" value="Farmacovigilância" checked="@(notificacao.DsEventoRelacao == "Farmacovigilância")" @onchange=@(__e => {notificacao.DsEventoRelacao = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Farmacovigilância <span class=" bg-green ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-evento" value="Tecnovigilância" checked="@(notificacao.DsEventoRelacao == "Tecnovigilância")" @onchange=@(__e => {notificacao.DsEventoRelacao = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Tecnovigilância <span class=" bg-yellow ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-evento" value="Hemovigilância" checked="@(notificacao.DsEventoRelacao == "Hemovigilância")" @onchange=@(__e => {notificacao.DsEventoRelacao = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Hemovigilância <span class=" bg-orange ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-evento" value="Protocolo" checked="@(notificacao.DsEventoRelacao == "Protocolo")" @onchange=@(__e => {notificacao.DsEventoRelacao = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Protocolo <span class=" bg-red ms-auto"></span>
+                                                        <small class="form-hint">
+                                                            <input class="form-control" type="text" value="@notificacao.DsJustificativaRelacionada" @oninput="@((e) => {notificacao.DsJustificativaRelacionada = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})" placeholder="Qual?">
+                                                        </small>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <label class="form-label">
+                                                Informações
+                                            </label>
+                                            <div>
+                                                <label class="form-check">
+                                                    <label class="form-check-label">
+                                                        Produto
+                                                    </label>
+                                                    <InputText autocomplete="on" class="form-control" type="text" @bind-Value="@notificacao.DsProdutoRelacao" @oninput="@((e) => {notificacao.DsProdutoRelacao = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})" />
+                                                </label>
+                                                <label class="form-check">
+                                                    <label class="form-check-label">
+                                                        Série/Lote
+                                                    </label>
+                                                    <InputText autocomplete="on" class="form-control" type="text" @bind-Value="@notificacao.NrLote" @oninput="@((e) => {notificacao.NrLote = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})" />
+                                                </label>
+                                                <label class="form-check">
+                                                    <label class="form-check-label">
+                                                        Reg. Anvisa
+                                                    </label>
+                                                    <InputText autocomplete="on" class="form-control" type="text" @bind-Value="@notificacao.NrRegistroAnvisa" @oninput="@((e) => {notificacao.NrRegistroAnvisa = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})" />
+                                                </label>
+                                                <label class="form-check">
+                                                    <label class="form-check-label">
+                                                        Fornecedor
+                                                    </label>
+                                                    <InputText autocomplete="on" class="form-control" type="text" @bind-Value="@notificacao.DsFornecedor" @oninput="@((e) => {notificacao.DsFornecedor = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})" />
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <div>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Hemoderivados/Hemocomponentes" checked="@(notificacao.DsRelacaoOpcional == "Hemoderivados/Hemocomponentes")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Hemoderivados/Hemocomponentes <span class=" bg-green ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Equipamentos médicos" checked="@(notificacao.DsRelacaoOpcional == "Equipamentos médicos")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Equipamentos médicos <span class=" bg-yellow ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Gases / Oxigênio" checked="@(notificacao.DsRelacaoOpcional == "Gases / Oxigênio")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Gases / Oxigênio <span class=" bg-orange ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Nutrição" checked="@(notificacao.DsRelacaoOpcional == "Nutrição")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Nutrição <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Processo Clínico / Procedimentos" checked="@(notificacao.DsRelacaoOpcional == "Processo Clínico / Procedimentos")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Processo Clínico / Procedimentos <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Estrutura" checked="@(notificacao.DsRelacaoOpcional == "Estrutura")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Estrutura <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Gerenciamento de Risco / Ocupacionais" checked="@(notificacao.DsRelacaoOpcional == "Gerenciamento de Risco / Ocupacionais")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Gerenciamento de Risco / Ocupacionais <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Material Médico Hospitalar" checked="@(notificacao.DsRelacaoOpcional == "Material Médico Hospitalar")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Material Médico Hospitalar <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Infecção" checked="@(notificacao.DsRelacaoOpcional == "Infecção")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Infecção <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Medicamentos" checked="@(notificacao.DsRelacaoOpcional == "Medicamentos")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Medicamentos <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Administração Clínica" checked="@(notificacao.DsRelacaoOpcional == "Administração Clínica")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Administração Clínica <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                                <label class="form-check">
+                                                    <input class="form-check-input" type="radio" name="radios-relacao" value="Financeiro" checked="@(notificacao.DsRelacaoOpcional == "Financeiro")" @onchange=@(__e => {notificacao.DsRelacaoOpcional = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeDiagramas, "IeDiagramas", null);})>
+                                                    <span class="form-check-label">
+                                                        Financeiro <span class=" bg-red ms-auto"></span>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        @if (ieEtapas.IeDiagramas)
+                        {
+                            <div class="btn-group mt-0 w-100" role="group">
+                                @if (notificacao.DsIshikawa == "" || notificacao.DsIshikawa == "Não" || notificacao.DsIshikawa == null)
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-ishikawa" autocomplete="on" data-bs-toggle="modal" data-bs-target="#modal-ishikawa">
+                                    <label for="btn-diagrama-ishikawa" type="button" class="btn">Ishikawa</label>
+                                }
+                                else
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-ishikawa" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeIshikawa, null, null, "IeIshikawa");})">
+                                    <label for="btn-diagrama-ishikawa" type="button" class="btn btn-actions">
+                                        Ishikawa
+                                        <a class="btn-action btn-ghost-danger" @onclick="@((e) => {notificacao.DsIshikawa = "Não"; notificacao.DtIshikawa = null;})"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-trash-x"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M4 7h16" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /><path d="M10 12l4 4m0 -4l-4 4" /></svg></a>
+                                    </label>
+                                }
+
+                                @if (notificacao.DsBowTie == "" || notificacao.DsBowTie == "Não" || notificacao.DsBowTie == null)
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-bowtie" autocomplete="on" data-bs-toggle="modal" data-bs-target="#modal-bowtie">
+                                    <label for="btn-diagrama-bowtie" type="button" class="btn">BowTie</label>
+                                }
+                                else
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-bowtie" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeBowTie, null, null, "IeBowTie");})">
+                                    <label for="btn-diagrama-bowtie" type="button" class="btn btn-actions">
+                                        BowTie
+                                        <a class="btn-action btn-ghost-danger" @onclick="@((e) => {notificacao.DsBowTie = "Não"; notificacao.DtBowTie = null;})"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-trash-x"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M4 7h16" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /><path d="M10 12l4 4m0 -4l-4 4" /></svg></a>
+                                    </label>
+                                }
+
+                                @if (notificacao.DsNaranjo == "" || notificacao.DsNaranjo == "Não" || notificacao.DsNaranjo == null)
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-naranjo" autocomplete="on" data-bs-toggle="modal" data-bs-target="#modal-naranjo">
+                                    <label for="btn-diagrama-naranjo" type="button" class="btn">Naranjo</label>
+                                }
+                                else
+                                {
+                                    <input type="radio" class="btn-check" name="btn-diagrama" id="btn-diagrama-naranjo" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeNaranjo, null, null, "IeNaranjo");})">
+                                    <label for="btn-diagrama-naranjo" type="button" class="btn btn-actions">
+                                        Naranjo
+                                        <a class="btn-action btn-ghost-danger" @onclick="@((e) => {notificacao.DsNaranjo = "Não"; notificacao.DtNaranjo = null;})"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-trash-x"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M4 7h16" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /><path d="M10 12l4 4m0 -4l-4 4" /></svg></a>
+                                    </label>
+                                }
+
+                            </div>
+
+                            @if (ieEtapas.IeIshikawa == true)
+                            {
+                                <div class="card card-lg" style="height: 90%;">
+                                    <div class="card-body p-0" style="align-content: center;">
+                                        <div class="row w-100">
+                                            <div class="col">
+                                                <div class="row" style="justify-content: center; align-content: center;">
+                                                    <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: yellowgreen; min-height: 100%;">
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-yellow text-blue-fg"><div class="p-skew">Tarefa Tecnologia</div></span></h3>
+                                                        </div>
+                                                        <div class="mt-1" align="right">
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Tarefa1";})>
+                                                                @if (notificacao.DsTarefa1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsTarefa1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Tarefa2";})>
+                                                                @if (notificacao.DsTarefa2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsTarefa2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+
+                                                        @if (notificacao.DsTarefa1 == "" || notificacao.DsTarefa1 == null)
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-yellow btn-icon btn-sm p-skew" data-bs-toggle="modal" data-bs-target="#modal-tarefa1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsTarefa2 == "" || notificacao.DsTarefa2 == null)
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-yellow btn-icon btn-sm p-skew" data-bs-toggle="modal" data-bs-target="#modal-tarefa2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                    <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: darkcyan; min-height: 100%;">
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-cyan text-blue-fg"><div class="p-skew">Ambiente</div></span></h3>
+                                                        </div>
+                                                        <div class="mt-1" align="right">
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Ambiente1";})>
+                                                                @if (notificacao.DsAmbiente1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsAmbiente1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Ambiente2";})>
+                                                                @if (notificacao.DsAmbiente2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsAmbiente2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+
+                                                        @if (notificacao.DsAmbiente1 == "")
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-icon btn-sm btn-cyan p-skew" data-bs-toggle="modal" data-bs-target="#modal-ambiente1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsAmbiente2 == "")
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-icon btn-sm btn-cyan p-skew" data-bs-toggle="modal" data-bs-target="#modal-ambiente2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                    <div class="col-lg-3 skew" style="border-bottom: 2px solid; border-right: 2px solid; border-color: darkblue; min-height: 100%;">
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-blue text-blue-fg"><div class="p-skew">Paciente</div></span></h3>
+                                                        </div>
+                                                        <div class="mt-1" align="right">
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Paciente1";})>
+                                                                @if (notificacao.DsPaciente1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsPaciente1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Paciente2";})>
+                                                                @if (notificacao.DsPaciente2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsPaciente2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+
+                                                        @if (notificacao.DsPaciente1 == "")
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-icon btn-sm btn-primary p-skew" data-bs-toggle="modal" data-bs-target="#modal-paciente1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsPaciente2 == "")
+                                                        {
+                                                            <div class="mb-0" align="right">
+                                                                <a class="btn btn-icon btn-sm btn-primary p-skew" data-bs-toggle="modal" data-bs-target="#modal-paciente2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="row mt-5" style="justify-content: center; align-content: center;">
+                                                    <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: mediumpurple;">
+                                                        @if (notificacao.DsGestao1 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-purple btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-gestao1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsGestao2 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-purple btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-gestao2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+
+                                                        <div class="mb-1" align="right">
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Gestao2";})>
+                                                                @if (notificacao.DsGestao2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsGestao2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Gestao1";})>
+                                                                @if (notificacao.DsGestao1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsGestao1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-purple text-blue-fg"><div class="p-skew-reverse">Gestão</div></span></h3>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: lightpink;">
+                                                        @if (notificacao.DsEquipe1 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-pink btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-equipe1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsEquipe2 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-pink btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-equipe2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+
+                                                        <div class="mb-1" align="right">
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Equipe2";})>
+                                                                @if (notificacao.DsEquipe2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsEquipe2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Equipe1";})>
+                                                                @if (notificacao.DsEquipe1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsEquipe1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-pink text-blue-fg"><div class="p-skew-reverse">Equipe</div></span></h3>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-lg-3 skew-reverse" style="border-top: 2px solid; border-right: 2px solid; border-color: red;">
+                                                        @if (notificacao.DsIndividuo1 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-red btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-individuo1">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                        else if (notificacao.DsIndividuo2 == "")
+                                                        {
+                                                            <div class="mt-0" align="right">
+                                                                <a class="btn btn-red btn-icon btn-sm p-skew-reverse" data-bs-toggle="modal" data-bs-target="#modal-individuo2">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-plus"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+
+                                                        <div class="mb-1" align="right">
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Individuo2";})>
+                                                                @if (notificacao.DsIndividuo2 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsIndividuo2</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                            <RadzenStack class="p-skew-reverse" ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Individuo1";})>
+                                                                @if (notificacao.DsIndividuo1 != null)
+                                                                {
+                                                                    <h6>@notificacao.DsIndividuo1</h6>
+                                                                }
+                                                            </RadzenStack>
+                                                        </div>
+                                                        <div class="mb-0" align="right">
+                                                            <h3><span class="badge w-75 bg-red text-blue-fg"><div class="p-skew-reverse">Indivíduo</div></span></h3>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-2" style="align-content: center;">
+                                                <div class="markdown">
+                                                    @if (notificacao.DsComunica != "" || notificacao.DsComunica != null)
+                                                    {
+                                                        <RadzenStack ContextMenu=@(args => {ShowContextMenuWithItems(args); nmFuncao = "Comunica";})>
+                                                            <h6>@notificacao.DsComunica</h6>
+                                                        </RadzenStack>
+                                                    }
+                                                    @if (notificacao.DsComunica == null || notificacao.DsComunica == "")
+                                                    {
+                                                        <a data-bs-toggle="modal" data-bs-target="#modal-comunica" class="btn btn-xs btn-primary">
+                                                            Comunica
+                                                        </a>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (ieEtapas.IeBowTie == true)
+                            {
+                                <div class="card" style="height: 90%;">
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-xl-3">
+                                                <div>
+                                                    <div class="form-label">Ameaça</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (1)" @bind="@notificacao.Ameaca1" @oninput="@((e) => {notificacao.Ameaca1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (2)" @bind="@notificacao.Ameaca2" @oninput="@((e) => {notificacao.Ameaca2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (3)" @bind="@notificacao.Ameaca3" @oninput="@((e) => {notificacao.Ameaca3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (4)" @bind="@notificacao.Ameaca4" @oninput="@((e) => {notificacao.Ameaca4 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (5)" @bind="@notificacao.Ameaca5" @oninput="@((e) => {notificacao.Ameaca5 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                            </div>
+                                            <div class="col-xl-2">
+                                                <div class="mt-3">
+                                                    <div class="form-label">&nbsp;</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="form-label">Barreira</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Barreira (1)" @bind="@notificacao.Barreira1" @oninput="@((e) => {notificacao.Barreira1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Barreira (2)" @bind="@notificacao.Barreira2" @oninput="@((e) => {notificacao.Barreira2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Barreira (3)" @bind="@notificacao.Barreira3" @oninput="@((e) => {notificacao.Barreira3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                            </div>
+                                            <div class="col-xl-2">
+                                                <div class="mt-4">
+                                                    <div class="form-label">&nbsp;</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="form-label">&nbsp;</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="form-label">Evento de Risco</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Ameaça (1)" @bind="@notificacao.Evento" @oninput="@((e) => {notificacao.Evento = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                </div>
+                                            </div>
+                                            <div class="col-xl-2">
+                                                <div class="mt-3">
+                                                    <div class="form-label">&nbsp;</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <div class="form-label">Mitigação</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Mitigação (1)" @bind="@notificacao.Mitigacao1" @oninput="@((e) => {notificacao.Mitigacao1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Mitigação (2)" @bind="@notificacao.Mitigacao2" @oninput="@((e) => {notificacao.Mitigacao2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Mitigação (3)" @bind="@notificacao.Mitigacao3" @oninput="@((e) => {notificacao.Mitigacao3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                            </div>
+                                            <div class="col-xl-3">
+                                                <div>
+                                                    <div class="form-label">Dano</div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Dano (1)" @bind="@notificacao.Dano1" @oninput="@((e) => {notificacao.Dano1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Dano (2)" @bind="@notificacao.Dano2" @oninput="@((e) => {notificacao.Dano2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Dano (3)" @bind="@notificacao.Dano3" @oninput="@((e) => {notificacao.Dano3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Dano (4)" @bind="@notificacao.Dano4" @oninput="@((e) => {notificacao.Dano4 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                                <div class="mt-3">
+                                                    <textarea class="form-control mb-md" maxlength="100" autocomplete="on" placeholder="Dano (5)" @bind="@notificacao.Dano5" @oninput="@((e) => {notificacao.Dano5 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (ieEtapas.IeNaranjo == true)
+                            {
+                                <div class="card" style="height: 90%;">
+                                    <div class="table-responsive">
+                                        <table class="table table-vcenter card-table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Questões</th>
+                                                    <th>Sim</th>
+                                                    <th>Não</th>
+                                                    <th>Desconhecido</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td><small>1</small></td>
+                                                    <td><small>Existem notificações conclusivas sobre essa reação</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao1" value="1" checked="@(notificacao.Questao1 == 1)" @onchange=@(__e => {notificacao.Questao1 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao1" value="0" checked="@(notificacao.Questao1 == 0)" @onchange=@(__e => {notificacao.Questao1 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao1" value="999" checked="@(notificacao.Questao1 == 999)" @onchange=@(__e => {notificacao.Questao1 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>2</small></td>
+                                                    <td><small>A reação apareceu após a administração do fármaco?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao2" value="2" checked="@(notificacao.Questao2 == 2)" @onchange=@(__e => {notificacao.Questao2 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">2</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao2" value="-1" checked="@(notificacao.Questao2 == -1)" @onchange=@(__e => {notificacao.Questao2 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">-1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao2" value="999" checked="@(notificacao.Questao2 == 999)" @onchange=@(__e => {notificacao.Questao2 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>3</small></td>
+                                                    <td><small>A reação melhorou quando o fármaco foi suspenso?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao3" value="1" checked="@(notificacao.Questao3 == 1)" @onchange=@(__e => {notificacao.Questao3 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao3" value="0" checked="@(notificacao.Questao3 == 0)" @onchange=@(__e => {notificacao.Questao3 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao3" value="999" checked="@(notificacao.Questao3 == 999)" @onchange=@(__e => {notificacao.Questao3 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>4</small></td>
+                                                    <td><small>A reação reapareceu quando da sua readministração?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao4" value="2" checked="@(notificacao.Questao4 == 2)" @onchange=@(__e => {notificacao.Questao4 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">2</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao4" value="-1" checked="@(notificacao.Questao4 == -1)" @onchange=@(__e => {notificacao.Questao4 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">-1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao4" value="999" checked="@(notificacao.Questao4 == 999)" @onchange=@(__e => {notificacao.Questao4 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>5</small></td>
+                                                    <td><small>Existem causas alternativas? (até mesmo outro fármaco)</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao5" value="-1" checked="@(notificacao.Questao5 == -1)" @onchange=@(__e => {notificacao.Questao5 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">-1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao5" value="2" checked="@(notificacao.Questao5 == 2)" @onchange=@(__e => {notificacao.Questao5 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">2</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao5" value="999" checked="@(notificacao.Questao5 == 999)" @onchange=@(__e => {notificacao.Questao5 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>6</small></td>
+                                                    <td><small>A reação reaparece com a introdução de um placebo?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao6" value="-1" checked="@(notificacao.Questao6 == -1)" @onchange=@(__e => {notificacao.Questao6 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">-1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao6" value="1" checked="@(notificacao.Questao6 == 1)" @onchange=@(__e => {notificacao.Questao6 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao6" value="999" checked="@(notificacao.Questao6 == 999)" @onchange=@(__e => {notificacao.Questao6 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>7</small></td>
+                                                    <td><small>A concentração plasmática está em nível tóxico?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao7" value="1" checked="@(notificacao.Questao7 == 1)" @onchange=@(__e => {notificacao.Questao7 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao7" value="0" checked="@(notificacao.Questao7 == 0)" @onchange=@(__e => {notificacao.Questao7 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao7" value="999" checked="@(notificacao.Questao7 == 999)" @onchange=@(__e => {notificacao.Questao7 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>8</small></td>
+                                                    <td><small>A reação aumentou com dose maior ou reduziu-se com dose menor?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao8" value="1" checked="@(notificacao.Questao8 == 1)" @onchange=@(__e => {notificacao.Questao8 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao8" value="0" checked="@(notificacao.Questao8 == 0)" @onchange=@(__e => {notificacao.Questao8 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao8" value="999" checked="@(notificacao.Questao8 == 999)" @onchange=@(__e => {notificacao.Questao8 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>9</small></td>
+                                                    <td><small>O paciente já experimentou semelhante reação anteriormente com medicamentos de mesmo fármaco?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao9" value="1" checked="@(notificacao.Questao9 == 1)" @onchange=@(__e => {notificacao.Questao9 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao9" value="0" checked="@(notificacao.Questao9 == 0)" @onchange=@(__e => {notificacao.Questao9 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao9" value="999" checked="@(notificacao.Questao9 == 999)" @onchange=@(__e => {notificacao.Questao9 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td><small>10</small></td>
+                                                    <td><small>A reação foi confirmada por qualquer evidência objetiva?</small></td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao10" value="1" checked="@(notificacao.Questao10 == 1)" @onchange=@(__e => {notificacao.Questao10 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">1</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao10" value="0" checked="@(notificacao.Questao10 == 0)" @onchange=@(__e => {notificacao.Questao10 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                    <td>
+                                                        <label class="form-check form-switch">
+                                                            <input class="form-check-input" type="radio" name="questao10" value="999" checked="@(notificacao.Questao10 == 999)" @onchange=@(__e => {notificacao.Questao10 = float.Parse(__e.Value.ToString()); SomaNaranjo(float.Parse(__e.Value.ToString())); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})>
+                                                            <small class="form-check-label">0</small>
+                                                        </label>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="card-footer d-flex align-items-center">
+                                        <ul class="pagination m-0 ms-auto">
+                                            <li class="page-item active">
+                                                <a class="page-link">
+                                                    Soma Scores @notificacao.SomaNaranjo
+                                                </a>
+                                            </li>
+                                            <li class="page-item"><a class="page-link"></a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else if (ieEtapas.IePlanosAcao)
+                        {
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="btn-plano-acao" id="btn-primeiro-plano" checked="@ieEtapas.IePrimeiro" autocomplete="on" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IePrimeiro, null, "IePrimeiro", null);})">
+                                <label for="btn-primeiro-plano" type="button" class="btn">1º Plano de Ação</label>
+                                <input type="radio" class="btn-check" name="btn-plano-acao" id="btn-segundo-plano" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeSegundo, null, "IeSegundo", null);})">
+                                <label for="btn-segundo-plano" type="button" class="btn">2º Plano de Ação</label>
+                                <input type="radio" class="btn-check" name="btn-plano-acao" id="btn-terceiro-plano" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeTerceiro, null, "IeTerceiro", null);})">
+                                <label for="btn-terceiro-plano" type="button" class="btn">3º Plano de Ação</label>
+                            </div>
+
+                            @if (ieEtapas.IePrimeiro)
+                            {
+                                <div class="card card-lg">
+                                    <div class="card-body">
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">O que?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao1_1" @oninput="@((e) => {notificacao.DsAcao1_1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quando?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="date" class="form-control" @bind-Value="@notificacao.DsAcao1_2" @onchange="@((e) => {notificacao.DsAcao1_2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Como?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao1_3" @oninput="@((e) => {notificacao.DsAcao1_3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quem?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao1_4" @oninput="@((e) => {notificacao.DsAcao1_4 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (ieEtapas.IeSegundo)
+                            {
+                                <div class="card card-lg">
+                                    <div class="card-body">
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">O que?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao2_1" @oninput="@((e) => {notificacao.DsAcao2_1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quando?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="date" class="form-control" @bind-Value="@notificacao.DsAcao2_2" @oninput="@((e) => {notificacao.DsAcao2_2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Como?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao2_3" @oninput="@((e) => {notificacao.DsAcao2_3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quem?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao2_4" @oninput="@((e) => {notificacao.DsAcao2_4 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (ieEtapas.IeTerceiro)
+                            {
+                                <div class="card card-lg">
+                                    <div class="card-body">
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">O que?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao3_1" @oninput="@((e) => {notificacao.DsAcao3_1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quando?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="date" class="form-control" @bind-Value="@notificacao.DsAcao3_2" @oninput="@((e) => {notificacao.DsAcao3_2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Como?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao3_3" @oninput="@((e) => {notificacao.DsAcao3_3 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 row">
+                                            <label class="col-3 col-form-label required">Quem?</label>
+                                            <div class="col">
+                                                <InputText autocomplete="on" type="text" class="form-control" @bind-Value="@notificacao.DsAcao3_4" @oninput="@((e) => {notificacao.DsAcao3_4 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else if (ieEtapas.IeAvaliacao)
+                        {
+                            <div class="card card-lg">
+                                <div class="card-body">
+                                    <div class="mb-3 row">
+                                        <label class="col-3 form-label required">Os Planos de Ação foram eficazes?</label>
+                                        <div class="col">
+                                            <label class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="radios-eficaz" value="Sim" checked="@(notificacao.DsAvalEficacia == "Sim")" @onchange=@(__e => {notificacao.DsAvalEficacia = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})>
+                                                <span class="form-check-label">Sim, Evidencie.</span>
+                                            </label>
+                                            <label class="form-check form-check-inline">
+                                                <input class="form-check-input" type="radio" name="radios-eficaz" value="Não" checked="@(notificacao.DsAvalEficacia == "Não")" @onchange=@(__e => {notificacao.DsAvalEficacia = __e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})>
+                                                <span class="form-check-label">Não</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3 row">
+                                        <label class="col-2 form-label required">Evidências</label>
+                                        <div class="col">
+                                            <InputTextArea autocomplete="on" class="form-control" @bind-Value="@notificacao.DsAvalEvidencias" @oninput="@((e) => {notificacao.DsAvalEvidencias = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IeAvaliacao, "IeAvaliacao", null);})" style="resize: none;" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </form>
+                </div>
+            </div>
+        </div>
+                    
+    </div>
+
+    @* Modal Confirma Ishikawa *@
+
+    <div class="modal modal-blur fade" id="modal-ishikawa" tabindex="-1" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="modal-title">Tem certeza?</div>
+                    <div>Quer utilizar o Diagrama de Ishikawa?</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal" @onclick="@((e) => {notificacao.DsIshikawa = "Não";})">Não</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeIshikawa, null, null, "IeIshikawa"); notificacao.DtIshikawa = DateTimeOffset.Now; notificacao.DsIshikawa = "Sim";})">Sim</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Modal Confirma BowTie *@
+
+    <div class="modal modal-blur fade" id="modal-bowtie" tabindex="-1" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="modal-title">Tem certeza?</div>
+                    <div>Quer utilizar o Diagrama de BowTie?</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal" @onclick="@((e) => {notificacao.DsBowTie = "Não";})">Não</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeBowTie, null, null, "IeBowTie"); notificacao.DtBowTie = DateTimeOffset.Now; notificacao.DsBowTie = "Sim";})">Sim</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Modal Confirma Naranjo *@
+
+    <div class="modal modal-blur fade" id="modal-naranjo" tabindex="-1" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="modal-title">Tem certeza?</div>
+                    <div>Quer utilizar o Diagrama de Naranjo?</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn me-auto" data-bs-dismiss="modal" @onclick="@((e) => {notificacao.DsNaranjo = "Não";})">Não</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @onclick="@((e) => {ieEtapas.Check(!ieEtapas.IeNaranjo, null, null, "IeNaranjo"); notificacao.DtNaranjo = DateTimeOffset.Now; notificacao.DsNaranjo = "Sim";})">Sim</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Nova Tarefa *@
+
+    <div class="modal modal-blur fade" id="modal-tarefa1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Tarefa (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsTarefa1" @oninput="@((e) => {notificacao.DsTarefa1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-tarefa2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Tarefa (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsTarefa2" @oninput="@((e) => {notificacao.DsTarefa2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Novo Ambiente *@
+
+    <div class="modal modal-blur fade" id="modal-ambiente1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Ambiente (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsAmbiente1" @oninput="@((e) => {notificacao.DsAmbiente1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-ambiente2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Ambiente (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsAmbiente2" @oninput="@((e) => {notificacao.DsAmbiente2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Novo Paciente *@
+
+    <div class="modal modal-blur fade" id="modal-paciente1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Paciente (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100"  @bind-Value="@notificacao.DsPaciente1" @oninput="@((e) => {notificacao.DsPaciente1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-paciente2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Paciente (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsPaciente2" @oninput="@((e) => {notificacao.DsPaciente2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Nova Gestão *@
+
+    <div class="modal modal-blur fade" id="modal-gestao1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Gestão (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsGestao1" @oninput="@((e) => {notificacao.DsGestao1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-gestao2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Gestão (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsGestao2" @oninput="@((e) => {notificacao.DsGestao2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Nova Equipe *@
+
+    <div class="modal modal-blur fade" id="modal-equipe1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Equipe (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsEquipe1" @oninput="@((e) => {notificacao.DsEquipe1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-equipe2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Equipe (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100"  @bind-Value="@notificacao.DsEquipe2" @oninput="@((e) => {notificacao.DsEquipe2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Novo Individuo *@
+
+    <div class="modal modal-blur fade" id="modal-individuo1" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Individuo (1)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsIndividuo1" @oninput="@((e) => {notificacao.DsIndividuo1 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="modal-individuo2" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Individuo (2)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsIndividuo2" @oninput="@((e) => {notificacao.DsIndividuo2 = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" style="resize: none;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Inserir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Nova Comunica *@
+    <div class="modal modal-blur fade" id="modal-comunica" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Comunica</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <!-- Médico -->
+                        <div class="col-12">
+                            <InputText autocomplete="on" class="form-control mb-md" maxlength="100" @bind-Value="@notificacao.DsComunica" @oninput="@((e) => {notificacao.DsComunica = e.Value.ToString(); ieDisponibilidade.ChecarDisponibilidade(!ieDisponibilidade.IePlanosAcao, "IePlanosAcao", null);})" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</EditForm>

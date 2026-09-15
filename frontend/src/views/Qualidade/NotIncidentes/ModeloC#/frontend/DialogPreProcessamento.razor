@@ -1,0 +1,314 @@
+﻿@page "/DialogCardPrePro/{NotificacaoID}"
+
+@layout GlobalLayout
+@using TinyMCE.Blazor
+@using NexusHealth_Blazor.Pages.Global
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using System.Linq;
+@inject ProtectedSessionStorage ProtectedSessionStore
+@inject Majorsoft.Blazor.Extensions.BrowserStorage.ILocalStorageService localStorage
+@inject NavigationManager Navigation
+@inject TooltipService TooltipService
+@inject DialogService DialogService
+@inject Radzen.NotificationService NotificationService
+@inject IJSRuntime JS
+
+<RadzenStack Gap="1rem" Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
+    <RadzenStack>
+        <EditForm Model="@notificacao" autocomplete="on" id="form" name="form" novalidate="novalidate">
+            <div class="card @Disabled">
+                <div class="card-header">
+                    <h3 class="card-title">Dados Notificação</h3>
+                </div>
+                <div class="card-body">
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Nome</div>
+                            <div class="datagrid-content">
+                                <input type="text" class="form-control" value="@(notificacao.NmNotificador != "" ? notificacao.NmNotificador : "Não Informado")" disabled="" />
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Setor</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdSetorNotificador" disabled="">
+                                    <option value="0">Selecione</option>
+                                    @foreach (Setor setor in setores)
+                                    {
+                                        <option value="@setor.Id">@setor.NmSetor</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Médico</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdMedico" disabled="">
+                                    <option value="0">Selecione</option>
+                                    @foreach (MedicoTasy medicos in listaMedicos)
+                                    {
+                                        <option value="@medicos.Id_profissional">@medicos.Nm_profissional</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Cód/Nome Paciente</div>
+                            <div class="datagrid-content">
+                                <div class="row">
+                                    <div class="col-xs-2 col-sm-2 col-md-2 col-lg-2">
+                                        <div>
+                                            <input type="text" class="form-control" disabled="" id="iptPct" @bind="notificacao.CdPaciente" placeholder="Clique aqui para buscar o paciente" @ondblclick="@(() => {ModalOrigem = "#modal-buscapct2"; ModalBuscaPct(); })" data-bs-toggle="@Modal" data-bs-target="@NomeModal">
+                                        </div>
+                                    </div>
+                                    <div class="col-xs-10 col-sm-10 col-md-10 col-lg-10">
+                                        <div>
+                                            <input type="text" class="form-control" disabled="" @bind="notificacao.DsPaciente">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Tipo de Incidente</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdIncidente" @onchange="@((ChangeEventArgs __e) => {notificacao.CdIncidente = Convert.ToInt32(__e?.Value); setVisibility();})">
+                                    <option value="0">Selecione</option>
+                                    @foreach (NotificacaoIncidenteTipo tipo in listaTipos)
+                                    {
+                                        <option value="@tipo.Id">@tipo.DsTipo</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@atendHidden" class="datagrid-item">
+                            <div class="datagrid-title">Atendimento</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdAtendimento" @onchange="@((ChangeEventArgs __e) => {notificacao.CdAtendimento = Convert.ToInt32(__e?.Value); BuscaProtocolos();})">
+                                    <option value="0">Selecione</option>
+                                    @foreach (Atendimento atendimento in atendimentos)
+                                    {
+                                        <option value="@atendimento.NrAtendimento">@atendimento.NrAtendimento</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@protocoloHidden" class="datagrid-item">
+                            <div class="datagrid-title">Protocolo</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdProtocolo" @onchange="@((ChangeEventArgs __e) => {notificacao.CdProtocolo = Convert.ToInt32(__e?.Value); BuscaMedicacao();})">
+                                    <option value="0">Selecione</option>
+                                    @foreach (Protocolo protocolo in protocolos)
+                                    {
+                                        <option value="@protocolo.NrProtocolo">@protocolo.DsProtocolo</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@medicacaoHidden" class="datagrid-item">
+                            <div class="datagrid-title">Medicação</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdMedicacao" @onchange="@((ChangeEventArgs __e) => notificacao.CdMedicacao = Convert.ToInt32(__e?.Value))">
+                                    <option value="0">Selecione</option>
+                                    @foreach (MaterialMedicamento medicamento in medicamentos)
+                                    {
+                                        <option value="@medicamento.CdMaterial">(@medicamento.CdMaterial) @medicamento.DsMaterial - @medicamento.QtDose @medicamento.UnidMedDose</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@cateterHidden" class="datagrid-item">
+                            <div class="datagrid-title">Implantes de Cateter</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.DsCateter" @onchange="@((ChangeEventArgs __e) => {notificacao.DsCateter = __e?.Value?.ToString(); BuscaAtendimento();})">
+                                    <option value="0">Selecione</option>
+                                    @foreach (Cateter cateter in cateteres)
+                                    {
+                                        <option value="@cateter.DsProcedimento - @cateter.DtLiberacao.ToString("dd/MM/yyyy")">@cateter.DsProcedimento (@cateter.DtLiberacao.ToString("dd/MM/yyyy"))</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@cateterAtendHidden" class="datagrid-item">
+                            <div class="datagrid-title">Atendimentos</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.DtAtendimento" @onchange="@((ChangeEventArgs __e) => notificacao.DtAtendimento = Convert.ToDateTime(__e?.Value))">
+                                    <option value="0">Selecione</option>
+                                    @foreach (Atendimento atendimento in atendimentos)
+                                    {
+                                        <option value="@atendimento.DtAcomodacaoPaciente">@atendimento.NrAtendimento (@atendimento.DtAcomodacaoPaciente)</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div hidden="@newsHidden" class="datagrid-item">
+                            <div class="datagrid-title">Escala de News</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.DsEscalaNews" @onchange="@((ChangeEventArgs __e) => notificacao.DsEscalaNews = __e?.Value?.ToString())">
+                                    <option value="0">Selecione</option>
+                                    @foreach (EscalaNews escala in escalas)
+                                    {
+                                        <option value="@escala.DtEscala | Atendimento: @notificacao.CdAtendimento | Pontuação: @escala.QtPontuacao | Risco Clínico: @escala.DsRisco">Data Escala: @escala.DtEscala | Atendimento: @notificacao.CdAtendimento | Pontuação: @escala.QtPontuacao | Risco Clínico: @escala.DsRisco</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="datagrid">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Fato</div>
+                            <div class="datagrid-content">
+                                <InputText autocomplete="on" class="form-control" rows="5" style="resize: none;" @bind-Value="@notificacao.DsFato" />
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Consequências para</div>
+                            <div class="datagrid-content">
+                                <div>
+                                    <select class="form-select" value="@notificacao.DsConsequencias" @onchange="@((ChangeEventArgs __e) => {notificacao.DsConsequencias = __e?.Value.ToString();})">
+                                        <option value=""></option>
+                                        <option value="Paciente">Paciente</option>
+                                        <option value="Colaborador">Colaborador</option>
+                                        <option value="Instituição">Instituição</option>
+                                        <option value="Sem Consequências">Sem Consequências</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Consequências Imediatas</div>
+                            <div class="datagrid-content">
+                                <InputText autocomplete="on" class="form-control" rows="5" style="resize: none;" @bind-Value="@notificacao.DsConsequenciasImediatas" />
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Ações Imediatas</div>
+                            <div class="datagrid-content">
+                                <InputText autocomplete="on" class="form-control" rows="5" style="resize: none;" @bind-Value="@notificacao.DsAcoesImediatas" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-2">
+                <div class="card-body">
+                    <span class="badge bg-red w-100 text-red-fg">Pré Processamento</span>
+                    <div class="datagrid mt-2">
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Classificação do Incidente</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.DsClass" @onchange="@((ChangeEventArgs __e) => {notificacao.DsClass = __e.Value.ToString();})">
+                                    <option value="Não Processado">Não Processado</option>
+                                    <option value="Procedente">Procedente</option>
+                                    <option value="Improcedente">Improcedente</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Motivo da Classificação</div>
+                            <div class="datagrid-content">
+                                <InputText autocomplete="on" class="form-control" rows="5" style="resize: none;" @bind-Value="@notificacao.DsMotClass" />
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Responsável pela Notificação</div>
+                            <div class="datagrid-content">
+                                <select class="form-select" value="@notificacao.CdResponsavel" @onchange="@((ChangeEventArgs __e) => {notificacao.CdResponsavel = Convert.ToInt32(__e.Value); notificacao.DsResponsavel = responsaveis.First(x => x.Id == notificacao.CdResponsavel).DsResp;})">
+                                    @if (notificacao.CdIncidente == 44)
+                                    {
+                                        <option value="0">Selecione</option>
+                                        @foreach (var resp in responsaveis.Where(x => x.Id == 6))
+                                        {
+                                            <option value="@resp.Id">@resp.DsResp</option>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <option value="0">Selecione</option>
+                                        @foreach (var resp in responsaveis.Where(x => x.Id != 6))
+                                        {
+                                            <option value="@resp.Id">@resp.DsResp</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="datagrid-item">
+                            <div class="datagrid-title">Responsável pelo Pré Processamento</div>
+                            <div class="datagrid-content">@usuario.Nm_usuario</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        @if(Disabled == "")
+        {
+            <RadzenButton Variant="Variant.Flat" Icon="close" ButtonStyle="ButtonStyle.Danger" Text="Cancelar" Click="@(() => {Disabled = "card-inactive"; ObterDadosNotificacao();})" />
+        }
+        else
+        {
+            <RadzenButton Variant="Variant.Flat" Icon="edit" ButtonStyle="ButtonStyle.Warning" Text="Editar" Click="@(() => {Disabled = "";})" />
+        }
+        <RadzenButton Variant="Variant.Flat" Icon="save" Text="Salvar" Click="GravaPreProcessamento" />
+    </RadzenStack>
+    <div class="modal modal-blur fade" id="modal-buscapct2" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" data-bs-toggle="@Modal" data-bs-target="@ModalOrigem"></button>
+                <div class="modal-body">
+                    <div class="flex-fill">
+                        <div class="font-weight-medium">Buscar pessoa física</div>
+                        <div class="text-muted">Pelo código ou nome da pessoa</div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col">
+                            <input type="text" @ref="modalMultipleSerialNumbers" autofocus="autofocus" class="form-control mb-md" @bind="Pct" />
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-icon btn-primary" @onclick="((e) => {BuscaPct();})">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-search"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <RadzenDataGrid Density="Density.Compact"
+                                            Style="height: 100%; overflow-y: auto;"
+                                            AllowColumnResize="true"
+                                            AllowFiltering="true"
+                                            AllowAlternatingRows="false"
+                                            AllowSorting="true"
+                                            PageSize="10"
+                                            AllowPaging="true"
+                                            ShowPagingSummary="true"
+                                            Data="@pacientes"
+                                            TItem="Paciente">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="Paciente" Title="Nome" Property="NmPaciente" Filterable="false" Width="155px" />
+                                    <RadzenDataGridColumn TItem="Paciente" Title="Ações" Filterable="false" Sortable="false" Width="30px">
+                                        <Template Context="data">
+                                            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center">
+                                                <a href="#" data-bs-dismiss="modal" data-bs-toggle="@Modal" data-bs-target="@ModalOrigem" @onclick="((e) => {notificacao.CdPaciente = data.CdPaciente; notificacao.DsPaciente = data.NmPaciente;})">
+                                                    <RadzenButton Icon="done" ButtonStyle="ButtonStyle.Primary" Variant="Radzen.Variant.Flat" Size="Radzen.ButtonSize.ExtraSmall"></RadzenButton>
+                                                </a>
+                                            </RadzenStack>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</RadzenStack>
