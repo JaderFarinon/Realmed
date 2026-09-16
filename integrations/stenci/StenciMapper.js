@@ -28,5 +28,20 @@ class StenciMapper {
     if (!insurance?.id) return null
     return { external_source: 'STENCI', external_id: String(insurance.id), name: insurance.name || null, plan_id: insurance.planId || null, plan: insurance.plan?.name || null, card_number: insurance.record || null, card_expiration: insurance.validity || null }
   }
+  static insuranceCatalog(item) {
+    if (!item?.id || !item?.name) return null
+    return { externalId: String(item.id), name: String(item.name), type: item.type || null, imageUrl: item.imageUrl || null }
+  }
+  static insurancePlan(item) {
+    if (!item?.id || !item?.plan?.id || !item.plan.name) return null
+    return { insuranceExternalId: String(item.id), insuranceName: item.name || null, planExternalId: String(item.plan.id), planName: item.customName || item.plan.name, originalPlanName: item.plan.name, type: item.plan.type || null, record: item.plan.record || null }
+  }
+  static professional(item) {
+    if (!item?.id || !item?.name) return null
+    const details = item.professional && typeof item.professional === 'object' ? item.professional : {}
+    const councils = Array.isArray(details.councils) ? details.councils.filter(Boolean).map((c) => ({ name: c.name || null, state: c.state || null, record: c.record || null })) : []
+    const specialties = Array.isArray(details.specialties) ? details.specialties.filter(Boolean).map((s) => ({ code: s.code || null, name: s.name || null, rqe: s.rqe || null })) : []
+    return { externalId: String(item.id), identityId: item.identityId == null ? null : String(item.identityId), name: String(item.name), active: details.active === true, councils, specialties, title: details.title || null, signature: details.signature || null, signatureImageUrl: details.signatureImageUrl || null }
+  }
 }
 module.exports = StenciMapper

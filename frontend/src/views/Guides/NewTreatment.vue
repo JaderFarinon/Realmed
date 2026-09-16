@@ -1,46 +1,551 @@
 <template>
-  <PageShell title="Novo Tratamento" subtitle="Prepare o tratamento e a documentação recebida antes de encaminhá-lo ao faturamento">
+  <PageShell
+    title="Novo Tratamento"
+    subtitle="Prepare o tratamento e a documentação recebida antes de encaminhá-lo ao faturamento"
+  >
     <form class="space-y-5" @submit.prevent="save">
-      <section class="panel"><h2 class="section-title">1. Paciente</h2><label class="field">PACIENTE<input v-model="search" class="input" placeholder="Buscar paciente no Stenci..." @input="findPatients"></label><p v-if="searching" class="mt-2 text-sm text-gray-500">Consultando o Stenci...</p><div v-if="searchError" class="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ searchError }}</div><div v-if="patients.length" class="mt-2 divide-y rounded-xl border"><button v-for="patient in patients" :key="patient.external_id" type="button" class="block w-full p-3 text-left hover:bg-gray-50" :disabled="importing" @click="selectPatient(patient)"><span class="flex items-center gap-2"><b>{{ patient.full_name }}</b><span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">STENCI</span></span><span class="mt-1 block text-sm text-gray-600">CPF: {{ patient.cpf || '—' }} · Nascimento: {{ date(patient.birth_date) }} · Telefone: {{ patient.phone || '—' }}</span><span class="mt-1 block text-sm text-gray-600">Convênio: {{ patient.insurance?.name || '—' }} · Plano: {{ patient.insurance?.plan || '—' }} · Carteirinha: {{ patient.insurance?.card_number || '—' }}</span></button><button v-if="hasMore" type="button" class="block w-full p-3 text-center font-semibold text-blue-700 hover:bg-gray-50" :disabled="searching" @click="loadMore">Carregar mais</button></div><p v-if="importing" class="mt-3 font-semibold text-blue-700">Importando dados do Stenci...</p><div v-if="selectedPatient" class="mt-4 rounded-xl bg-blue-50 p-4"><span class="flex items-center gap-2"><b>Paciente selecionado: {{ selectedPatient.full_name }}</b><span class="rounded-full px-2 py-0.5 text-xs font-bold" :class="selectedPatient.external_source === 'STENCI' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'">{{ selectedPatient.external_source === 'STENCI' ? 'STENCI' : 'MANUAL' }}</span></span><p class="mt-1 text-sm text-gray-600">CPF: {{ selectedPatient.cpf || '—' }} · Nascimento: {{ date(selectedPatient.birth_date) }} · Telefone: {{ selectedPatient.phone || '—' }}</p><p v-if="selectedInsurance" class="mt-1 text-sm text-gray-600">Convênio: {{ selectedInsurance.insurance_name || '—' }} · Plano: {{ selectedInsurance.plan || '—' }} · Carteirinha: {{ selectedInsurance.card_number || '—' }} · Validade: {{ date(selectedInsurance.card_expiration) }}</p><RouterLink class="link mt-2 inline-block" :to="`/pacientes/${selectedPatient.id}`">Confirmar ou atualizar cadastro</RouterLink></div><RouterLink class="btn-secondary mt-3 inline-block" to="/pacientes">Paciente não encontrado? Cadastrar manualmente</RouterLink></section>
+      <section class="panel">
+        <h2 class="section-title">1. Paciente</h2>
+        <label class="field"
+          >Paciente<SearchableSelect
+            v-model="patientOption"
+            :options="patients"
+            label-key="full_name"
+            key-key="external_id"
+            :loading="searching"
+            loading-text="Consultando o Stenci..."
+            placeholder="Digite nome, CPF etc."
+            :min-chars="2"
+            remote
+            @search="findPatients"
+            ><template #option="{ option: patient }"
+              ><b class="block">{{ patient.full_name }}</b
+              ><span class="block text-xs text-gray-600"
+                >CPF: {{ patient.cpf || '—' }} · Nasc.: {{ date(patient.birth_date) }} · Tel.:
+                {{ patient.phone || '—' }}</span
+              ><span v-if="patient.insurance" class="block text-xs text-gray-500"
+                >{{ patient.insurance.name || '—' }} · {{ patient.insurance.plan || '—' }} ·
+                Carteirinha: {{ patient.insurance.card_number || '—' }}</span
+              ></template
+            ></SearchableSelect
+          ></label
+        >
+        <p v-if="searchError" class="mt-2 text-sm text-error-700">{{ searchError }}</p>
+        <p v-if="importing" class="mt-2 text-sm font-semibold text-blue-700">
+          Importando dados do Stenci...
+        </p>
+        <div
+          v-if="selectedPatient"
+          class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-blue-50 px-4 py-3"
+        >
+          <div>
+            <span class="text-xs font-semibold uppercase text-blue-700">Paciente selecionado</span
+            ><b class="block text-gray-800">{{ selectedPatient.full_name }}</b
+            ><span class="text-sm text-gray-600"
+              >{{ date(selectedPatient.birth_date) }} ·
+              {{ selectedInsurance?.name || 'Sem convênio'
+              }}<template v-if="selectedPlan"> / {{ selectedPlan.planName }}</template></span
+            >
+          </div>
+          <button type="button" class="link" @click="changePatient">Alterar paciente</button>
+        </div>
+        <RouterLink class="btn-secondary mt-3 inline-block" to="/pacientes"
+          >Paciente não encontrado? Cadastrar manualmente</RouterLink
+        >
+      </section>
 
-      <section class="panel"><h2 class="section-title">2. Dados do tratamento</h2><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"><label class="field">Convênio<select v-model="form.patient_insurance_id" class="input" required><option value="">Selecione</option><option v-for="item in insurances" :key="item.id" :value="item.id">{{ item.insurance_name }} · {{ item.card_number }} · {{ item.plan || 'Plano não informado' }}</option></select></label><label class="field">Fisioterapeuta responsável<select v-model="form.physiotherapist_id" class="input" required><option value="">Selecione</option><option v-for="item in physiotherapists" :key="item.id" :value="item.id">{{ item.full_name }}</option></select></label><label class="field">Médico solicitante<select v-model="form.requesting_doctor_id" class="input"><option value="">Selecione</option><option v-for="item in doctors" :key="item.id" :value="item.id">{{ item.full_name }}</option></select></label><label class="field">Data da avaliação<input v-model="form.assessment_date" type="date" class="input" required></label><label class="field">Data prevista de início<input v-model="form.expected_start_date" type="date" class="input" required></label><label class="field">Quantidade de sessões<input v-model.number="form.requested_sessions" type="number" min="1" class="input" required></label><label class="field md:col-span-2 xl:col-span-3">Observações<textarea v-model="form.notes" class="input min-h-20"></textarea></label></div></section>
+      <section class="panel">
+        <h2 class="section-title">2. Dados do tratamento</h2>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label class="field"
+            >Convênio<SearchableSelect
+              v-model="selectedInsurance"
+              :options="insurances"
+              :loading="catalogLoading.insurances"
+              loading-text="Carregando convênios..."
+              placeholder="Selecione"
+              @update:model-value="insuranceChanged" /></label
+          ><label class="field"
+            >Plano<SearchableSelect
+              v-model="selectedPlan"
+              :options="availablePlans"
+              label-key="planName"
+              key-key="planExternalId"
+              :disabled="!selectedInsurance"
+              :loading="catalogLoading.plans"
+              loading-text="Carregando planos..."
+              placeholder="Selecione" /></label
+          ><label class="field"
+            >Número da carteirinha<input v-model="cardNumber" class="input" /></label
+          ><label class="field"
+            >Validade da carteirinha<input v-model="cardExpiration" type="date" class="input"
+          /></label>
+          <p v-if="catalogErrors.insurances" class="error-text">{{ catalogErrors.insurances }}</p>
+          <p v-if="catalogErrors.plans" class="error-text">{{ catalogErrors.plans }}</p>
+        </div>
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <label class="field"
+            >Fisioterapeuta responsável<SearchableSelect
+              v-model="selectedPhysiotherapist"
+              :options="physiotherapists"
+              :loading="catalogLoading.professionals"
+              loading-text="Carregando profissionais..."
+              ><template #option="{ option }"
+                ><b class="block">{{ option.name }}</b
+                ><span class="text-xs text-gray-500">{{
+                  councilLabel(option, 'CREFITO')
+                }}</span></template
+              ></SearchableSelect
+            ></label
+          ><label class="field"
+            >Médico solicitante<SearchableSelect
+              v-model="selectedDoctor"
+              :options="doctors"
+              :loading="catalogLoading.professionals"
+              loading-text="Carregando profissionais..."
+              ><template #option="{ option }"
+                ><b class="block">{{ option.name }}</b
+                ><span class="text-xs text-gray-500">{{
+                  councilLabel(option, 'CRM')
+                }}</span></template
+              ></SearchableSelect
+            ></label
+          >
+          <p v-if="catalogErrors.professionals" class="error-text md:col-span-2">
+            {{ catalogErrors.professionals }}
+          </p>
+        </div>
+        <div class="mt-4 grid gap-4 md:grid-cols-3">
+          <label class="field"
+            >Data da avaliação<input
+              v-model="form.assessment_date"
+              type="date"
+              class="input"
+              required /></label
+          ><label class="field"
+            >Data prevista de início<input
+              v-model="form.expected_start_date"
+              type="date"
+              class="input"
+              required /></label
+          ><label class="field"
+            >Quantidade de sessões<input
+              v-model.number="form.requested_sessions"
+              type="number"
+              min="1"
+              class="input"
+              required /></label
+          ><label class="field md:col-span-3"
+            >Observações<textarea v-model="form.notes" class="input min-h-20"></textarea>
+          </label>
+        </div>
+      </section>
 
-      <section class="panel"><h2 class="section-title">3. Dias de tratamento</h2><div class="flex flex-wrap gap-2"><label v-for="day in weekdays" :key="day.value" class="rounded-xl border px-4 py-3"><input v-model="form.treatment_days" type="checkbox" :value="day.value" class="mr-2">{{ day.label }}</label></div><label class="field mt-4 max-w-md">Período / horário preferencial<input v-model="form.preferred_period" class="input" placeholder="Ex.: Manhã, 14h ou após as 18h"></label></section>
+      <section class="panel">
+        <h2 class="section-title">3. Dias de tratamento</h2>
+        <div class="flex flex-wrap gap-2">
+          <label v-for="day in weekdays" :key="day.value" class="rounded-xl border px-4 py-3"
+            ><input
+              v-model="form.treatment_days"
+              type="checkbox"
+              :value="day.value"
+              class="mr-2"
+            />{{ day.label }}</label
+          >
+        </div>
+        <label class="field mt-4 max-w-md"
+          >Período / horário preferencial<input
+            v-model="form.preferred_period"
+            class="input"
+            placeholder="Ex.: Manhã, 14h ou após as 18h"
+        /></label>
+      </section>
 
-      <section class="panel"><h2 class="section-title">4. Procedimentos</h2><p class="mb-4 text-sm text-gray-500">Selecione no cadastro de procedimentos; nenhum código é fixado nesta tela.</p><div class="grid gap-4 md:grid-cols-3"><label v-for="kind in procedureKinds" :key="kind.type" class="field">{{ kind.label }}<select v-model="procedureSelection[kind.type].procedure_id" class="input"><option value="">Selecione</option><option v-for="item in procedures.filter(p => p.type === kind.type)" :key="item.id" :value="item.id">{{ item.code }} · {{ item.description }}</option></select><input v-model.number="procedureSelection[kind.type].requested_quantity" class="input mt-2" type="number" min="1" :placeholder="kind.type === 'CONSULTATION' ? '1' : 'Quantidade'"></label></div></section>
+      <section class="panel">
+        <h2 class="section-title">4. Procedimentos</h2>
+        <p class="mb-4 text-sm text-gray-500">
+          Selecione no cadastro de procedimentos; nenhum código é fixado nesta tela.
+        </p>
+        <div class="grid gap-4 md:grid-cols-3">
+          <label v-for="kind in procedureKinds" :key="kind.type" class="field"
+            >{{ kind.label
+            }}<select v-model="procedureSelection[kind.type].procedure_id" class="input">
+              <option value="">Selecione</option>
+              <option
+                v-for="item in procedures.filter((p) => p.type === kind.type)"
+                :key="item.id"
+                :value="item.id"
+              >
+                {{ item.code }} · {{ item.description }}
+              </option></select
+            ><input
+              v-model.number="procedureSelection[kind.type].requested_quantity"
+              class="input mt-2"
+              type="number"
+              min="1"
+              :placeholder="kind.type === 'CONSULTATION' ? '1' : 'Quantidade'"
+          /></label>
+        </div>
+      </section>
 
-      <section class="panel"><h2 class="section-title">5. Documentação recebida</h2><div class="grid gap-4 md:grid-cols-2"><article v-for="card in documentCards" :key="card.type" class="rounded-xl border p-4"><h3 class="font-bold">{{ card.label }}</h3><p class="my-2 text-sm text-gray-500">{{ files[card.type]?.name || card.empty }}</p><label class="btn-secondary inline-block">Anexar<input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png" @change="chooseFile($event, card.type)"></label><div v-if="card.usability && files[card.type]" class="mt-3 flex gap-4 text-sm"><label><input v-model="usability[card.type]" type="radio" :value="true"> Adequado</label><label><input v-model="usability[card.type]" type="radio" :value="false"> Necessita ajuste</label></div></article><article class="rounded-xl border p-4"><h3 class="font-bold">Outros documentos</h3><p class="my-2 text-sm text-gray-500">Encaminhamentos, relatórios, exames e complementos.</p><label class="btn-secondary inline-block">Selecionar arquivos<input type="file" multiple class="hidden" accept=".pdf,.jpg,.jpeg,.png" @change="chooseOthers"></label><p v-for="file in otherFiles" :key="file.name" class="mt-2 text-sm">{{ file.name }}</p></article></div></section>
+      <section class="panel">
+        <h2 class="section-title">5. Documentação recebida</h2>
+        <div class="grid gap-4 md:grid-cols-2">
+          <article v-for="card in documentCards" :key="card.type" class="rounded-xl border p-4">
+            <h3 class="font-bold">{{ card.label }}</h3>
+            <p class="my-2 text-sm text-gray-500">{{ files[card.type]?.name || card.empty }}</p>
+            <label class="btn-secondary inline-block"
+              >Anexar<input
+                type="file"
+                class="hidden"
+                accept=".pdf,.jpg,.jpeg,.png"
+                @change="chooseFile($event, card.type)"
+            /></label>
+            <div v-if="card.usability && files[card.type]" class="mt-3 flex gap-4 text-sm">
+              <label
+                ><input v-model="usability[card.type]" type="radio" :value="true" /> Adequado</label
+              ><label
+                ><input v-model="usability[card.type]" type="radio" :value="false" /> Necessita
+                ajuste</label
+              >
+            </div>
+          </article>
+          <article class="rounded-xl border p-4">
+            <h3 class="font-bold">Outros documentos</h3>
+            <p class="my-2 text-sm text-gray-500">
+              Encaminhamentos, relatórios, exames e complementos.
+            </p>
+            <label class="btn-secondary inline-block"
+              >Selecionar arquivos<input
+                type="file"
+                multiple
+                class="hidden"
+                accept=".pdf,.jpg,.jpeg,.png"
+                @change="chooseOthers"
+            /></label>
+            <p v-for="file in otherFiles" :key="file.name" class="mt-2 text-sm">{{ file.name }}</p>
+          </article>
+        </div>
+      </section>
 
-      <section class="panel"><h2 class="section-title">6. Documentação necessária</h2><p class="text-sm text-gray-600">Guias ausentes ou marcadas como “Necessita ajuste” poderão ser geradas com os modelos já cadastrados após salvar. O original permanecerá disponível ao lado do documento preparado pela Realmed.</p></section>
-      <section class="panel"><h2 class="section-title">7. Resumo / conclusão</h2><ul class="space-y-2 text-sm"><li v-for="item in checklist" :key="item.label" :class="item.ok ? 'text-success-700' : 'text-error-700'">{{ item.ok ? '✓' : '✕' }} {{ item.label }}</li></ul><p class="mt-4 font-semibold">{{ locallyComplete ? 'Documentação pronta para conferência' : 'Documentação incompleta' }}</p><button class="btn mt-4 px-6 py-3" :disabled="saving">{{ locallyComplete ? 'Finalizar preparação' : 'Salvar com documentação pendente' }}</button></section>
+      <section class="panel">
+        <h2 class="section-title">6. Documentação necessária</h2>
+        <p class="text-sm text-gray-600">
+          Guias ausentes ou marcadas como “Necessita ajuste” poderão ser geradas com os modelos já
+          cadastrados após salvar. O original permanecerá disponível ao lado do documento preparado
+          pela Realmed.
+        </p>
+      </section>
+      <section class="panel">
+        <h2 class="section-title">7. Resumo / conclusão</h2>
+        <ul class="space-y-2 text-sm">
+          <li
+            v-for="item in checklist"
+            :key="item.label"
+            :class="item.ok ? 'text-success-700' : 'text-error-700'"
+          >
+            {{ item.ok ? '✓' : '✕' }} {{ item.label }}
+          </li>
+        </ul>
+        <p class="mt-4 font-semibold">
+          {{ locallyComplete ? 'Documentação pronta para conferência' : 'Documentação incompleta' }}
+        </p>
+        <button class="btn mt-4 px-6 py-3" :disabled="saving">
+          {{ locallyComplete ? 'Finalizar preparação' : 'Salvar com documentação pendente' }}
+        </button>
+      </section>
     </form>
   </PageShell>
 </template>
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
-const router=useRouter(),search=ref(''),patients=ref<any[]>([]),selectedPatient=ref<any>(),insurances=ref<any[]>([]),professionals=ref<any[]>([]),procedures=ref<any[]>([]),files=reactive<Record<string,File|undefined>>({}),otherFiles=ref<File[]>([]),usability=reactive<Record<string,boolean>>({}),saving=ref(false),searching=ref(false),importing=ref(false),searchError=ref(''),hasMore=ref(false),offset=ref(0)
-const form=reactive<any>({patient_insurance_id:'',physiotherapist_id:'',requesting_doctor_id:'',assessment_date:'',expected_start_date:'',requested_sessions:10,notes:'',treatment_days:[],preferred_period:''})
-const weekdays=[['MONDAY','Segunda'],['TUESDAY','Terça'],['WEDNESDAY','Quarta'],['THURSDAY','Quinta'],['FRIDAY','Sexta'],['SATURDAY','Sábado']].map(([value,label])=>({value,label}))
-const procedureKinds=[{type:'PHYSIOTHERAPY',label:'Fisioterapia'},{type:'ELECTROSTIMULATION',label:'Eletroestimulação'},{type:'CONSULTATION',label:'Consulta / Avaliação'}]
-const procedureSelection=reactive<Record<string,any>>(Object.fromEntries(procedureKinds.map(k=>[k.type,{procedure_id:'',requested_quantity:k.type==='CONSULTATION'?1:10}])))
-const documentCards=[{type:'PHYSIOTHERAPY_GUIDE',label:'Guia de Fisioterapia',empty:'Nenhuma guia recebida',usability:true},{type:'CONSULTATION_GUIDE',label:'Guia de Consulta / Avaliação',empty:'Nenhuma guia recebida',usability:true},{type:'PHYSIO_ASSESSMENT',label:'Avaliação Fisioterapêutica',empty:'Anexe o formulário preenchido',usability:false}]
-const physiotherapists=computed(()=>professionals.value.filter(p=>p.type==='PHYSIOTHERAPIST')),doctors=computed(()=>professionals.value.filter(p=>p.type==='DOCTOR'))
-const checklist=computed(()=>[{label:'Avaliação fisioterapêutica',ok:!!files.PHYSIO_ASSESSMENT},{label:'Guia de consulta adequada',ok:!!files.CONSULTATION_GUIDE&&usability.CONSULTATION_GUIDE===true},{label:'Guia de fisioterapia adequada',ok:!!files.PHYSIOTHERAPY_GUIDE&&usability.PHYSIOTHERAPY_GUIDE===true},{label:'Eletroestimulação incluída',ok:!!procedureSelection.ELECTROSTIMULATION.procedure_id}]),locallyComplete=computed(()=>checklist.value.every(i=>i.ok))
-let timer:number|undefined
-function findPatients(){window.clearTimeout(timer);searchError.value='';offset.value=0;if(search.value.trim().length<2){patients.value=[];hasMore.value=false;return}timer=window.setTimeout(()=>fetchPatients(false),300)}
-async function fetchPatients(append:boolean){searching.value=true;try{const response=(await api.get('/integrations/stenci/patients/search',{params:{search:search.value.trim(),limit:30,offset:offset.value}})).data;patients.value=append?[...patients.value,...response.items]:response.items;hasMore.value=response.hasMore}catch{if(!append)patients.value=[];hasMore.value=false;searchError.value='Não foi possível consultar o Stenci no momento.'}finally{searching.value=false}}
-async function loadMore(){offset.value+=30;await fetchPatients(true)}
-async function selectPatient(patient:any){importing.value=true;searchError.value='';try{const synced=(await api.post(`/integrations/stenci/patients/${encodeURIComponent(patient.external_id)}/sync`,{patient:patient.raw})).data;selectedPatient.value=(await api.get(`/patients/${synced.patient.id}`)).data;insurances.value=selectedPatient.value.insurances.filter((i:any)=>i.active);form.patient_insurance_id=synced.patient_insurance?.id||'';patients.value=[];hasMore.value=false;search.value=selectedPatient.value.full_name}catch{searchError.value='Não foi possível importar o paciente do Stenci. Você ainda pode cadastrá-lo manualmente.'}finally{importing.value=false}}
-function chooseFile(event:Event,type:string){files[type]=(event.target as HTMLInputElement).files?.[0]}
-function chooseOthers(event:Event){otherFiles.value=Array.from((event.target as HTMLInputElement).files||[])}
-async function upload(processId:number,type:string,file:File){await api.post(`/guide-processes/${processId}/documents`,file,{params:{documentType:type,isUsable:type==='PHYSIO_ASSESSMENT'?true:usability[type]},headers:{'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name)}})}
-async function save(){if(!selectedPatient.value)return window.alert('Selecione um paciente.');saving.value=true;try{const proceduresPayload=Object.values(procedureSelection).filter((p:any)=>p.procedure_id);const treatment=(await api.post('/guide-processes',{...form,patient_id:selectedPatient.value.id,procedures:proceduresPayload})).data;for(const card of documentCards){const file=files[card.type];if(file)await upload(treatment.id,card.type,file)}for(const file of otherFiles.value)await upload(treatment.id,'OTHER',file);await router.push(`/central-de-guias/tratamentos/${treatment.id}`)}finally{saving.value=false}}
-const date=(value:string)=>value?new Date(`${String(value).slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR'):'—'
-const selectedInsurance=computed(()=>insurances.value.find((item:any)=>String(item.id)===String(form.patient_insurance_id)))
-onMounted(async()=>{try{[professionals.value,procedures.value]=await Promise.all([(await api.get('/professionals',{params:{active:true}})).data,(await api.get('/procedures',{params:{active:true}})).data])}catch{searchError.value='Não foi possível carregar profissionais e procedimentos.'}})
+import SearchableSelect from '@/components/SearchableSelect.vue'
+const router = useRouter(),
+  patients = ref<any[]>([]),
+  patientOption = ref<any>(null),
+  selectedPatient = ref<any>(),
+  insurances = ref<any[]>([]),
+  plans = ref<any[]>([]),
+  professionals = ref<any[]>([]),
+  procedures = ref<any[]>([]),
+  files = reactive<Record<string, File | undefined>>({}),
+  otherFiles = ref<File[]>([]),
+  usability = reactive<Record<string, boolean>>({}),
+  saving = ref(false),
+  searching = ref(false),
+  importing = ref(false),
+  searchError = ref('')
+const selectedInsurance = ref<any>(null),
+  selectedPlan = ref<any>(null),
+  selectedPhysiotherapist = ref<any>(null),
+  selectedDoctor = ref<any>(null),
+  cardNumber = ref(''),
+  cardExpiration = ref('')
+const catalogLoading = reactive({ insurances: true, plans: true, professionals: true }),
+  catalogErrors = reactive({ insurances: '', plans: '', professionals: '' })
+const form = reactive<any>({
+  assessment_date: '',
+  expected_start_date: '',
+  requested_sessions: 10,
+  notes: '',
+  treatment_days: [],
+  preferred_period: '',
+})
+const weekdays = [
+  ['MONDAY', 'Segunda'],
+  ['TUESDAY', 'Terça'],
+  ['WEDNESDAY', 'Quarta'],
+  ['THURSDAY', 'Quinta'],
+  ['FRIDAY', 'Sexta'],
+  ['SATURDAY', 'Sábado'],
+].map(([value, label]) => ({ value, label }))
+const procedureKinds = [
+  { type: 'PHYSIOTHERAPY', label: 'Fisioterapia' },
+  { type: 'ELECTROSTIMULATION', label: 'Eletroestimulação' },
+  { type: 'CONSULTATION', label: 'Consulta / Avaliação' },
+]
+const procedureSelection = reactive<Record<string, any>>(
+  Object.fromEntries(
+    procedureKinds.map((k) => [
+      k.type,
+      { procedure_id: '', requested_quantity: k.type === 'CONSULTATION' ? 1 : 10 },
+    ]),
+  ),
+)
+const documentCards = [
+  {
+    type: 'PHYSIOTHERAPY_GUIDE',
+    label: 'Guia de Fisioterapia',
+    empty: 'Nenhuma guia recebida',
+    usability: true,
+  },
+  {
+    type: 'CONSULTATION_GUIDE',
+    label: 'Guia de Consulta / Avaliação',
+    empty: 'Nenhuma guia recebida',
+    usability: true,
+  },
+  {
+    type: 'PHYSIO_ASSESSMENT',
+    label: 'Avaliação Fisioterapêutica',
+    empty: 'Anexe o formulário preenchido',
+    usability: false,
+  },
+]
+const byName = (a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }),
+  hasCouncil = (p: any, name: string) =>
+    p.active === true && p.councils.some((c: any) => String(c.name).toUpperCase() === name)
+const physiotherapists = computed(() =>
+    professionals.value.filter((p) => hasCouncil(p, 'CREFITO')).sort(byName),
+  ),
+  doctors = computed(() => professionals.value.filter((p) => hasCouncil(p, 'CRM')).sort(byName)),
+  availablePlans = computed(() =>
+    plans.value
+      .filter((p) => p.insuranceExternalId === selectedInsurance.value?.externalId)
+      .sort((a, b) => a.planName.localeCompare(b.planName, 'pt-BR', { sensitivity: 'base' })),
+  )
+const checklist = computed(() => [
+    { label: 'Avaliação fisioterapêutica', ok: !!files.PHYSIO_ASSESSMENT },
+    {
+      label: 'Guia de consulta adequada',
+      ok: !!files.CONSULTATION_GUIDE && usability.CONSULTATION_GUIDE === true,
+    },
+    {
+      label: 'Guia de fisioterapia adequada',
+      ok: !!files.PHYSIOTHERAPY_GUIDE && usability.PHYSIOTHERAPY_GUIDE === true,
+    },
+    {
+      label: 'Eletroestimulação incluída',
+      ok: !!procedureSelection.ELECTROSTIMULATION.procedure_id,
+    },
+  ]),
+  locallyComplete = computed(() => checklist.value.every((i) => i.ok))
+let timer: number | undefined
+function findPatients(value: string) {
+  window.clearTimeout(timer)
+  searchError.value = ''
+  if (value.trim().length < 2) {
+    patients.value = []
+    return
+  }
+  timer = window.setTimeout(() => fetchPatients(value.trim()), 300)
+}
+async function fetchPatients(search: string) {
+  searching.value = true
+  try {
+    patients.value = (
+      await api.get('/integrations/stenci/patients/search', {
+        params: { search, limit: 30, offset: 0 },
+      })
+    ).data.items
+  } catch {
+    patients.value = []
+    searchError.value = 'Não foi possível consultar o Stenci no momento.'
+  } finally {
+    searching.value = false
+  }
+}
+watch(patientOption, (patient) => {
+  if (patient) selectPatient(patient)
+})
+async function selectPatient(patient: any) {
+  importing.value = true
+  searchError.value = ''
+  try {
+    const synced = (
+      await api.post(
+        `/integrations/stenci/patients/${encodeURIComponent(patient.external_id)}/sync`,
+        { patient: patient.raw },
+      )
+    ).data
+    selectedPatient.value = synced.patient
+    patients.value = []
+    const linked = patient.insurance
+    if (linked) {
+      selectedInsurance.value = insurances.value.find(
+        (i) => i.externalId === linked.external_id,
+      ) || { externalId: linked.external_id, name: linked.name }
+      selectedPlan.value =
+        plans.value.find(
+          (p) =>
+            p.insuranceExternalId === linked.external_id && p.planExternalId === linked.plan_id,
+        ) || null
+      cardNumber.value = linked.card_number || ''
+      cardExpiration.value = String(linked.card_expiration || '').slice(0, 10)
+    } else clearInsurance()
+  } catch {
+    patientOption.value = null
+    searchError.value =
+      'Não foi possível importar o paciente do Stenci. Você ainda pode cadastrá-lo manualmente.'
+  } finally {
+    importing.value = false
+  }
+}
+function clearInsurance() {
+  selectedInsurance.value = null
+  selectedPlan.value = null
+  cardNumber.value = ''
+  cardExpiration.value = ''
+}
+function changePatient() {
+  selectedPatient.value = undefined
+  patientOption.value = null
+  clearInsurance()
+}
+function insuranceChanged(value: any) {
+  if (!value || selectedPlan.value?.insuranceExternalId !== value.externalId)
+    selectedPlan.value = null
+}
+function councilLabel(item: any, name: string) {
+  const c = item.councils.find((entry: any) => String(entry.name).toUpperCase() === name)
+  return c ? `${name} ${c.record} / ${c.state}` : name
+}
+function chooseFile(event: Event, type: string) {
+  files[type] = (event.target as HTMLInputElement).files?.[0]
+}
+function chooseOthers(event: Event) {
+  otherFiles.value = Array.from((event.target as HTMLInputElement).files || [])
+}
+async function upload(processId: number, type: string, file: File) {
+  await api.post(`/guide-processes/${processId}/documents`, file, {
+    params: { documentType: type, isUsable: type === 'PHYSIO_ASSESSMENT' ? true : usability[type] },
+    headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+  })
+}
+async function save() {
+  if (!selectedPatient.value) return window.alert('Selecione um paciente.')
+  if (!selectedInsurance.value || !selectedPlan.value || !selectedPhysiotherapist.value)
+    return window.alert('Selecione convênio, plano e fisioterapeuta.')
+  saving.value = true
+  try {
+    const proceduresPayload = Object.values(procedureSelection).filter((p: any) => p.procedure_id)
+    const stenci = {
+      insurance: {
+        ...selectedInsurance.value,
+        planExternalId: selectedPlan.value.planExternalId,
+        planName: selectedPlan.value.planName,
+        cardNumber: cardNumber.value,
+        cardExpiration: cardExpiration.value || null,
+      },
+      physiotherapist: selectedPhysiotherapist.value,
+      doctor: selectedDoctor.value,
+    }
+    const treatment = (
+      await api.post('/guide-processes', {
+        ...form,
+        patient_id: selectedPatient.value.id,
+        procedures: proceduresPayload,
+        stenci,
+      })
+    ).data
+    for (const card of documentCards) {
+      const file = files[card.type]
+      if (file) await upload(treatment.id, card.type, file)
+    }
+    for (const file of otherFiles.value) await upload(treatment.id, 'OTHER', file)
+    await router.push(`/central-de-guias/tratamentos/${treatment.id}`)
+  } finally {
+    saving.value = false
+  }
+}
+const date = (value: string) =>
+  value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—'
+async function loadCatalog(
+  key: 'insurances' | 'plans' | 'professionals',
+  path: string,
+  message: string,
+) {
+  try {
+    const data = (await api.get(path)).data
+    if (key === 'insurances') insurances.value = data.items.sort(byName)
+    if (key === 'plans') plans.value = data.items
+    if (key === 'professionals') professionals.value = data.items
+  } catch {
+    catalogErrors[key] = message
+  } finally {
+    catalogLoading[key] = false
+  }
+}
+onMounted(async () => {
+  await Promise.all([
+    loadCatalog(
+      'insurances',
+      '/integrations/stenci/insurances',
+      'Não foi possível carregar os convênios do Stenci.',
+    ),
+    loadCatalog(
+      'plans',
+      '/integrations/stenci/insurance-plans',
+      'Não foi possível carregar os planos do Stenci.',
+    ),
+    loadCatalog(
+      'professionals',
+      '/integrations/stenci/professionals',
+      'Não foi possível carregar os profissionais do Stenci.',
+    ),
+    api
+      .get('/procedures', { params: { active: true } })
+      .then((r) => (procedures.value = r.data))
+      .catch(() => {}),
+  ])
+})
 </script>
-<style scoped>.field{display:flex;flex-direction:column;gap:.4rem;font-size:.8rem;font-weight:600;color:#475467}.field .input{width:100%;font-weight:400;color:#344054}</style>
+<style scoped>
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475467;
+}
+.field .input {
+  width: 100%;
+  font-weight: 400;
+  color: #344054;
+}
+</style>

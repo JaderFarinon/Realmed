@@ -104,6 +104,22 @@ test('mapper tolerates absent insurance and optional identity and contact fields
   assert.equal(StenciMapper.insurance(nullValidity).card_expiration, null)
 })
 
+test('catalog mappers preserve distinct insurance and plan ids and classify professionals by council data', () => {
+  assert.deepEqual(StenciMapper.insuranceCatalog({ id: 'insurance-1', name: 'Particular', type: 'particular' }), { externalId: 'insurance-1', name: 'Particular', type: 'particular', imageUrl: null })
+  assert.deepEqual(StenciMapper.insurancePlan({ id: 'insurance-1', name: 'FUSEX', customName: 'Plano regional', plan: { id: 'plan-9', name: 'Fusex', type: 'insurance' } }), { insuranceExternalId: 'insurance-1', insuranceName: 'FUSEX', planExternalId: 'plan-9', planName: 'Plano regional', originalPlanName: 'Fusex', type: 'insurance', record: null })
+  const professional = StenciMapper.professional({ id: 'pro-1', identityId: 'person-1', name: 'Dra. Ana', professional: { active: true, councils: [{ name: 'CRM', state: 'PR', record: '123' }], specialties: [], signature: 'signed', signatureImageUrl: 'https://example.test/signature.png' } })
+  assert.equal(professional.councils[0].name, 'CRM'); assert.deepEqual(professional.specialties, []); assert.equal(professional.signature, 'signed')
+  assert.deepEqual(StenciMapper.professional({ id: 'pro-2', name: 'Sem conselho', professional: { active: true } }).councils, [])
+})
+
+test('catalog calls use the operational API, session JWT and exact queries', async () => {
+  const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, status: 200, json: async () => ({ items: [], hasMore: false }) } }
+  const service = new StenciService(new StenciClient({ config: getStenciConfig(env), session, fetchImpl }))
+  await Promise.all([service.listInsurances(), service.listInsurancePlans(), service.listProfessionals()])
+  assert.deepEqual(calls.map(call => call.url), ['https://api.example/v1/insurances?limit=0&active=true', 'https://api.example/v1/insurance-plans?limit=0&offset=0&active=true', 'https://api.example/v1/professionals?limit=100&offset=0&active=true'])
+  assert.equal(calls.every(call => call.options.headers.Authorization === 'JWT session-token'), true)
+})
+
 function memoryDb() {
   const tables = { patients: [], insurance_providers: [], patient_insurances: [] }
   const db = (tableExpression) => {
@@ -145,7 +161,10 @@ test('New Treatment uses the backend Stenci flow, preselects insurance and keeps
   const source = fs.readFileSync(path.join(__dirname, '../../frontend/src/views/Guides/NewTreatment.vue'), 'utf8')
   assert.match(source, /\/integrations\/stenci\/patients\/search/)
   assert.match(source, /\/integrations\/stenci\/patients\/\$\{encodeURIComponent\(patient\.external_id\)\}\/sync/)
-  assert.match(source, /form\.patient_insurance_id=synced\.patient_insurance\?\.id/)
+  assert.match(source, /selectedInsurance\.value\s*=\s*insurances\.value\.find/)
+  assert.match(source, /\/integrations\/stenci\/insurance-plans/)
+  assert.match(source, /hasCouncil\(p,\s*'CREFITO'\)/)
+  assert.match(source, /hasCouncil\(p,\s*'CRM'\)/)
   assert.match(source, /Não foi possível consultar o Stenci no momento\./)
   assert.match(source, /Cadastrar manualmente/)
   assert.equal(source.includes(env.STENCI_BRANCH_ID), false)
