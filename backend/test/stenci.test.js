@@ -83,8 +83,8 @@ test('public configuration and integration logs do not expose secrets or patient
 })
 
 test('network and invalid responses become controlled errors', async () => {
-  const config = getStenciConfig(env), network = new StenciClient({ config, fetchImpl: async () => { throw new Error('socket details') } }); await assert.rejects(network.authenticate('user', 'password', 'device'), { code: 'STENCI_NETWORK_ERROR', status: 503 })
-  const invalid = new StenciClient({ config, fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('invalid') } }) }); await assert.rejects(invalid.authenticate('user', 'password', 'device'), { code: 'STENCI_INVALID_RESPONSE', status: 502 })
+  const config = getStenciConfig(env), network = new StenciClient({ config, fetchImpl: async () => { throw new Error('socket details') } }); await assert.rejects(network.authenticate('user', 'password', 'device'), { code: 'STENCI_CONNECTION_ERROR', status: 503, stage: 'auth' })
+  const invalid = new StenciClient({ config, fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('invalid') } }) }); await assert.rejects(invalid.authenticate('user', 'password', 'device'), { code: 'STENCI_AUTH_FAILED', status: 502, stage: 'auth' })
 })
 
 test('New Treatment uses the backend Stenci flow, preselects insurance and keeps manual fallback', () => {
