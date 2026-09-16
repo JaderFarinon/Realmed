@@ -10,7 +10,6 @@ const configuredEnv = {
   STENCI_ENABLED: 'true',
   STENCI_API_X_BASE_URL: 'https://api-x.example',
   STENCI_API_BASE_URL: 'https://api.example',
-  STENCI_DEVICE_ID: 'realmed-device',
   STENCI_BRANCH_ID: 'realmed-branch',
 }
 
@@ -23,21 +22,23 @@ test('configuration requires infrastructure but never fixed username and passwor
     api_x_base_url_configured: true,
     api_base_url_configured: true,
     authentication_configured: true,
-    device_configured: true,
     branch_configured: true,
   })
-  assert.equal(publicConfig(getStenciConfig({ ...configuredEnv, STENCI_DEVICE_ID: '' })).authentication_configured, false)
+  assert.equal(getStenciConfig(configuredEnv).deviceId, undefined)
+  assert.equal(publicConfig(getStenciConfig({ ...configuredEnv, STENCI_ENABLED: 'false' })).authentication_configured, false)
   assert.equal(publicConfig(getStenciConfig({ ...configuredEnv, STENCI_BRANCH_ID: '' })).authentication_configured, false)
+  assert.equal(publicConfig(getStenciConfig({ ...configuredEnv, STENCI_API_X_BASE_URL: '' })).authentication_configured, false)
 })
 
 test('server-side store isolates users and expires sessions with the JWT-compatible TTL', () => {
   let now = 100
   const store = new StenciSessionStore({ ttlMs: tokenTtlMs('2h'), now: () => now })
-  const maria = new StenciSession({ deviceId: 'device', branchId: 'maria-branch' })
-  const joao = new StenciSession({ deviceId: 'device', branchId: 'joao-branch' })
+  const maria = new StenciSession({ deviceId: 'maria-device', branchId: 'maria-branch' })
+  const joao = new StenciSession({ deviceId: 'joao-device', branchId: 'joao-branch' })
   const mariaSid = store.create(maria)
   const joaoSid = store.create(joao)
   assert.notEqual(mariaSid, joaoSid)
+  assert.notEqual(maria.deviceId, joao.deviceId)
   assert.equal(store.get(mariaSid), maria)
   assert.equal(store.get(joaoSid), joao)
   now += tokenTtlMs('2h')

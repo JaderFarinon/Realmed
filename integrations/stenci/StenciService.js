@@ -14,8 +14,8 @@ class StenciService {
     if (!result || typeof result !== 'object' || Array.isArray(result)) throw new StenciError('Resposta inválida recebida do Stenci.', { code: 'STENCI_INVALID_RESPONSE', status: 502 })
     return result
   }
-  async authenticateUser(username, password) {
-    const me = await this.client.authenticateSession(username, password)
+  async authenticateUser(username, password, deviceId) {
+    const me = await this.client.authenticateSession(username, password, deviceId)
     return require('./StenciMapper').userIdentity(me, username)
   }
   getSession() { return this.client.getSession() }

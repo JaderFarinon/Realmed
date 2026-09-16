@@ -1,5 +1,6 @@
 const express = require('express')
 const jwt = require('jsonwebtoken')
+const crypto = require('node:crypto')
 
 const pool = require('../db')
 const authMiddleware = require('../middleware/auth')
@@ -28,6 +29,7 @@ function createAuthRouter({
   syncUser = syncStenciUser,
   jwtSecret = process.env.JWT_SECRET,
   sessionStore = stenciSessionStore,
+  deviceIdFactory = () => crypto.randomUUID().replace(/-/g, ''),
 } = {}) {
   const router = express.Router()
 
@@ -43,7 +45,8 @@ function createAuthRouter({
       const service = serviceFactory
         ? serviceFactory(config)
         : new StenciService(new StenciClient({ config }))
-      const identity = await service.authenticateUser(username, password)
+      const deviceId = deviceIdFactory()
+      const identity = await service.authenticateUser(username, password, deviceId)
       const stenciSession = service.getSession()
       if (!stenciSession) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_MISSING' })
       const user = await syncUser(db, identity)

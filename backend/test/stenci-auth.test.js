@@ -21,7 +21,6 @@ const config = getStenciConfig({
   STENCI_ENABLED: 'true',
   STENCI_API_X_BASE_URL: 'https://api-x.example',
   STENCI_API_BASE_URL: 'https://api.example',
-  STENCI_DEVICE_ID: 'fixed-device',
   STENCI_BRANCH_ID: 'realmed-branch',
 })
 
@@ -32,22 +31,22 @@ async function withServer(router, callback) {
   try { await callback(`http://127.0.0.1:${server.address().port}`) } finally { await new Promise((resolve) => server.close(resolve)) }
 }
 
-test('employee authentication uses credentials once, fixed branch, device and GET /me', async () => {
+test('employee authentication uses credentials once, fixed branch, session device and GET /me', async () => {
   const calls = []
   const fetchImpl = async (url, options) => {
     calls.push({ path: new URL(url).pathname, body: options.body && JSON.parse(options.body) })
     return { ok: true, json: async () => new URL(url).pathname === '/v1/me' ? { identityId: 'identity-7', username: 'maria', name: 'Maria', email: 'maria@example.test' } : {} }
   }
-  const identity = await new StenciService(new StenciClient({ config, fetchImpl })).authenticateUser('maria', 'secret-value')
+  const identity = await new StenciService(new StenciClient({ config, fetchImpl })).authenticateUser('maria', 'secret-value', 'session-device')
   assert.deepEqual(calls, [
-    { path: '/v1/auth', body: { username: 'maria', password: 'secret-value', deviceId: 'fixed-device' } },
-    { path: '/v1/me/branch', body: { branchId: 'realmed-branch', deviceId: 'fixed-device' } },
+    { path: '/v1/auth', body: { username: 'maria', password: 'secret-value', deviceId: 'session-device' } },
+    { path: '/v1/me/branch', body: { branchId: 'realmed-branch', deviceId: 'session-device' } },
     { path: '/v1/me', body: undefined },
   ])
   assert.deepEqual(identity, { stenci_user_id: 'identity-7', stenci_username: 'maria', name: 'Maria', email: 'maria@example.test' })
 })
 
-test('valid Stenci login creates once, reuses internal user, issues a safe Realmed JWT and needs no permissions', async () => {
+test('valid logins create isolated device contexts, issue safe JWTs and logout clears them', async () => {
   const users = new Map(); let created = 0
   const syncUser = async (_db, identity) => {
     if (!users.has(identity.stenci_user_id)) {
@@ -56,8 +55,18 @@ test('valid Stenci login creates once, reuses internal user, issues a safe Realm
     }
     return users.get(identity.stenci_user_id)
   }
-  const storedSession = new StenciSession({ deviceId: 'fixed-device', branchId: 'realmed-branch' })
-  const serviceFactory = () => ({ authenticateUser: async () => ({ stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }), getSession: () => storedSession })
+  const receivedDeviceIds = []
+  const serviceFactory = () => {
+    let storedSession
+    return {
+      authenticateUser: async (_username, _password, deviceId) => {
+        receivedDeviceIds.push(deviceId)
+        storedSession = new StenciSession({ deviceId, branchId: 'realmed-branch' })
+        return { stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }
+      },
+      getSession: () => storedSession,
+    }
+  }
   const sessionStore = new StenciSessionStore({ ttlMs: 60_000 })
   const router = createAuthRouter({ configFactory: () => config, serviceFactory, syncUser, jwtSecret: process.env.JWT_SECRET, sessionStore })
   await withServer(router, async (base) => {
@@ -66,7 +75,10 @@ test('valid Stenci login creates once, reuses internal user, issues a safe Realm
       assert.equal(response.status, 200)
       const result = await response.json(); const claims = jwt.verify(result.token, process.env.JWT_SECRET)
       assert.equal(claims.id, 1); assert.equal(typeof claims.sid, 'string'); assert.equal(claims.password, undefined); assert.equal(claims.username, 'joao')
-      assert.equal(result.user.sid, undefined); assert.equal(sessionStore.get(claims.sid), storedSession)
+      assert.equal(result.user.sid, undefined)
+      const session = sessionStore.get(claims.sid)
+      assert.equal(session.deviceId, receivedDeviceIds[attempt])
+      assert.match(session.deviceId, /^[0-9a-f]{32}$/)
       assert.equal(JSON.stringify(result).includes('never-persist-this'), false)
       assert.equal(result.user.permissions, undefined)
       const logout = await fetch(`${base}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${result.token}` } })
@@ -75,6 +87,7 @@ test('valid Stenci login creates once, reuses internal user, issues a safe Realm
     }
   })
   assert.equal(created, 1)
+  assert.equal(new Set(receivedDeviceIds).size, 2)
 })
 
 test('invalid credentials and unavailable Stenci return controlled messages', async () => {
