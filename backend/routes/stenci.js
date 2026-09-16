@@ -49,6 +49,23 @@ function createStenciRouter({ db = knex, configFactory = getStenciConfig, servic
     try { context = makeService(req); const result = await context.service.searchPatients(search, { limit, offset }); const items = result.items.map((item) => ({ ...StenciMapper.patient(item), insurance: StenciMapper.insurance(item), raw: validatedPatient(item, item.id) })); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: items.length }); res.json({ items, hasMore: result.hasMore }) }
     catch (originalError) { const error = normalizeStenciSessionError(originalError, context?.sid || req.user?.sid, sessionStore); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message }); res.status(error.status || 503).json({ error: error.code === 'STENCI_SESSION_EXPIRED' ? 'Sua sessão expirou. Entre novamente.' : 'Não foi possível consultar o Stenci no momento.', code: error.code || 'STENCI_ERROR' }) }
   })
+  const catalog = (path, operation, load, map) => router.get(path, modulePermission('guide_processes', 'create'), async (req, res) => {
+    const started = new Date(); let context
+    try {
+      context = makeService(req)
+      const result = await context.service[load]()
+      const items = result.items.map(map).filter(Boolean)
+      const finished = new Date(); await log({ integration: 'STENCI', operation, status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: items.length })
+      res.json({ items, hasMore: result.hasMore })
+    } catch (originalError) {
+      const error = normalizeStenciSessionError(originalError, context?.sid || req.user?.sid, sessionStore)
+      const finished = new Date(); await log({ integration: 'STENCI', operation, status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message })
+      res.status(error.status || 503).json({ error: error.code === 'STENCI_SESSION_EXPIRED' ? 'Sua sessão expirou. Entre novamente.' : 'Não foi possível consultar o Stenci no momento.', code: error.code || 'STENCI_ERROR' })
+    }
+  })
+  catalog('/insurances', 'INSURANCE_LIST', 'listInsurances', StenciMapper.insuranceCatalog)
+  catalog('/insurance-plans', 'INSURANCE_PLAN_LIST', 'listInsurancePlans', StenciMapper.insurancePlan)
+  catalog('/professionals', 'PROFESSIONAL_LIST', 'listProfessionals', StenciMapper.professional)
   router.post('/patients/:externalId/sync', modulePermission('guide_processes', 'create'), async (req, res) => {
     const started = new Date()
     try { const externalPatient = validatedPatient(req.body?.patient, req.params.externalId), result = await sync(db, externalPatient); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SYNC', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 1 }); res.json(result) }

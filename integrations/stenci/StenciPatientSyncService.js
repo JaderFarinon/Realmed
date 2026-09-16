@@ -21,7 +21,7 @@ async function syncPatientFromStenci(knex, externalPatient) {
       let provider = await trx('insurance_providers').where({ external_source: 'STENCI', external_id: mappedInsurance.external_id }).first()
       if (!provider) { const [providerId] = await trx('insurance_providers').insert({ name: mappedInsurance.name, external_source: 'STENCI', external_id: mappedInsurance.external_id, active: true }); provider = await trx('insurance_providers').where({ id: providerId }).first() }
       else if (provider.name !== mappedInsurance.name || !provider.active) { await trx('insurance_providers').where({ id: provider.id }).update({ name: mappedInsurance.name, active: true }); provider = await trx('insurance_providers').where({ id: provider.id }).first() }
-      const insuranceData = { card_number: mappedInsurance.card_number, card_expiration: mappedInsurance.card_expiration, plan: mappedInsurance.plan, active: true }
+      const insuranceData = { card_number: mappedInsurance.card_number, card_expiration: mappedInsurance.card_expiration, plan: mappedInsurance.plan, plan_external_id: mappedInsurance.plan_id, active: true }
       patientInsurance = await trx('patient_insurances').where({ patient_id: patient.id, insurance_provider_id: provider.id }).first()
       if (patientInsurance) await trx('patient_insurances').where({ id: patientInsurance.id }).update(insuranceData)
       else { const [insuranceId] = await trx('patient_insurances').insert({ ...insuranceData, patient_id: patient.id, insurance_provider_id: provider.id }); patientInsurance = { id: insuranceId } }
