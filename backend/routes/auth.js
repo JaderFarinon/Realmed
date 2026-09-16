@@ -5,7 +5,7 @@ const crypto = require('node:crypto')
 const pool = require('../db')
 const authMiddleware = require('../middleware/auth')
 const { normalizeRoleValue } = require('../middleware/permission')
-const { syncStenciUser } = require('../services/stenciUserService')
+const { syncStenciUser, databaseDiagnostic } = require('../services/stenciUserService')
 const { getStenciConfig } = require('../../integrations/stenci/config')
 const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciService = require('../../integrations/stenci/StenciService')
@@ -30,6 +30,7 @@ function createAuthRouter({
   jwtSecret = process.env.JWT_SECRET,
   sessionStore = stenciSessionStore,
   deviceIdFactory = () => crypto.randomUUID().replace(/-/g, ''),
+  logger = console,
 } = {}) {
   const router = express.Router()
 
@@ -53,14 +54,17 @@ function createAuthRouter({
       sid = sessionStore.create(stenciSession)
       const payload = { ...publicUser(user), sid }
       const token = jwt.sign(payload, jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
-      console.info('[REALMED AUTH] login concluído')
+      logger.info('[REALMED AUTH] login concluído')
       return res.json({ token, user: publicUser(user) })
     } catch (error) {
       if (sid) sessionStore.delete(sid)
       if (error.code === 'STENCI_INVALID_CREDENTIALS') return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
       if (error.code === 'USER_IDENTITY_CONFLICT') return res.status(409).json({ error: error.message, code: error.code })
-      if (error.code === 'REALMED_USER_SYNC_FAILED') return res.status(500).json({ error: error.message, code: error.code })
-      console.error('[REALMED AUTH] falha na autenticação Stenci', { code: error.code || error.name, stage: error.stage, upstreamStatus: error.upstreamStatus })
+      if (error.code === 'REALMED_USER_SYNC_FAILED') {
+        logger.error('[REALMED USER SYNC] falha', databaseDiagnostic(error.cause))
+        return res.status(500).json({ error: error.message, code: error.code })
+      }
+      logger.error('[REALMED AUTH] falha na autenticação Stenci', { code: error.code || error.name, stage: error.stage, upstreamStatus: error.upstreamStatus })
       if (error.code === 'STENCI_BRANCH_FAILED') return res.status(502).json({ error: 'Não foi possível selecionar a unidade da Realmed no Stenci.' })
       if (error.code === 'STENCI_ME_FAILED') return res.status(502).json({ error: 'Autenticação realizada, mas não foi possível validar o usuário no Stenci.' })
       return res.status(error.code === 'STENCI_CONNECTION_ERROR' ? 503 : 502).json({ error: 'Não foi possível validar seu acesso no momento. Tente novamente.' })

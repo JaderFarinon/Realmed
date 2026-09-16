@@ -8,6 +8,7 @@ class UserSyncError extends Error {
     this.name = 'UserSyncError'
     this.code = code
     this.status = status
+    if (cause && !this.cause) this.cause = cause
   }
 }
 
@@ -20,8 +21,9 @@ function databaseDiagnostic(error) {
   return {
     code: error?.code,
     errno: error?.errno,
-    constraint: message.match(/for key ['`](.+?)['`]/i)?.[1],
+    constraint: error?.constraint || message.match(/for key ['`](.+?)['`]/i)?.[1],
     duplicateField: message.match(/Duplicate entry .* for key ['`](.+?)['`]/i)?.[1],
+    sqlState: error?.sqlState,
   }
 }
 
@@ -35,6 +37,21 @@ function lockNames(identity) {
 async function selectUser(connection, sql, value) {
   const [rows] = await connection.query(sql, Array.isArray(value) ? value : [value])
   return rows[0] || null
+}
+
+async function selectPerson(connection, column, value) {
+  if (!value) return null
+  const [rows] = await connection.query(
+    `SELECT p.*, u.id AS linked_user_id, u.stenci_user_id AS linked_stenci_user_id
+       FROM people p LEFT JOIN users u ON u.person_id = p.id
+      WHERE p.${column} = ? FOR UPDATE`,
+    [value],
+  )
+  if (!rows.length) return null
+  const personIds = new Set(rows.map((row) => row.id))
+  const linkedUserIds = new Set(rows.map((row) => row.linked_user_id).filter(Boolean))
+  if (personIds.size !== 1 || linkedUserIds.size > 1) throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
+  return rows[0]
 }
 
 function assertCompatible(candidate, identity) {
@@ -70,8 +87,20 @@ async function reconcile(connection, identity, logger) {
   if (compatibleIds.size > 1) throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
 
   const user = byStenci || byEmail || byUsername || byIdentity
-  const reconciledBy = byStenci ? 'stenci_user_id' : byEmail ? 'email' : (byUsername || byIdentity) ? 'username' : null
-  let personId = user?.person_id
+  const reconciledBy = byStenci ? 'stenci_user_id' : byEmail ? 'email' : byUsername ? 'username' : byIdentity ? 'cpf' : null
+
+  // Lock and reconcile people independently of users. This catches legacy, unlinked
+  // people before either an INSERT or an UPDATE can hit cpf/email UNIQUE indexes.
+  const personByCpf = await selectPerson(connection, 'cpf', identity.identity)
+  const personByEmail = await selectPerson(connection, 'email', identity.email)
+  if (personByCpf && personByEmail && personByCpf.id !== personByEmail.id) {
+    throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
+  }
+  const matchingPerson = personByCpf || personByEmail
+  if (matchingPerson?.linked_user_id && matchingPerson.linked_user_id !== user?.id) {
+    throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
+  }
+  let personId = matchingPerson?.id || user?.person_id
 
   if (!personId) {
     const [result] = await connection.query(
@@ -109,7 +138,7 @@ async function reconcile(connection, identity, logger) {
     userId = result.insertId
   }
 
-  developmentLog(logger, `reconciliado por: ${reconciledBy || 'novo usuário'}`)
+  logger.info(`[REALMED USER SYNC] reconciliado por: ${reconciledBy || (matchingPerson ? 'person' : 'novo usuário')}`)
   developmentLog(logger, `criado novo usuário: ${!user}`)
   const [synced] = await connection.query(
     `SELECT u.id, u.username, u.role, u.status, u.person_id, u.stenci_user_id, u.stenci_username,
@@ -129,9 +158,10 @@ async function syncStenciUser(pool, rawIdentity, { logger = console } = {}) {
   }
   if (!identity.stenci_user_id) throw new UserSyncError('REALMED_USER_SYNC_FAILED')
 
-  const connection = await pool.getConnection()
   const locks = lockNames(identity)
+  let connection
   try {
+    connection = await pool.getConnection()
     for (const name of locks) {
       const [rows] = await connection.query('SELECT GET_LOCK(?, 10) AS acquired', [name])
       if (!Number(rows[0]?.acquired)) throw new UserSyncError('REALMED_USER_SYNC_FAILED')
@@ -141,15 +171,15 @@ async function syncStenciUser(pool, rawIdentity, { logger = console } = {}) {
     await connection.commit()
     return user
   } catch (error) {
-    try { await connection.rollback() } catch (_) {}
+    try { await connection?.rollback() } catch (_) {}
     if (error instanceof UserSyncError) throw error
-    if (process.env.NODE_ENV === 'development') logger.error('[REALMED USER SYNC] falha no banco', databaseDiagnostic(error))
+    logger.error('[REALMED USER SYNC] falha', databaseDiagnostic(error))
     throw new UserSyncError('REALMED_USER_SYNC_FAILED', 500, error)
   } finally {
-    for (const name of [...locks].reverse()) {
+    for (const name of connection ? [...locks].reverse() : []) {
       try { await connection.query('SELECT RELEASE_LOCK(?) AS released', [name]) } catch (_) {}
     }
-    connection.release()
+    connection?.release()
   }
 }
 

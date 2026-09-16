@@ -16,6 +16,7 @@ const { createAuthRouter } = require('../routes/auth')
 const express = require('express')
 const StenciSession = require('../../integrations/stenci/StenciSession')
 const { StenciSessionStore } = require('../services/StenciSessionStore')
+const { UserSyncError } = require('../services/stenciUserService')
 
 const config = getStenciConfig({
   STENCI_ENABLED: 'true',
@@ -103,6 +104,38 @@ test('invalid credentials and unavailable Stenci return controlled messages', as
       assert.deepEqual(await response.json(), { error: scenario.message })
     })
   }
+})
+
+test('user sync failures log only sanitized MySQL diagnostics before returning 500', async () => {
+  const entries = []
+  const logger = { info() {}, error: (...values) => entries.push(values) }
+  const mysqlError = Object.assign(new Error('private database failure'), {
+    code: 'ER_DUP_ENTRY', errno: 1062, sqlState: '23000',
+    sqlMessage: "Duplicate entry 'private@example.test' for key 'people.uk_people_email'",
+    sql: "UPDATE people SET email = 'private@example.test'",
+  })
+  const serviceFactory = () => {
+    let session
+    return {
+      authenticateUser: async () => {
+        session = new StenciSession({ deviceId: 'device', branchId: 'branch', token: 'private-stenci-token' })
+        return { stenci_user_id: 'stable-1', stenci_username: 'private-cpf', email: 'private@example.test' }
+      },
+      getSession: () => session,
+    }
+  }
+  const router = createAuthRouter({
+    serviceFactory, logger, jwtSecret: process.env.JWT_SECRET,
+    syncUser: async () => { throw new UserSyncError('REALMED_USER_SYNC_FAILED', 500, mysqlError) },
+  })
+  await withServer(router, async (base) => {
+    const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'private-cpf', password: 'private-password' }) })
+    assert.equal(response.status, 500)
+    assert.deepEqual(await response.json(), { error: 'Não foi possível concluir seu acesso ao Realmed.', code: 'REALMED_USER_SYNC_FAILED' })
+  })
+  const output = JSON.stringify(entries)
+  assert.match(output, /REALMED USER SYNC|ER_DUP_ENTRY|uk_people_email|23000/)
+  assert.doesNotMatch(output, /private@example\.test|private-cpf|private-password|private-stenci-token|UPDATE people/)
 })
 
 test('authentication stages have distinct errors and preserve a string username and its leading zero', async () => {
