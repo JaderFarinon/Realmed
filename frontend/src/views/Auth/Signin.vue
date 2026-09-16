@@ -50,17 +50,22 @@ const route = useRoute()
 const submit = async () => {
   error.value = ''
   loading.value = true
+  localStorage.removeItem('token')
+  useAuthUser().clearUser()
   try {
     const { data } = await api.post('/auth/login', {
       username: username.value,
       password: password.value,
     })
     localStorage.setItem('token', data.token)
-    await useAuthUser().loadUser()
+    const authenticatedUser = await useAuthUser().loadUser()
+    if (!authenticatedUser) throw new Error('Não foi possível carregar o usuário autenticado.')
     await router.push(
       typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard',
     )
   } catch (errorCaught: unknown) {
+    localStorage.removeItem('token')
+    useAuthUser().clearUser()
     const response = (errorCaught as { response?: { data?: { error?: string } } }).response
     error.value = response?.data?.error || 'Não foi possível entrar.'
   } finally {

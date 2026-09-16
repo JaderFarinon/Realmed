@@ -29,6 +29,14 @@ export function useAuthUser() {
       loading = api
         .get<{ user: AuthUser }>('/auth/me')
         .then(({ data }) => (user.value = data.user))
+        .catch((error: { response?: { status?: number } }) => {
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            localStorage.removeItem('token')
+            user.value = null
+            return null
+          }
+          throw error
+        })
         .finally(() => {
           loading = null
         })

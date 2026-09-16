@@ -13,7 +13,11 @@ api.interceptors.request.use((config) => {
   return config
 })
 api.interceptors.response.use(undefined, (error) => {
-  if (error.response?.status === 401 || error.response?.data?.code === 'STENCI_SESSION_EXPIRED') {
+  if (
+    error.response?.status === 401 ||
+    error.response?.status === 403 ||
+    error.response?.data?.code === 'STENCI_SESSION_EXPIRED'
+  ) {
     if (error.response?.data?.code === 'STENCI_SESSION_EXPIRED') {
       sessionStorage.setItem('auth_message', 'Sua sessão expirou. Entre novamente.')
     }
