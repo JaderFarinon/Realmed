@@ -48,18 +48,20 @@ function createAuthRouter({
       const deviceId = deviceIdFactory()
       const identity = await service.authenticateUser(username, password, deviceId)
       const stenciSession = service.getSession()
-      if (!stenciSession) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_MISSING' })
+      if (!stenciSession) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_ERROR', stage: 'session' })
       const user = await syncUser(db, identity)
       sid = sessionStore.create(stenciSession)
       const payload = { ...publicUser(user), sid }
       const token = jwt.sign(payload, jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
+      console.info('[REALMED AUTH] login concluído')
       return res.json({ token, user: publicUser(user) })
     } catch (error) {
       if (sid) sessionStore.delete(sid)
-      const invalidCredentials = ['STENCI_HTTP_401', 'STENCI_HTTP_403'].includes(error.code)
-      if (invalidCredentials) return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
-      console.error('[Auth] Falha controlada na autenticação Stenci:', error.code || error.name)
-      return res.status(503).json({ error: 'Não foi possível validar seu acesso no momento. Tente novamente em alguns instantes.' })
+      if (error.code === 'STENCI_INVALID_CREDENTIALS') return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
+      console.error('[REALMED AUTH] falha na autenticação Stenci', { code: error.code || error.name, stage: error.stage, upstreamStatus: error.upstreamStatus })
+      if (error.code === 'STENCI_BRANCH_FAILED') return res.status(502).json({ error: 'Não foi possível selecionar a unidade da Realmed no Stenci.' })
+      if (error.code === 'STENCI_ME_FAILED') return res.status(502).json({ error: 'Autenticação realizada, mas não foi possível validar o usuário no Stenci.' })
+      return res.status(error.code === 'STENCI_CONNECTION_ERROR' ? 503 : 502).json({ error: 'Não foi possível validar seu acesso no momento. Tente novamente.' })
     }
   })
 

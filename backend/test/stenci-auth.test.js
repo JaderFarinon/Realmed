@@ -92,8 +92,8 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
 
 test('invalid credentials and unavailable Stenci return controlled messages', async () => {
   for (const scenario of [
-    { error: Object.assign(new Error('remote body'), { code: 'STENCI_HTTP_401' }), status: 401, message: 'Usuário ou senha inválidos.' },
-    { error: Object.assign(new Error('socket and headers'), { code: 'STENCI_NETWORK_ERROR' }), status: 503, message: 'Não foi possível validar seu acesso no momento. Tente novamente em alguns instantes.' },
+    { error: Object.assign(new Error('remote body'), { code: 'STENCI_INVALID_CREDENTIALS', stage: 'auth', upstreamStatus: 401 }), status: 401, message: 'Usuário ou senha inválidos.' },
+    { error: Object.assign(new Error('socket and headers'), { code: 'STENCI_CONNECTION_ERROR', stage: 'auth' }), status: 503, message: 'Não foi possível validar seu acesso no momento. Tente novamente.' },
   ]) {
     const router = createAuthRouter({ configFactory: () => config, serviceFactory: () => ({ authenticateUser: async () => { throw scenario.error } }), jwtSecret: process.env.JWT_SECRET })
     await withServer(router, async (base) => {
@@ -102,4 +102,72 @@ test('invalid credentials and unavailable Stenci return controlled messages', as
       assert.deepEqual(await response.json(), { error: scenario.message })
     })
   }
+})
+
+test('authentication stages have distinct errors and preserve a string username and its leading zero', async () => {
+  const scenarios = [
+    { statuses: [401], code: 'STENCI_INVALID_CREDENTIALS', stage: 'auth', status: 401 },
+    { statuses: [200, 401], code: 'STENCI_BRANCH_FAILED', stage: 'branch', status: 502 },
+    { statuses: [200, 200, 401], code: 'STENCI_ME_FAILED', stage: 'me', status: 502 },
+  ]
+  for (const scenario of scenarios) {
+    const calls = []
+    const fetchImpl = async (_url, options) => {
+      calls.push(options)
+      const status = scenario.statuses[calls.length - 1]
+      return { ok: status === 200, status, headers: { get: () => null }, json: async () => ({ code: 'remote_error', message: 'safe diagnostic' }) }
+    }
+    const client = new StenciClient({ config, fetchImpl, logger: { info() {}, warn() {}, error() {} } })
+    await assert.rejects(client.authenticateSession('05286020984', 'top-secret', 'same-device'), (error) => {
+      assert.equal(error.code, scenario.code)
+      assert.equal(error.stage, scenario.stage)
+      assert.equal(error.status, scenario.status)
+      return true
+    })
+    const authBody = JSON.parse(calls[0].body)
+    assert.equal(authBody.username, '05286020984')
+    assert.equal(typeof authBody.username, 'string')
+    assert.deepEqual(Object.keys(authBody), ['username', 'password', 'deviceId'])
+    if (calls[1]) assert.equal(JSON.parse(calls[1].body).deviceId, authBody.deviceId)
+  }
+})
+
+test('network failures retain their stage and become connection errors', async () => {
+  const client = new StenciClient({ config, fetchImpl: async () => { throw new Error('socket failed') }, logger: { info() {}, error() {} } })
+  await assert.rejects(client.authenticateSession('user', 'secret', 'device'), { code: 'STENCI_CONNECTION_ERROR', stage: 'auth', status: 503 })
+})
+
+test('cookies and auth tokens returned by auth remain server-side and are reused', async () => {
+  const calls = []
+  const fetchImpl = async (url, options) => {
+    calls.push({ path: new URL(url).pathname, headers: options.headers })
+    const auth = calls.length === 1
+    return {
+      ok: true,
+      status: 200,
+      headers: { getSetCookie: () => auth ? ['session=private-cookie; HttpOnly; Path=/'] : [], get: (name) => auth && name === 'authorization' ? 'Bearer private-token' : null },
+      json: async () => new URL(url).pathname === '/v1/me' ? { identityId: '1', username: 'user' } : {},
+    }
+  }
+  const client = new StenciClient({ config, fetchImpl, logger: { info() {} } })
+  await client.authenticateSession('user', 'password-must-not-log', 'one-device')
+  assert.equal(calls[0].headers.Cookie, undefined)
+  for (const call of calls.slice(1)) {
+    assert.equal(call.headers.Cookie, 'session=private-cookie')
+    assert.equal(call.headers.Authorization, 'Bearer private-token')
+  }
+  const session = client.getSession()
+  assert.equal(session.cookie, 'session=private-cookie')
+  assert.equal(session.authorization, 'Bearer private-token')
+})
+
+test('diagnostic logs contain stages and statuses but never credentials or response bodies', async () => {
+  const entries = []
+  const logger = Object.fromEntries(['info', 'warn', 'error'].map((level) => [level, (...values) => entries.push(values)]))
+  const client = new StenciClient({ config, logger, fetchImpl: async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ message: 'invalid', password: 'leaked-password' }) }) })
+  await assert.rejects(client.authenticateSession('private-user', 'private-password', 'device-id'), { code: 'STENCI_INVALID_CREDENTIALS' })
+  const output = JSON.stringify(entries)
+  assert.match(output, /STENCI AUTH/)
+  assert.match(output, /status: 401/)
+  assert.doesNotMatch(output, /private-user|private-password|leaked-password/)
 })
