@@ -33,6 +33,10 @@ function evaluationValues(process) {
     EXPECTED_START_DATE: date(process.expected_start_date), ASSESSMENT_DATE: date(process.assessment_date),
     SESSIONS_PER_WEEK: text(Object.values(schedule).filter((item) => item.enabled).length),
     TOTAL_SESSIONS: text(process.requested_sessions), schedule,
+    chief_complaint: text(process.chief_complaint), current_history: text(process.current_history), functional_limitations: text(process.functional_limitations), physical_exam: text(process.physical_exam),
+    pain_score: text(process.pain_score), pain_classification: text(process.pain_classification), pain_location: text(process.pain_location), severity: process.severity, severity_justification: text(process.severity_justification),
+    care_risk: process.care_risk, individual_monitoring: process.individual_monitoring === true || process.individual_monitoring === 1, precautions: parseDays(process.precautions), specific_care_notes: text(process.specific_care_notes),
+    therapeutic_goals: text(process.therapeutic_goals), conducts: parseDays(process.conducts), conduct_description: text(process.conduct_description), reevaluation_date: date(process.reevaluation_date), reevaluation_notes: text(process.reevaluation_notes), regions: parseDays(process.regions),
   }
 }
 
@@ -61,24 +65,24 @@ async function generatePhysiotherapyEvaluation(process) {
   field('Diagnóstico médico / hipótese', v.MEDICAL_DIAGNOSIS, 32, 360); field('CID', v.CID, 408, 155); y -= 27
   field('Quantidade de sessões solicitadas', v.REQUESTED_SESSIONS, 32, 250); field('Guia / autorização nº', v.AUTHORIZATION_NUMBER, 298, 265); y -= 32
   heading(3, 'AVALIAÇÃO FISIOTERAPÊUTICA')
-  blank('Queixa principal / motivo do atendimento', 42); blank('História do quadro atual', 48); blank('Limitações funcionais', 40); blank('Exame físico e achados relevantes', 48)
-  draw('Dor EVA 0–10:', 32, y, 7, bold, gray); line(105, y - 3, 160); check('Sem dor', false, 190, y); check('Leve', false, 270, y); check('Moderada', false, 330, y); check('Intensa', false, 415, y); y -= 25; field('Localização predominante', '', 32, 531)
+  blank(`Queixa principal / motivo do atendimento: ${v.chief_complaint}`, 42); blank(`História do quadro atual: ${v.current_history}`, 48); blank(`Limitações funcionais: ${v.functional_limitations}`, 40); blank(`Exame físico e achados relevantes: ${v.physical_exam}`, 48)
+  draw(`Dor EVA 0–10: ${v.pain_score}`, 32, y, 7, bold, gray); line(105, y - 3, 160); check('Sem dor', false, 190, y); check('Leve', false, 270, y); check('Moderada', false, 330, y); check('Intensa', false, 415, y); y -= 25; field('Localização predominante', v.pain_location, 32, 531)
 
   p = page(); header(2); y = 775
   heading(4, 'REGIÃO / MEMBRO ACOMETIDO E MAPA CORPORAL')
   draw('Região', 32, y, 7, bold, gray); draw('D', 185, y, 7, bold); draw('E', 215, y, 7, bold); draw('Bil.', 245, y, 7, bold)
   const regions = ['Cervical / cabeça','Ombro','Braço','Cotovelo','Antebraço','Punho / mão','Torácica','Lombar','Quadril','Coxa','Joelho','Perna','Tornozelo / pé','Outro']
-  regions.forEach((region, index) => { const yy = y - 15 - index * 11; draw(region, 32, yy, 6.2); [185,215,245].forEach(x => check('', false, x, yy)) })
+  regions.forEach((region, index) => { const yy = y - 15 - index * 11, selected=v.regions.find(item => String(item.region||item).toLocaleLowerCase('pt-BR').replaceAll(' ', '') === region.toLocaleLowerCase('pt-BR').replaceAll(' ', '')); draw(region, 32, yy, 6.2); ['RIGHT','LEFT','BILATERAL'].forEach((side,i) => check('', Boolean(selected && (selected.laterality === side || (typeof selected === 'string' && side === 'BILATERAL'))), [185,215,245][i], yy)) })
   draw('MAPA CORPORAL', 355, y, 7, bold, gray); p.drawCircle({ x: 445, y: y - 27, size: 13, borderWidth: 1, borderColor: gray }); p.drawLine({ start:{x:445,y:y-40}, end:{x:445,y:y-95}, thickness:1, color:gray }); [['arms',410,y-60,480,y-60],['legs',445,y-95,425,y-145],['legs2',445,y-95,465,y-145]].forEach(([,x1,y1,x2,y2])=>p.drawLine({start:{x:x1,y:y1},end:{x:x2,y:y2},thickness:1,color:gray})); y -= 175
   heading(5, 'CLASSIFICAÇÃO DE GRAVIDADE E RISCOS / PRECAUÇÕES')
-  draw('Gravidade:',32,y,7,bold,gray); ['Leve','Moderada','Grave'].forEach((x,i)=>check(x,false,100+i*85,y)); draw('Risco assistencial:',350,y,7,bold,gray); ['Baixo','Moderado','Alto'].forEach((x,i)=>check(x,false,435+i*48,y)); y-=19
-  field('Justificativa', '', 32, 531); y-=23; draw('Necessita acompanhamento individualizado:',32,y,7,bold,gray); check('Sim',false,225,y); check('Não',false,280,y); y-=16
+  draw('Gravidade:',32,y,7,bold,gray); ['Leve','Moderada','Grave'].forEach((x,i)=>check(x,['MILD','MODERATE','SEVERE'][i]===v.severity,100+i*85,y)); draw('Risco assistencial:',350,y,7,bold,gray); ['Baixo','Moderado','Alto'].forEach((x,i)=>check(x,['LOW','MODERATE','HIGH'][i]===v.care_risk,435+i*48,y)); y-=19
+  field('Justificativa', v.severity_justification, 32, 531); y-=23; draw('Necessita acompanhamento individualizado:',32,y,7,bold,gray); check('Sim',v.individual_monitoring,225,y); check('Não',!v.individual_monitoring,280,y); y-=16
   const risks=['Risco de queda','Alteração de sensibilidade','Pós-operatório','Doença cardiovascular','Déficit neurológico','Lesão de pele','Marcapasso / implante eletrônico','Gestação','Trombose / risco vascular','Dor intensa','Outro']
-  risks.forEach((risk,i)=>check(risk,false,32+(i%4)*135,y-Math.floor(i/4)*15)); y-=48; field('Observações / cuidados específicos','',32,531); y-=25
+  risks.forEach((risk,i)=>check(risk,v.precautions.includes(risk),32+(i%4)*135,y-Math.floor(i/4)*15)); y-=48; field('Observações / cuidados específicos',v.specific_care_notes,32,531); y-=25
   heading(6, 'CONDUTA E PLANO TERAPÊUTICO')
-  field('Objetivos terapêuticos','',32,531); y-=23
+  field('Objetivos terapêuticos',v.therapeutic_goals,32,531); y-=23
   const conducts=['Cinesioterapia','Alongamento','Fortalecimento','Treino funcional','Terapia manual','Eletroterapia','Termoterapia','Crioterapia','Propriocepção/equilíbrio','Treino de marcha','Orientações domiciliares','Outra']
-  conducts.forEach((item,i)=>check(item,false,32+(i%4)*135,y-Math.floor(i/4)*15)); y-=48; field('Descrição / parâmetros / progressão planejada','',32,531); y-=23; field('Previsão de reavaliação','',32,180); field('Critério / observação','',228,335); y-=25
+  conducts.forEach((item,i)=>check(item,v.conducts.includes(item),32+(i%4)*135,y-Math.floor(i/4)*15)); y-=48; field('Descrição / parâmetros / progressão planejada',v.conduct_description,32,531); y-=23; field('Previsão de reavaliação',v.reevaluation_date,32,180); field('Critério / observação',v.reevaluation_notes,228,335); y-=25
   heading(7, 'DIAS E HORÁRIO DE ATENDIMENTO')
   const days=[['MONDAY','Segunda'],['TUESDAY','Terça'],['WEDNESDAY','Quarta'],['THURSDAY','Quinta'],['FRIDAY','Sexta']]
   days.forEach(([key,label],i)=>{const x=32+i*106, item=v.schedule[key];draw(label,x,y,7,bold);check(item?.enabled?'Sim':'Não',Boolean(item?.enabled),x,y-13);draw(item?.time||'____:____',x,y-26,7)}); y-=42

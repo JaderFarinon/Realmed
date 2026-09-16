@@ -10,6 +10,7 @@ const permissoesRoutes = require('./routes/permissoes')
 const guideCenterRoutes = require('./routes/guide-center').router
 const guideOperationsRoutes = require('./routes/guide-operations')
 const documentGenerationRoutes = require('./routes/document-generation')
+const physiotherapyEvaluationRoutes = require('./routes/physiotherapy-evaluations')
 const { createStenciRouter } = require('./routes/stenci')
 
 const PORT = Number(process.env.PORT || 3005)
@@ -36,6 +37,7 @@ function createApp() {
   app.use('/api', guideCenterRoutes)
   app.use('/api', guideOperationsRoutes)
   app.use('/api', documentGenerationRoutes)
+  app.use('/api', physiotherapyEvaluationRoutes)
   app.use('/api/integrations/stenci', createStenciRouter())
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }))
