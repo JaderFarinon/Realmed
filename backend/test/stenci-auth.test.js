@@ -43,7 +43,7 @@ test('employee authentication uses credentials once, fixed branch, session devic
     { path: '/v1/me/branch', body: { branchId: 'realmed-branch', deviceId: 'session-device' } },
     { path: '/v1/me', body: undefined },
   ])
-  assert.deepEqual(identity, { stenci_user_id: 'identity-7', stenci_username: 'maria', name: 'Maria', email: 'maria@example.test' })
+  assert.deepEqual(identity, { stenci_user_id: 'identity-7', stenci_username: 'maria', identity: null, name: 'Maria', email: 'maria@example.test' })
 })
 
 test('valid logins create isolated device contexts, issue safe JWTs and logout clears them', async () => {

@@ -2,11 +2,14 @@ class StenciMapper {
   static userIdentity(me, loginUsername) {
     if (!me || typeof me !== 'object' || Array.isArray(me)) throw new Error('Resposta de usuário Stenci inválida.')
     const source = me.user && typeof me.user === 'object' ? me.user : me
-    const externalId = source.identityId ?? source.id
+    // The Stenci user id is the durable external key. Identity values (such as CPF)
+    // are mutable account attributes and are used only for first-login reconciliation.
+    const externalId = source.id ?? source.identityId
     if (externalId == null || String(externalId).trim() === '') throw new Error('Usuário Stenci sem identificador estável.')
     return {
       stenci_user_id: String(externalId),
-      stenci_username: source.username || source.login || loginUsername || null,
+      stenci_username: source.identity?.value || source.username || source.login || loginUsername || null,
+      identity: source.identity?.value == null ? null : String(source.identity.value),
       name: source.name || source.fullName || null,
       email: source.email || null,
     }
