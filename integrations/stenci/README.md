@@ -1,33 +1,42 @@
-# Integração Stenci (somente leitura)
+# Integração Stenci: pacientes
 
-Esta integração está **desabilitada por padrão** e não conhece rotas, autenticação ou payloads externos. Ela não altera o Stenci, não agenda, não envia autorizações e não executa sincronização automaticamente.
+Integração de leitura usada pela Central de Guias para localizar pacientes e importá-los para o Realmed. O backend é a única camada que conversa com o Stenci; credenciais nunca são enviadas ao frontend.
 
-## Componentes
+## Contrato confirmado pelo HAR
 
-- `config.js`: lê configuração e mantém `endpoints` deliberadamente vazio até a análise do HAR.
-- `StenciClient.js`: fronteira de HTTP, timeout e tradução de falhas. Não envia credenciais enquanto a autenticação não for conhecida.
-- `StenciService.js`: operações conceituais de pacientes, avaliações, agendamentos, tratamentos e sessões.
-- `StenciMapper.js`: único ponto de tradução de campos externos.
-- `StenciPatientSyncService.js`: upsert local explícito por `STENCI + external_id`; por padrão só completa campos locais vazios.
-- `StenciReconciliationService.js`: contratos de conciliação ainda não implementados.
+O Stenci usa duas origens distintas:
 
-## Variáveis
+- API X (`https://api-x.stenci.pro`): `POST /v1/auth`, `POST /v1/me/branch` e `GET /v1/me`;
+- API principal (`https://api.stenci.pro`): `GET /v1/patients/search`.
 
-`STENCI_ENABLED`, `STENCI_BASE_URL`, `STENCI_USERNAME`, `STENCI_PASSWORD` e `STENCI_TOKEN`. Usuário/senha e token são alternativas possíveis, não requisitos simultâneos. A estratégia somente será escolhida após o HAR. Secrets nunca compõem a resposta de status ou metadata de logs.
+O login envia `username`, `password` e `deviceId`. A seleção da empresa envia `branchId` e o mesmo `deviceId` persistente. Como o HAR não demonstrou token, cookie ou cabeçalho adicional, o cliente não presume nem cria nenhum deles.
 
-## Checklist para o HAR
+A busca envia `limit` (30 por padrão), `offset` (0 por padrão), `notFilterBranch=true` e `search`. O parâmetro `notFilterBranch=true` é preservado porque foi observado explicitamente no HAR. A resposta esperada contém `items` e `hasMore`; cada item possui os dados da pessoa em nível superior e o convênio atual em `patient.insurance`.
 
-Antes de preencher `config.endpoints` e implementar autenticação/paginação, precisamos confirmar:
+## Configuração
 
-1. URL base e ambiente;
-2. fluxo de login e renovação de sessão;
-3. esquema de autenticação, cookies e tokens;
-4. endpoints e payloads de pacientes, avaliações, agendamentos, tratamentos e sessões;
-5. paginação, limites e ordenação;
-6. nomes/formato/fuso dos filtros de data;
-7. IDs estáveis do paciente, atendimento, tratamento e ciclo;
-8. representação de profissionais e convênios;
-9. campos que distinguem sessões previstas, realizadas e canceladas;
-10. códigos e corpos de erro relevantes.
+```dotenv
+STENCI_ENABLED=false
+STENCI_API_X_BASE_URL=https://api-x.stenci.pro
+STENCI_API_BASE_URL=https://api.stenci.pro
+STENCI_USERNAME=
+STENCI_PASSWORD=
+STENCI_DEVICE_ID=
+STENCI_BRANCH_ID=
+STENCI_TIMEOUT_MS=10000
+```
 
-Não preencher `guide_processes.external_reference` até confirmar qual ID representa corretamente o tratamento/atendimento.
+Todos os valores de identificação e autenticação devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se qualquer valor obrigatório estiver ausente.
+
+## Mapeamento e sincronização
+
+`id`, `name`, identidade do tipo `cpf`, `birthDate`, `cellphone`/`phone` e `email` são mapeados para o paciente local. `identityId`, gênero, nome social, primeiro endereço e CNS ficam disponíveis como metadata da resposta, sem persistência obrigatória.
+
+O convênio de `patient.insurance` mapeia `id`, `name`, `plan.name`, `record` e `validity`. Pacientes e operadoras são conciliados por `external_source=STENCI` mais `external_id`; a relação em `patient_insurances` é criada ou atualizada. Nenhum tratamento é criado durante essa sincronização.
+
+Os únicos endpoints internos de paciente desta integração são:
+
+- `GET /api/integrations/stenci/patients/search`;
+- `POST /api/integrations/stenci/patients/:externalId/sync`.
+
+Ambos exigem autenticação e permissão de criação em `guide_processes`, sem conceder acesso à tela administrativa de Integrações. Avaliações, agenda, sessões, tratamentos concluídos, relatórios e escrita no Stenci permanecem fora do escopo.

@@ -1,65 +1,93 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const jwt = require('jsonwebtoken')
-
-Object.assign(process.env, { JWT_SECRET: 'test-only-secret', DB_HOST: 'localhost', DB_USER: 'test', DB_PASS: 'test', DB_NAME: 'test', DB_PORT: '3306' })
+const fs = require('node:fs')
+const path = require('node:path')
 const { getStenciConfig, publicConfig } = require('../../integrations/stenci/config')
 const StenciClient = require('../../integrations/stenci/StenciClient')
+const StenciService = require('../../integrations/stenci/StenciService')
+const StenciMapper = require('../../integrations/stenci/StenciMapper')
+const { syncPatientFromStenci } = require('../../integrations/stenci/StenciPatientSyncService')
 const { sanitize, createIntegrationLog } = require('../services/integrationLogService')
-const { createStenciRouter } = require('../routes/stenci')
-const express = require('express')
 
-test('Stenci is disabled by default and performs no HTTP request', async () => {
+const env = { STENCI_ENABLED: 'true', STENCI_API_X_BASE_URL: 'https://api-x.example', STENCI_API_BASE_URL: 'https://api.example', STENCI_USERNAME: 'configured-user', STENCI_PASSWORD: 'configured-password', STENCI_DEVICE_ID: 'persistent-device', STENCI_BRANCH_ID: 'configured-branch', STENCI_TIMEOUT_MS: '500' }
+const externalPatient = { id: 'patient-1', identityId: 'identity-1', name: 'Maria da Silva', identity: { type: 'cpf', value: '12345678900' }, cellphone: '41999999999', phone: '4133333333', email: 'maria@example.test', birthDate: '1970-03-10', gender: 'female', patient: { cns: null, insurance: { id: 'insurance-1', name: 'Unimed Curitiba', planId: 'plan-1', plan: { id: 'plan-1', name: 'Fisioterapia' }, record: '0032', validity: '2027-01-31' } } }
+
+test('Stenci is disabled by default and validates every required environment value', async () => {
   let called = false
-  const client = new StenciClient({ config: getStenciConfig({}), fetchImpl: async () => { called = true } })
-  await assert.rejects(client.request('patients.search'), { message: 'Integração Stenci desabilitada.', code: 'STENCI_DISABLED' })
-  assert.equal(called, false)
+  const disabled = new StenciClient({ config: getStenciConfig({}), fetchImpl: async () => { called = true } })
+  await assert.rejects(disabled.authenticate(), { code: 'STENCI_DISABLED' }); assert.equal(called, false)
+  const missing = new StenciClient({ config: getStenciConfig({ STENCI_ENABLED: 'true', STENCI_API_X_BASE_URL: 'https://x.example' }) })
+  await assert.rejects(missing.authenticate(), (error) => error.code === 'STENCI_NOT_CONFIGURED' && error.message.includes('STENCI_DEVICE_ID'))
 })
 
-test('incomplete configuration and unknown endpoint fail clearly without HTTP', async () => {
-  const noBase = new StenciClient({ config: getStenciConfig({ STENCI_ENABLED: 'true' }) })
-  await assert.rejects(noBase.request('patients.search'), { message: 'Integração Stenci não configurada.' })
-  const noEndpoint = new StenciClient({ config: getStenciConfig({ STENCI_ENABLED: 'true', STENCI_BASE_URL: 'https://example.invalid' }) })
-  await assert.rejects(noEndpoint.request('patients.search'), { message: 'Endpoint do Stenci ainda não configurado.', status: 501 })
+test('authentication and branch selection use only the HAR-confirmed payloads', async () => {
+  const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, json: async () => ({ ok: true }) } }
+  const client = new StenciClient({ config: getStenciConfig(env), fetchImpl }); await client.prepareSession()
+  assert.equal(calls[0].url, 'https://api-x.example/v1/auth'); assert.deepEqual(JSON.parse(calls[0].options.body), { username: 'configured-user', password: 'configured-password', deviceId: 'persistent-device' })
+  assert.equal(calls[1].url, 'https://api-x.example/v1/me/branch'); assert.deepEqual(JSON.parse(calls[1].options.body), { branchId: 'configured-branch', deviceId: 'persistent-device' })
+  assert.equal(calls.some(({ options }) => options.headers.Authorization || options.headers.Cookie), false)
 })
 
-test('public configuration and log sanitizer never expose secrets', () => {
-  const config = getStenciConfig({ STENCI_ENABLED: 'true', STENCI_BASE_URL: 'https://example.invalid', STENCI_USERNAME: 'user', STENCI_PASSWORD: 'secret', STENCI_TOKEN: 'token' })
-  assert.deepEqual(publicConfig(config), { enabled: true, base_url_configured: true, authentication_configured: true, endpoints_configured: false })
-  assert.deepEqual(sanitize({ token: 'x', nested: { cookie: 'y', safe: 1 }, authorizationHeader: 'z' }), { nested: { safe: 1 } })
-  assert.equal(JSON.stringify(publicConfig(config)).includes('secret'), false)
+test('patient search authenticates and sends limit, offset, search and notFilterBranch=true', async () => {
+  const calls = [], fetchImpl = async (url) => { calls.push(String(url)); return { ok: true, json: async () => String(url).includes('/patients/search') ? { items: [externalPatient], hasMore: true } : {} } }
+  const result = await new StenciService(new StenciClient({ config: getStenciConfig(env), fetchImpl })).searchPatients('Maria', { limit: 20, offset: 40 })
+  const url = new URL(calls[2]); assert.equal(url.origin, 'https://api.example'); assert.equal(url.pathname, '/v1/patients/search'); assert.deepEqual(Object.fromEntries(url.searchParams), { limit: '20', offset: '40', notFilterBranch: 'true', search: 'Maria' }); assert.equal(result.hasMore, true)
 })
 
-test('integration log is persisted with sanitized metadata', async () => {
-  let inserted
-  const db = () => ({ insert: async (value) => { inserted = value } })
-  await createIntegrationLog(db, { integration: 'STENCI', operation: 'TEST', status: 'SUCCESS', metadata: { token: 'hidden', count: 2 } })
-  assert.deepEqual(JSON.parse(inserted.metadata), { count: 2 })
+test('connection check uses authenticate, branch selection and GET /v1/me', async () => {
+  const calls = [], fetchImpl = async (url, options) => { calls.push([String(url), options.method]); return { ok: true, json: async () => ({ id: 'me' }) } }
+  await new StenciService(new StenciClient({ config: getStenciConfig(env), fetchImpl })).testConnection()
+  assert.deepEqual(calls.map(([url, method]) => [new URL(url).pathname, method]), [['/v1/auth', 'POST'], ['/v1/me/branch', 'POST'], ['/v1/me', 'GET']])
 })
 
-test('report contracts return 501 and administrative permission is enforced', async () => {
-  const db = () => ({ insert: async () => {} })
-  const app = express()
-  app.use(express.json(), createStenciRouter({ db }))
-  const server = app.listen(0)
-  try {
-    const base = `http://127.0.0.1:${server.address().port}`
-    assert.equal((await fetch(`${base}/assessments`)).status, 401)
-    const regularToken = jwt.sign({ id: 2, role: 'cac' }, process.env.JWT_SECRET)
-    assert.equal((await fetch(`${base}/assessments`, { headers: { Authorization: `Bearer ${regularToken}` } })).status, 403)
-    const token = jwt.sign({ id: 1, role: 'masteradmin' }, process.env.JWT_SECRET)
-    for (const path of ['/assessments?start_date=2026-01-01&patient=A', '/completed-treatments?insurance=B']) {
-      const response = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } })
-      assert.equal(response.status, 501)
-      assert.deepEqual(await response.json(), { error: 'Endpoint do Stenci ainda não configurado.' })
-    }
-  } finally { server.close() }
+test('mapper follows patient and current insurance structure exactly', () => {
+  assert.deepEqual(StenciMapper.patient(externalPatient), { external_source: 'STENCI', external_id: 'patient-1', full_name: 'Maria da Silva', cpf: '12345678900', birth_date: '1970-03-10', phone: '41999999999', email: 'maria@example.test', metadata: { identityId: 'identity-1', gender: 'female', socialName: null, address: null, cns: null } })
+  assert.deepEqual(StenciMapper.insurance(externalPatient), { external_source: 'STENCI', external_id: 'insurance-1', name: 'Unimed Curitiba', plan_id: 'plan-1', plan: 'Fisioterapia', card_number: '0032', card_expiration: '2027-01-31' })
+})
+
+function memoryDb() {
+  const tables = { patients: [], insurance_providers: [], patient_insurances: [] }
+  const db = (tableExpression) => {
+    const table = tableExpression.split(' ')[0]; let filters = {}; let joined = false
+    const matches = (row) => Object.entries(filters).every(([key, value]) => row[key.split('.').pop()] === value)
+    const result = () => { let rows = tables[table].filter(matches).map((row) => ({ ...row })); if (joined) rows = rows.map((row) => ({ ...row, insurance_name: tables.insurance_providers.find((provider) => provider.id === row.insurance_provider_id)?.name })); return rows }
+    const query = {
+      where(a, b) { if (typeof a === 'object') filters = { ...filters, ...a }; else filters[a] = b; return query },
+      first: async () => result()[0], join() { joined = true; return query }, select() { return query },
+      insert: async (data) => { const id = tables[table].length + 1; tables[table].push({ id, ...data }); return [id] },
+      update: async (data) => { for (const row of tables[table].filter(matches)) Object.assign(row, data); return 1 },
+      then(resolve, reject) { return Promise.resolve(result()).then(resolve, reject) },
+    }; return query
+  }
+  db.transaction = async (callback) => callback(db); db.tables = tables; return db
+}
+
+test('sync creates once, reuses provider and updates patient insurance', async () => {
+  const db = memoryDb(), first = await syncPatientFromStenci(db, externalPatient)
+  assert.equal(first.created, true); assert.equal(first.patient_insurance.card_number, '0032')
+  const changed = structuredClone(externalPatient); changed.patient.insurance.record = '0099'; changed.patient.insurance.plan.name = 'Novo plano'
+  const second = await syncPatientFromStenci(db, changed)
+  assert.equal(second.created, false); assert.equal(second.patient_insurance.card_number, '0099'); assert.equal(second.patient_insurance.plan, 'Novo plano')
+  assert.equal(db.tables.patients.length, 1); assert.equal(db.tables.insurance_providers.length, 1); assert.equal(db.tables.patient_insurances.length, 1)
+})
+
+test('public configuration and integration logs do not expose secrets or patient payloads', async () => {
+  const config = getStenciConfig(env), serialized = JSON.stringify(publicConfig(config)); assert.equal(serialized.includes('configured-password'), false); assert.equal(serialized.includes('persistent-device'), false)
+  assert.deepEqual(sanitize({ password: 'x', token: 'y', nested: { cookie: 'z', count: 1 } }), { nested: { count: 1 } })
+  let inserted; const db = () => ({ insert: async (value) => { inserted = value } }); await createIntegrationLog(db, { integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'SUCCESS', metadata: { token: 'hidden', count: 2 } }); assert.deepEqual(JSON.parse(inserted.metadata), { count: 2 })
 })
 
 test('network and invalid responses become controlled errors', async () => {
-  const config = { enabled: true, baseUrl: 'https://example.invalid', timeoutMs: 50, endpoints: { test: '/test' } }
-  const network = new StenciClient({ config, fetchImpl: async () => { throw new Error('socket details') } })
-  await assert.rejects(network.request('test'), { code: 'STENCI_NETWORK_ERROR', status: 503 })
-  const invalid = new StenciClient({ config, fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('invalid') } }) })
-  await assert.rejects(invalid.request('test'), { code: 'STENCI_INVALID_RESPONSE', status: 502 })
+  const config = getStenciConfig(env), network = new StenciClient({ config, fetchImpl: async () => { throw new Error('socket details') } }); await assert.rejects(network.authenticate(), { code: 'STENCI_NETWORK_ERROR', status: 503 })
+  const invalid = new StenciClient({ config, fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('invalid') } }) }); await assert.rejects(invalid.authenticate(), { code: 'STENCI_INVALID_RESPONSE', status: 502 })
+})
+
+test('New Treatment uses the backend Stenci flow, preselects insurance and keeps manual fallback', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../../frontend/src/views/Guides/NewTreatment.vue'), 'utf8')
+  assert.match(source, /\/integrations\/stenci\/patients\/search/)
+  assert.match(source, /\/integrations\/stenci\/patients\/\$\{encodeURIComponent\(patient\.external_id\)\}\/sync/)
+  assert.match(source, /form\.patient_insurance_id=synced\.patient_insurance\?\.id/)
+  assert.match(source, /Não foi possível consultar o Stenci no momento\./)
+  assert.match(source, /Cadastrar manualmente/)
+  for (const secret of [env.STENCI_USERNAME, env.STENCI_PASSWORD, env.STENCI_DEVICE_ID, env.STENCI_BRANCH_ID]) assert.equal(source.includes(secret), false)
 })

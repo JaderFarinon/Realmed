@@ -8,7 +8,8 @@
         <button :disabled="testing" class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50" @click="testConnection">{{ testing ? 'Testando...' : 'Testar conexão' }}</button>
       </div>
       <dl class="grid gap-4 border-t pt-5 sm:grid-cols-2">
-        <div><dt class="text-sm text-gray-500">Base URL</dt><dd class="font-medium">{{ yesNo(status.base_url_configured) }}</dd></div>
+        <div><dt class="text-sm text-gray-500">API X</dt><dd class="font-medium">{{ yesNo(status.api_x_base_url_configured) }}</dd></div>
+        <div><dt class="text-sm text-gray-500">API principal</dt><dd class="font-medium">{{ yesNo(status.api_base_url_configured) }}</dd></div>
         <div><dt class="text-sm text-gray-500">Autenticação</dt><dd class="font-medium">{{ yesNo(status.authentication_configured) }}</dd></div>
         <div><dt class="text-sm text-gray-500">Última operação</dt><dd class="font-medium">{{ status.last_operation?.operation || 'Nenhuma consulta realizada' }}</dd></div>
         <div><dt class="text-sm text-gray-500">Resultado</dt><dd class="font-medium">{{ status.last_operation?.status || '—' }}</dd></div>
@@ -25,7 +26,7 @@ import { computed, onMounted, ref } from 'vue'
 import PageShell from '@/components/PageShell.vue'
 import api from '@/plugins/axios'
 
-interface Status { enabled: boolean; base_url_configured: boolean; authentication_configured: boolean; status: 'DISABLED'|'CONFIGURED'|'ERROR'|'CONNECTED'; last_operation: null|{operation:string;status:string}; last_error:string|null }
+interface Status { enabled: boolean; api_x_base_url_configured: boolean; api_base_url_configured: boolean; authentication_configured: boolean; status: 'DISABLED'|'CONFIGURED'|'ERROR'|'CONNECTED'; last_operation: null|{operation:string;status:string}; last_error:string|null }
 const status = ref<Status|null>(null), loading = ref(true), testing = ref(false), loadError = ref(''), feedback = ref(''), feedbackError = ref(false)
 const labels = { DISABLED: 'Desabilitado', CONFIGURED: 'Configurado', ERROR: 'Erro', CONNECTED: 'Conectado' }
 const statusLabel = computed(() => status.value ? labels[status.value.status] : '—')
