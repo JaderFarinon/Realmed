@@ -9,15 +9,15 @@ const roots = {
 }
 
 const FIELD_CATEGORIES = Object.freeze({
-  patient: ['PATIENT_NAME', 'PATIENT_BIRTH_DATE', 'PATIENT_CPF', 'PATIENT_CARD_NUMBER', 'PATIENT_CARD_EXPIRATION'],
+  patient: ['PATIENT_NAME', 'PATIENT_BIRTH_DATE', 'PATIENT_CPF', 'PATIENT_GENDER', 'PATIENT_CELLPHONE', 'PATIENT_PHONE', 'PATIENT_CARD_NUMBER', 'PATIENT_CARD_EXPIRATION'],
   insurance: ['INSURANCE_NAME', 'INSURANCE_ANS_REGISTRATION', 'INSURANCE_LOGO'],
   doctor: ['DOCTOR_NAME', 'DOCTOR_COUNCIL', 'DOCTOR_COUNCIL_NUMBER', 'DOCTOR_STATE', 'DOCTOR_CBO', 'DOCTOR_SIGNATURE'],
   physiotherapist: ['PHYSIOTHERAPIST_NAME', 'PHYSIOTHERAPIST_COUNCIL', 'PHYSIOTHERAPIST_COUNCIL_NUMBER', 'PHYSIOTHERAPIST_STATE', 'PHYSIOTHERAPIST_CBO'],
-  process: ['ASSESSMENT_DATE', 'EXPECTED_START_DATE', 'REQUESTED_SESSIONS', 'AUTHORIZED_SESSIONS'],
+  process: ['ASSESSMENT_DATE', 'EXPECTED_START_DATE', 'REFERRAL_DATE', 'MEDICAL_DIAGNOSIS', 'CID', 'AUTHORIZATION_NUMBER', 'REQUESTED_SESSIONS', 'AUTHORIZED_SESSIONS', 'MONDAY_CHECK', 'MONDAY_TIME', 'TUESDAY_CHECK', 'TUESDAY_TIME', 'WEDNESDAY_CHECK', 'WEDNESDAY_TIME', 'THURSDAY_CHECK', 'THURSDAY_TIME', 'FRIDAY_CHECK', 'FRIDAY_TIME', 'SESSIONS_PER_WEEK', 'TOTAL_SESSIONS'],
 })
 const PROCEDURE_COLUMNS = ['CODE', 'DESCRIPTION', 'REQUESTED_QUANTITY', 'AUTHORIZED_QUANTITY']
 const PROCEDURE_SLOTS = 5
-const DATE_FIELDS = new Set(['PATIENT_BIRTH_DATE', 'PATIENT_CARD_EXPIRATION', 'ASSESSMENT_DATE', 'EXPECTED_START_DATE'])
+const DATE_FIELDS = new Set(['PATIENT_BIRTH_DATE', 'PATIENT_CARD_EXPIRATION', 'ASSESSMENT_DATE', 'EXPECTED_START_DATE', 'REFERRAL_DATE'])
 const fieldKeys = new Set(Object.values(FIELD_CATEGORIES).flat())
 for (let line = 1; line <= PROCEDURE_SLOTS; line += 1) for (const column of PROCEDURE_COLUMNS) fieldKeys.add(`PROCEDURE_${line}_${column}`)
 
@@ -42,8 +42,12 @@ function formatDate(value, pattern = 'DD/MM/YYYY') {
 
 function valuesFor(context) {
   const { process: p, procedures } = context
+  let treatmentDays = []
+  try { treatmentDays = Array.isArray(p.treatment_days) ? p.treatment_days : JSON.parse(p.treatment_days || '[]') } catch { treatmentDays = [] }
+  const schedule = Object.fromEntries(treatmentDays.map((entry) => typeof entry === 'string' ? [entry, { enabled: true, time: p.preferred_period || '' }] : [entry.day, entry]))
   const values = {
-    PATIENT_NAME: p.patient_name, PATIENT_BIRTH_DATE: p.birth_date, PATIENT_CPF: p.patient_cpf,
+    PATIENT_NAME: p.patient_name, PATIENT_BIRTH_DATE: p.birth_date, PATIENT_CPF: p.patient_cpf, PATIENT_GENDER: p.gender,
+    PATIENT_CELLPHONE: p.cellphone, PATIENT_PHONE: p.patient_phone,
     PATIENT_CARD_NUMBER: p.card_number, PATIENT_CARD_EXPIRATION: p.card_expiration,
     INSURANCE_NAME: p.insurance_name, INSURANCE_ANS_REGISTRATION: p.ans_registration,
     DOCTOR_NAME: p.doctor_name, DOCTOR_COUNCIL: p.doctor_council, DOCTOR_COUNCIL_NUMBER: p.doctor_council_number,
@@ -52,7 +56,13 @@ function valuesFor(context) {
     PHYSIOTHERAPIST_COUNCIL_NUMBER: p.physiotherapist_council_number, PHYSIOTHERAPIST_STATE: p.physiotherapist_state,
     PHYSIOTHERAPIST_CBO: p.physiotherapist_cbo, ASSESSMENT_DATE: p.assessment_date,
     EXPECTED_START_DATE: p.expected_start_date, REQUESTED_SESSIONS: p.requested_sessions,
-    AUTHORIZED_SESSIONS: p.authorized_sessions,
+    AUTHORIZED_SESSIONS: p.authorized_sessions, REFERRAL_DATE: p.referral_date, MEDICAL_DIAGNOSIS: p.medical_diagnosis,
+    CID: p.cid, AUTHORIZATION_NUMBER: p.authorization_number, TOTAL_SESSIONS: p.requested_sessions,
+    SESSIONS_PER_WEEK: Object.values(schedule).filter(item => item.enabled !== false).length,
+  }
+  for (const day of ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY']) {
+    values[`${day}_CHECK`] = schedule[day]?.enabled !== false && schedule[day] ? 'X' : ''
+    values[`${day}_TIME`] = schedule[day]?.time || ''
   }
   procedures.forEach((procedure, index) => {
     const prefix = `PROCEDURE_${index + 1}_`

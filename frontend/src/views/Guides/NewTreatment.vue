@@ -6,7 +6,7 @@
     <form class="space-y-5" @submit.prevent="save">
       <section class="panel">
         <h2 class="section-title">1. Paciente</h2>
-        <label class="field"
+        <label class="field patient-search"
           >Paciente<SearchableSelect
             v-model="patientOption"
             :options="patients"
@@ -49,15 +49,17 @@
           </div>
           <button type="button" class="link" @click="changePatient">Alterar paciente</button>
         </div>
-        <RouterLink class="btn-secondary mt-3 inline-block" to="/pacientes"
+        <RouterLink
+          class="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+          to="/pacientes"
           >Paciente não encontrado? Cadastrar manualmente</RouterLink
         >
       </section>
 
       <section class="panel">
         <h2 class="section-title">2. Dados do tratamento</h2>
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label class="field"
+        <div class="treatment-grid">
+          <label class="field span-4"
             >Convênio<SearchableSelect
               v-model="selectedInsurance"
               :options="insurances"
@@ -65,7 +67,7 @@
               loading-text="Carregando convênios..."
               placeholder="Selecione"
               @update:model-value="insuranceChanged" /></label
-          ><label class="field"
+          ><label class="field span-4"
             >Plano<SearchableSelect
               v-model="selectedPlan"
               :options="availablePlans"
@@ -75,16 +77,15 @@
               :loading="catalogLoading.plans"
               loading-text="Carregando planos..."
               placeholder="Selecione" /></label
-          ><label class="field"
+          ><label class="field span-2"
             >Número da carteirinha<input v-model="cardNumber" class="input" /></label
-          ><label class="field"
+          ><label class="field span-2"
             >Validade da carteirinha<input v-model="cardExpiration" type="date" class="input"
           /></label>
           <p v-if="catalogErrors.insurances" class="error-text">{{ catalogErrors.insurances }}</p>
           <p v-if="catalogErrors.plans" class="error-text">{{ catalogErrors.plans }}</p>
-        </div>
-        <div class="mt-4 grid gap-4 md:grid-cols-2">
-          <label class="field"
+
+          <label class="field span-6"
             >Fisioterapeuta responsável<SearchableSelect
               v-model="selectedPhysiotherapist"
               :options="physiotherapists"
@@ -97,7 +98,7 @@
                 }}</span></template
               ></SearchableSelect
             ></label
-          ><label class="field"
+          ><label class="field span-6"
             >Médico solicitante<SearchableSelect
               v-model="selectedDoctor"
               :options="doctors"
@@ -114,44 +115,42 @@
           <p v-if="catalogErrors.professionals" class="error-text md:col-span-2">
             {{ catalogErrors.professionals }}
           </p>
-        </div>
-        <div class="mt-4 grid gap-4 md:grid-cols-3">
-          <label class="field"
+
+          <label class="field span-4"
             >Data da avaliação<input
               v-model="form.assessment_date"
               type="date"
-              class="input"
-              required /></label
-          ><label class="field"
+              class="input" /></label
+          ><label class="field span-4"
             >Data prevista de início<input
               v-model="form.expected_start_date"
               type="date"
-              class="input"
-              required /></label
-          ><label class="field"
+              class="input" /></label
+          ><label class="field span-4"
             >Quantidade de sessões<input
               v-model.number="form.requested_sessions"
               type="number"
               min="1"
-              class="input"
-              required /></label
-          ><label class="field md:col-span-3"
+              class="input" /></label
+          ><label class="field span-12"
             >Observações<textarea v-model="form.notes" class="input min-h-20"></textarea>
           </label>
         </div>
       </section>
 
       <section class="panel">
-        <h2 class="section-title">3. Dias de tratamento</h2>
-        <div class="flex flex-wrap gap-2">
-          <label v-for="day in weekdays" :key="day.value" class="rounded-xl border px-4 py-3"
-            ><input
-              v-model="form.treatment_days"
-              type="checkbox"
-              :value="day.value"
-              class="mr-2"
-            />{{ day.label }}</label
-          >
+        <h2 class="section-title">3. Dias e horários pretendidos</h2>
+        <div class="schedule-grid">
+          <label v-for="day in weekdays" :key="day.value" class="schedule-day">
+            <span><input v-model="day.enabled" type="checkbox" class="mr-2" />{{ day.label }}</span>
+            <input
+              v-model="day.time"
+              type="time"
+              class="input"
+              :disabled="!day.enabled"
+              :aria-label="`Horário de ${day.label}`"
+            />
+          </label>
         </div>
         <label class="field mt-4 max-w-md"
           >Período / horário preferencial<input
@@ -251,7 +250,7 @@
           {{ locallyComplete ? 'Documentação pronta para conferência' : 'Documentação incompleta' }}
         </p>
         <button class="btn mt-4 px-6 py-3" :disabled="saving">
-          {{ locallyComplete ? 'Finalizar preparação' : 'Salvar com documentação pendente' }}
+          {{ saving ? 'Salvando...' : 'Salvar tratamento' }}
         </button>
       </section>
     </form>
@@ -290,7 +289,7 @@ const catalogLoading = reactive({ insurances: true, plans: true, professionals: 
 const form = reactive<any>({
   assessment_date: '',
   expected_start_date: '',
-  requested_sessions: 10,
+  requested_sessions: null,
   notes: '',
   treatment_days: [],
   preferred_period: '',
@@ -302,7 +301,7 @@ const weekdays = [
   ['THURSDAY', 'Quinta'],
   ['FRIDAY', 'Sexta'],
   ['SATURDAY', 'Sábado'],
-].map(([value, label]) => ({ value, label }))
+].map(([value, label]) => reactive({ value, label, enabled: false, time: '' }))
 const procedureKinds = [
   { type: 'PHYSIOTHERAPY', label: 'Fisioterapia' },
   { type: 'ELECTROSTIMULATION', label: 'Eletroestimulação' },
@@ -458,25 +457,29 @@ async function upload(processId: number, type: string, file: File) {
 }
 async function save() {
   if (!selectedPatient.value) return window.alert('Selecione um paciente.')
-  if (!selectedInsurance.value || !selectedPlan.value || !selectedPhysiotherapist.value)
-    return window.alert('Selecione convênio, plano e fisioterapeuta.')
   saving.value = true
   try {
     const proceduresPayload = Object.values(procedureSelection).filter((p: any) => p.procedure_id)
     const stenci = {
-      insurance: {
-        ...selectedInsurance.value,
-        planExternalId: selectedPlan.value.planExternalId,
-        planName: selectedPlan.value.planName,
-        cardNumber: cardNumber.value,
-        cardExpiration: cardExpiration.value || null,
-      },
+      insurance:
+        selectedInsurance.value && selectedPlan.value
+          ? {
+              ...selectedInsurance.value,
+              planExternalId: selectedPlan.value.planExternalId,
+              planName: selectedPlan.value.planName,
+              cardNumber: cardNumber.value,
+              cardExpiration: cardExpiration.value || null,
+            }
+          : null,
       physiotherapist: selectedPhysiotherapist.value,
       doctor: selectedDoctor.value,
     }
     const treatment = (
       await api.post('/guide-processes', {
         ...form,
+        treatment_days: weekdays
+          .filter((day) => day.enabled)
+          .map((day) => ({ day: day.value, enabled: true, time: day.time })),
         patient_id: selectedPatient.value.id,
         procedures: proceduresPayload,
         stenci,
@@ -547,5 +550,64 @@ onMounted(async () => {
   width: 100%;
   font-weight: 400;
   color: #344054;
+}
+</style>
+
+<style scoped>
+.patient-search {
+  width: min(100%, 50rem);
+}
+.treatment-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1rem;
+}
+.span-2 {
+  grid-column: span 2;
+}
+.span-4 {
+  grid-column: span 4;
+}
+.span-6 {
+  grid-column: span 6;
+}
+.span-12 {
+  grid-column: span 12;
+}
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.schedule-day {
+  min-width: 0;
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+@media (max-width: 1023px) {
+  .span-2,
+  .span-4,
+  .span-6 {
+    grid-column: span 6;
+  }
+  .schedule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 639px) {
+  .span-2,
+  .span-4,
+  .span-6,
+  .span-12 {
+    grid-column: 1 / -1;
+  }
+  .schedule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

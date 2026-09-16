@@ -9,11 +9,12 @@ const { modulePermission } = require('../middleware/permission')
 const { knex, history, handle, id, documents } = require('./guide-center')
 const { syncDocumentStatus } = require('../services/guideWorkflow')
 const { validateImageUpload } = require('../services/imageAssetService')
+const { generatePhysiotherapyEvaluation } = require('../services/physiotherapyEvaluationService')
 
 const router = express.Router()
 const storage = path.resolve(__dirname, '../../storage')
 roots.generated = path.join(storage, 'generated')
-const documentTypes = new Set(['CONSULTATION_GUIDE','PHYSIOTHERAPY_GUIDE','ELECTROSTIMULATION','OTHER'])
+const documentTypes = new Set(['CONSULTATION_GUIDE','PHYSIOTHERAPY_GUIDE','PHYSIOTHERAPY_EVALUATION','ELECTROSTIMULATION','OTHER'])
 const pdf = (b) => b.length > 5 && b.subarray(0,5).toString() === '%PDF-'
 const raw = express.raw({type:['application/pdf','image/png','image/jpeg'], limit:'10mb'})
 const imageRaw = express.raw({ type: ['image/png', 'image/jpeg'], limit: '5mb' })
@@ -55,7 +56,7 @@ router.post('/guide-processes/:id/procedures',modulePermission('guide_processes'
 router.delete('/guide-processes/:processId/procedures/:id',modulePermission('guide_processes','edit'),async(req,res)=>{try{await knex('guide_process_procedures').where({id:id(req.params.id),guide_process_id:id(req.params.processId)}).del();res.status(204).send()}catch(e){handle(res,e)}})
 
 async function generationContext(processId,templateId){
-  const process=await knex('guide_processes as gp').join('patients as p','p.id','gp.patient_id').join('patient_insurances as pi','pi.id','gp.patient_insurance_id').join('insurance_providers as ip','ip.id','pi.insurance_provider_id').leftJoin('professionals as dr','dr.id','gp.requesting_doctor_id').where('gp.id',processId).leftJoin('professionals as ph','ph.id','gp.physiotherapist_id').select('gp.*','p.full_name as patient_name','p.birth_date','p.cpf as patient_cpf','pi.card_number','pi.card_expiration','ip.id as insurance_provider_id','ip.ans_registration','ip.name as insurance_name','ip.authorization_type','dr.full_name as doctor_name','dr.council as doctor_council','dr.council_number as doctor_council_number','dr.state as doctor_state','dr.cbo as doctor_cbo','ph.full_name as physiotherapist_name','ph.council as physiotherapist_council','ph.council_number as physiotherapist_council_number','ph.state as physiotherapist_state','ph.cbo as physiotherapist_cbo').first()
+  const process=await knex('guide_processes as gp').join('patients as p','p.id','gp.patient_id').leftJoin('patient_insurances as pi','pi.id','gp.patient_insurance_id').leftJoin('insurance_providers as ip','ip.id','pi.insurance_provider_id').leftJoin('professionals as dr','dr.id','gp.requesting_doctor_id').where('gp.id',processId).leftJoin('professionals as ph','ph.id','gp.physiotherapist_id').select('gp.*','p.full_name as patient_name','p.birth_date','p.cpf as patient_cpf','p.gender','p.cellphone','p.phone as patient_phone','pi.card_number','pi.card_expiration','ip.id as insurance_provider_id','ip.ans_registration','ip.name as insurance_name','ip.authorization_type','dr.full_name as doctor_name','dr.council as doctor_council','dr.council_number as doctor_council_number','dr.state as doctor_state','dr.cbo as doctor_cbo','ph.full_name as physiotherapist_name','ph.council as physiotherapist_council','ph.council_number as physiotherapist_council_number','ph.state as physiotherapist_state','ph.cbo as physiotherapist_cbo').first()
   const template=await templateWithFields(templateId);if(!process||!template||!template.active||!template.template_file_path||template.document_type==='OTHER'||(template.insurance_provider_id&&template.insurance_provider_id!==process.insurance_provider_id))throw Object.assign(new Error('Processo ou modelo aplicável não encontrado.'),{status:404})
   await fs.access(safeFile(roots.templates, template.template_file_path)).catch(() => { throw Object.assign(new Error('Arquivo PDF do modelo não está disponível.'), {status:422}) })
   const procedures=await knex('guide_process_procedures as g').join('procedures as p','p.id','g.procedure_id').where('g.guide_process_id',processId).select('g.*','p.code','p.description','p.type')
@@ -69,5 +70,36 @@ async function generationContext(processId,templateId){
 }
 router.post('/guide-processes/:id/documents/preview',modulePermission('guide_processes','edit'),async(req,res)=>{try{const processId=id(req.params.id),ctx=await generationContext(processId,id(req.body.template_id)),buffer=await generateDocument(ctx);await history(knex,processId,req.user.id,'DOCUMENT_PREVIEWED',null,null,null,{templateId:ctx.template.id,version:ctx.template.version});res.type('application/pdf').set('Cache-Control','no-store').send(buffer)}catch(e){if(e.missing)return res.status(e.status).json({error:e.message,missing:e.missing});handle(res,e)}})
 router.post('/guide-processes/:id/documents/generate',modulePermission('guide_processes','edit'),async(req,res)=>{const trx=await knex.transaction();let target;try{const processId=id(req.params.id),ctx=await generationContext(processId,id(req.body.template_id)),buffer=await generateDocument(ctx);await fs.mkdir(roots.generated,{recursive:true});const filename=`${crypto.randomUUID()}.pdf`;target=safeFile(roots.generated,filename);await fs.writeFile(target,buffer,{flag:'wx'});const previous=await trx('guide_process_documents').where({guide_process_id:processId,document_type:ctx.template.document_type,document_role:'GENERATED'}).whereNull('deleted_at').first();const [documentId]=await trx('guide_process_documents').insert({guide_process_id:processId,document_type:ctx.template.document_type,file_path:filename,original_name:`${ctx.template.name}-v${ctx.template.version}.pdf`,mime_type:'application/pdf',file_size:buffer.length,source:'GENERATED',document_role:'GENERATED',is_usable:true,uploaded_by:req.user.id,document_template_id:ctx.template.id,template_version:ctx.template.version,signature_id:ctx.signature?.id||null});if(previous)await trx('guide_process_documents').where({id:previous.id}).update({deleted_at:trx.fn.now(),replaced_by_document_id:documentId});const transition=await syncDocumentStatus(trx,processId);await history(trx,processId,req.user.id,previous?'DOCUMENT_REGENERATED':'DOCUMENT_GENERATED',null,null,ctx.template.document_type,{documentId,templateId:ctx.template.id,templateVersion:ctx.template.version,doctorId:ctx.process.requesting_doctor_id,signatureId:ctx.signature?.id||null});if(transition.authorization_status==='READY')await history(trx,processId,req.user.id,'TREATMENT_READY_FOR_AUTHORIZATION','authorization_status','NOT_READY','READY');await trx.commit();res.status(201).json((await documents(processId)).find(d=>d.id===documentId))}catch(e){await trx.rollback();if(target)await fs.unlink(target).catch(()=>{});if(e.missing)return res.status(e.status).json({error:e.message,missing:e.missing});handle(res,e)}})
+
+async function evaluationContext(processId) {
+  const process = await knex('guide_processes as gp')
+    .join('patients as p', 'p.id', 'gp.patient_id')
+    .leftJoin('patient_insurances as pi', 'pi.id', 'gp.patient_insurance_id')
+    .leftJoin('insurance_providers as ip', 'ip.id', 'pi.insurance_provider_id')
+    .leftJoin('professionals as dr', 'dr.id', 'gp.requesting_doctor_id')
+    .leftJoin('professionals as ph', 'ph.id', 'gp.physiotherapist_id')
+    .leftJoin('guide_authorizations as ga', function () { this.on('ga.guide_process_id', '=', 'gp.id').andOn('ga.id', '=', knex.raw('(SELECT MAX(a.id) FROM guide_authorizations a WHERE a.guide_process_id = gp.id)')) })
+    .where('gp.id', processId)
+    .select('gp.*','p.full_name as patient_name','p.cpf as patient_cpf','p.birth_date','p.gender','p.cellphone','p.phone as patient_phone','pi.card_number','pi.card_expiration','ip.name as insurance_name','dr.full_name as doctor_name','dr.council as doctor_council','dr.council_number as doctor_council_number','dr.state as doctor_state','ph.full_name as physiotherapist_name','ph.council as physiotherapist_council','ph.council_number as physiotherapist_council_number','ph.state as physiotherapist_state','ga.authorization_number').first()
+  if (!process) throw Object.assign(new Error('Tratamento não encontrado.'), { status: 404 })
+  return process
+}
+
+router.post('/guide-processes/:id/physiotherapy-evaluation/preview', modulePermission('guide_processes'), async (req, res) => {
+  try { const buffer = await generatePhysiotherapyEvaluation(await evaluationContext(id(req.params.id))); res.type('application/pdf').set('Cache-Control','no-store').send(buffer) } catch (e) { handle(res,e) }
+})
+
+router.post('/guide-processes/:id/physiotherapy-evaluation/generate', modulePermission('guide_processes','edit'), async (req, res) => {
+  const trx=await knex.transaction(); let target
+  try {
+    const processId=id(req.params.id), buffer=await generatePhysiotherapyEvaluation(await evaluationContext(processId))
+    const latest=await trx('guide_process_documents').where({guide_process_id:processId,document_type:'PHYSIOTHERAPY_EVALUATION'}).max('document_version as version').first()
+    const version=Number(latest?.version)||0, nextVersion=version+1
+    await fs.mkdir(roots.generated,{recursive:true}); const filename=`${crypto.randomUUID()}.pdf`; target=safeFile(roots.generated,filename); await fs.writeFile(target,buffer,{flag:'wx'})
+    const [documentId]=await trx('guide_process_documents').insert({guide_process_id:processId,document_type:'PHYSIOTHERAPY_EVALUATION',file_path:filename,original_name:`Ficha-de-Avaliacao-Fisioterapeutica-v${nextVersion}.pdf`,mime_type:'application/pdf',file_size:buffer.length,source:'GENERATED',document_role:'GENERATED',document_version:nextVersion,is_usable:true,uploaded_by:req.user.id})
+    await history(trx,processId,req.user.id,version?'DOCUMENT_REGENERATED':'DOCUMENT_GENERATED',null,null,'PHYSIOTHERAPY_EVALUATION',{documentId,documentVersion:nextVersion})
+    await trx.commit(); res.status(201).json((await documents(processId)).find(d=>d.id===documentId))
+  } catch(e) { await trx.rollback(); if(target)await fs.unlink(target).catch(()=>{}); handle(res,e) }
+})
 
 module.exports=router
