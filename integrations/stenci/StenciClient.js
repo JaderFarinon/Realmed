@@ -3,10 +3,14 @@ const StenciError = require('./StenciError')
 class StenciClient {
   constructor({ config, fetchImpl = global.fetch } = {}) { this.config = config; this.fetch = fetchImpl }
 
-  assertConfigured() {
+  assertConfigured({ requireCredentials = false, username, password } = {}) {
     if (!this.config?.enabled) throw new StenciError('Integração Stenci desabilitada.', { code: 'STENCI_DISABLED', status: 503 })
     const missing = []
-    for (const [key, value] of [['STENCI_API_X_BASE_URL', this.config.apiXBaseUrl], ['STENCI_API_BASE_URL', this.config.apiBaseUrl], ['STENCI_USERNAME', this.config.username], ['STENCI_PASSWORD', this.config.password], ['STENCI_DEVICE_ID', this.config.deviceId], ['STENCI_BRANCH_ID', this.config.branchId]]) if (!value) missing.push(key)
+    for (const [key, value] of [['STENCI_API_X_BASE_URL', this.config.apiXBaseUrl], ['STENCI_API_BASE_URL', this.config.apiBaseUrl], ['STENCI_DEVICE_ID', this.config.deviceId], ['STENCI_BRANCH_ID', this.config.branchId]]) if (!value) missing.push(key)
+    if (requireCredentials) {
+      if (!username) missing.push('username')
+      if (!password) missing.push('password')
+    }
     if (missing.length) throw new StenciError(`Integração Stenci não configurada. Verifique: ${missing.join(', ')}.`, { code: 'STENCI_NOT_CONFIGURED', status: 503 })
   }
 
@@ -31,9 +35,13 @@ class StenciClient {
     } finally { clearTimeout(timer) }
   }
 
-  authenticate() { return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username: this.config.username, password: this.config.password, deviceId: this.config.deviceId } }) }
+  async authenticate(username = this.config.username, password = this.config.password) {
+    this.assertConfigured({ requireCredentials: true, username, password })
+    return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username, password, deviceId: this.config.deviceId } })
+  }
   selectBranch() { return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId: this.config.branchId, deviceId: this.config.deviceId } }) }
-  async prepareSession() { await this.authenticate(); await this.selectBranch() }
+  getMe() { return this.request('/v1/me', { base: 'apiX' }) }
+  async prepareSession(username, password) { await this.authenticate(username, password); await this.selectBranch() }
 }
 
 module.exports = StenciClient

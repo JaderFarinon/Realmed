@@ -10,9 +10,14 @@ class StenciService {
   }
   async testConnection() {
     await this.client.prepareSession()
-    const result = await this.client.request('/v1/me', { base: 'apiX' })
+    const result = await this.client.getMe()
     if (!result || typeof result !== 'object' || Array.isArray(result)) throw new StenciError('Resposta inválida recebida do Stenci.', { code: 'STENCI_INVALID_RESPONSE', status: 502 })
     return result
+  }
+  async authenticateUser(username, password) {
+    await this.client.prepareSession(username, password)
+    const me = await this.client.getMe()
+    return require('./StenciMapper').userIdentity(me, username)
   }
 }
 module.exports = StenciService
