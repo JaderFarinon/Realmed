@@ -27,11 +27,14 @@ function databaseDiagnostic(error) {
   }
 }
 
-function lockNames(identity) {
-  return [...new Set([identity.stenci_user_id, identity.email, identity.stenci_username, identity.identity]
-    .filter((value) => value != null && String(value).trim())
-    .map((value) => `realmed-user-sync:${crypto.createHash('sha256').update(String(value)).digest('hex')}`))]
-    .sort()
+function buildUserSyncLockKey(stenciUserId) {
+  const hash = crypto
+    .createHash('sha256')
+    .update(String(stenciUserId))
+    .digest('hex')
+    .slice(0, 32)
+
+  return `rus:${hash}`
 }
 
 async function selectUser(connection, sql, value) {
@@ -158,29 +161,45 @@ async function syncStenciUser(pool, rawIdentity, { logger = console } = {}) {
   }
   if (!identity.stenci_user_id) throw new UserSyncError('REALMED_USER_SYNC_FAILED')
 
-  const locks = lockNames(identity)
+  const lockName = buildUserSyncLockKey(identity.stenci_user_id)
   let connection
+  let lockAcquired = false
+  let transactionStarted = false
   try {
     connection = await pool.getConnection()
-    for (const name of locks) {
-      const [rows] = await connection.query('SELECT GET_LOCK(?, 10) AS acquired', [name])
-      if (!Number(rows[0]?.acquired)) throw new UserSyncError('REALMED_USER_SYNC_FAILED')
-    }
+    const [rows] = await connection.query('SELECT GET_LOCK(?, 10) AS acquired', [lockName])
+    const lockResult = rows[0]?.acquired
+    lockAcquired = Number(lockResult) === 1
+    developmentLog(logger, 'lock', { lockNameLength: lockName.length, acquired: lockAcquired })
+    if (lockResult === null || lockResult === undefined) throw new UserSyncError('USER_SYNC_LOCK_ERROR')
+    if (!lockAcquired) throw new UserSyncError('USER_SYNC_LOCK_TIMEOUT')
+
     await connection.beginTransaction()
+    transactionStarted = true
     const user = await reconcile(connection, identity, logger)
     await connection.commit()
+    transactionStarted = false
     return user
   } catch (error) {
-    try { await connection?.rollback() } catch (_) {}
+    if (transactionStarted) {
+      try { await connection.rollback() } catch (_) {}
+    }
     if (error instanceof UserSyncError) throw error
     logger.error('[REALMED USER SYNC] falha', databaseDiagnostic(error))
     throw new UserSyncError('REALMED_USER_SYNC_FAILED', 500, error)
   } finally {
-    for (const name of connection ? [...locks].reverse() : []) {
-      try { await connection.query('SELECT RELEASE_LOCK(?) AS released', [name]) } catch (_) {}
+    if (lockAcquired) {
+      try { await connection.query('SELECT RELEASE_LOCK(?) AS released', [lockName]) } catch (_) {}
     }
     connection?.release()
   }
 }
 
-module.exports = { syncStenciUser, UserSyncError, databaseDiagnostic, reconcile, SYNC_MESSAGE }
+module.exports = {
+  syncStenciUser,
+  buildUserSyncLockKey,
+  UserSyncError,
+  databaseDiagnostic,
+  reconcile,
+  SYNC_MESSAGE,
+}
