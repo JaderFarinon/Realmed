@@ -59,12 +59,30 @@ test('StenciClient rejects non-string usernames instead of coercing them', async
 })
 
 test('patient search reuses its session and never authenticates again', async () => {
-  const calls = [], fetchImpl = async (url) => { calls.push(String(url)); return { ok: true, json: async () => String(url).includes('/patients/search') ? { items: [externalPatient], hasMore: true } : {} } }
+  const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, status: 200, json: async () => String(url).includes('/patients/search') ? { items: [externalPatient], hasMore: true } : {} } }
   const service = new StenciService(new StenciClient({ config: getStenciConfig(env), session, fetchImpl }))
   let result
   for (let count = 0; count < 10; count += 1) result = await service.searchPatients('Maria', { limit: 20, offset: 40 })
-  assert.equal(calls.length, 10); assert.equal(calls.some((url) => url.includes('/v1/auth') || url.includes('/v1/me/branch')), false)
-  const url = new URL(calls[0]); assert.equal(url.origin, 'https://api.example'); assert.equal(url.pathname, '/v1/patients/search'); assert.deepEqual(Object.fromEntries(url.searchParams), { limit: '20', offset: '40', notFilterBranch: 'true', search: 'Maria' }); assert.equal(result.hasMore, true)
+  assert.equal(calls.length, 10); assert.equal(calls.some(({ url }) => url.includes('/v1/auth') || url.includes('/v1/me/branch')), false)
+  const url = new URL(calls[0].url); assert.equal(url.origin, 'https://api.example'); assert.equal(url.pathname, '/v1/patients/search'); assert.deepEqual(Object.fromEntries(url.searchParams), { limit: '20', offset: '40', notFilterBranch: 'true', search: 'Maria' }); assert.equal(calls[0].options.headers.Authorization, 'JWT session-token'); assert.equal(result.hasMore, true)
+})
+
+test('patient search uses the post-branch token and exact default query', async () => {
+  const calls = []
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), options })
+    const pathname = new URL(url).pathname
+    if (pathname === '/v1/auth') return { ok: true, status: 200, headers: { getSetCookie: () => [] }, json: async () => ({ token: 'token-A' }) }
+    if (pathname === '/v1/me/branch') return { ok: true, status: 200, headers: { getSetCookie: () => [] }, json: async () => ({ token: 'token-B' }) }
+    if (pathname === '/v1/me') return { ok: true, status: 200, json: async () => ({ id: 'user-1' }) }
+    return { ok: true, status: 200, json: async () => ({ items: [], hasMore: false }) }
+  }
+  const client = new StenciClient({ config: getStenciConfig(env), fetchImpl })
+  await client.authenticateSession('user', 'password', 'persistent-device')
+  await new StenciService(client).searchPatients('teste')
+  const searchCall = calls.at(-1)
+  assert.equal(searchCall.url, 'https://api.example/v1/patients/search?limit=30&offset=0&notFilterBranch=true&search=teste')
+  assert.equal(searchCall.options.headers.Authorization, 'JWT token-B')
 })
 
 test('connection check uses the authenticated session and only GET /v1/me', async () => {
@@ -76,6 +94,14 @@ test('connection check uses the authenticated session and only GET /v1/me', asyn
 test('mapper follows patient and current insurance structure exactly', () => {
   assert.deepEqual(StenciMapper.patient(externalPatient), { external_source: 'STENCI', external_id: 'patient-1', full_name: 'Maria da Silva', cpf: '12345678900', birth_date: '1970-03-10', phone: '41999999999', email: 'maria@example.test', metadata: { identityId: 'identity-1', gender: 'female', socialName: null, address: null, cns: null } })
   assert.deepEqual(StenciMapper.insurance(externalPatient), { external_source: 'STENCI', external_id: 'insurance-1', name: 'Unimed Curitiba', plan_id: 'plan-1', plan: 'Fisioterapia', card_number: '0032', card_expiration: '2027-01-31' })
+})
+
+test('mapper tolerates absent insurance and optional identity and contact fields', () => {
+  const optional = { id: 'patient-2', identityId: null, name: 'Paciente sem cadastro completo', identity: null, email: '', birthDate: null, patient: { insurance: null } }
+  assert.deepEqual(StenciMapper.patient(optional), { external_source: 'STENCI', external_id: 'patient-2', full_name: 'Paciente sem cadastro completo', cpf: null, birth_date: null, phone: null, email: null, metadata: { identityId: null, gender: null, socialName: null, address: null, cns: null } })
+  assert.equal(StenciMapper.insurance(optional), null)
+  const nullValidity = structuredClone(externalPatient); nullValidity.patient.insurance.validity = null
+  assert.equal(StenciMapper.insurance(nullValidity).card_expiration, null)
 })
 
 function memoryDb() {

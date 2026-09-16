@@ -4,8 +4,15 @@ class StenciService {
   constructor(client) { this.client = client }
   async searchPatients(search, options = {}) {
     this.client.assertAuthenticated()
-    const result = await this.client.request('/v1/patients/search', { query: { limit: options.limit ?? 30, offset: options.offset ?? 0, notFilterBranch: true, search } })
+    const limit = options.limit ?? 30
+    const offset = options.offset ?? 0
+    if (process.env.NODE_ENV === 'development') this.client.logger.info('[STENCI PATIENT SEARCH] iniciando', {
+      tokenPresent: Boolean(this.client.authState.token), authorizationScheme: 'JWT', limit, offset,
+      notFilterBranch: true, searchLength: String(search).length,
+    })
+    const result = await this.client.request('/v1/patients/search', { query: { limit, offset, notFilterBranch: true, search } })
     if (!result || !Array.isArray(result.items) || typeof result.hasMore !== 'boolean') throw new StenciError('Resposta inválida recebida do Stenci.', { code: 'STENCI_INVALID_RESPONSE', status: 502 })
+    if (process.env.NODE_ENV === 'development') this.client.logger.info('[STENCI PATIENT SEARCH] status: 200', { items: result.items.length, hasMore: result.hasMore })
     return result
   }
   async testConnection() {

@@ -87,7 +87,7 @@ async function sendAsset(file: File,id:number){await api.post(`/${config.value.a
 async function uploadAsset(event:Event,id:number){const input=event.target as HTMLInputElement,file=input.files?.[0];if(file)await sendAsset(file,id);input.value=''}
 async function viewAsset(id:number){const response=await api.get(`/${config.value.asset.path}/${id}/${config.value.asset.name}`,{responseType:'blob'});window.open(URL.createObjectURL(response.data),'_blank')}
 watch(()=>route.path,async()=>{reset();await load()})
-onMounted(async()=>{reset();await load()})
+onMounted(async()=>{reset();try{await load()}catch(error:any){message.value=error.response?.data?.error||'Não foi possível carregar o cadastro.'}})
 onBeforeUnmount(()=>{clearPreview();Object.values(logoUrls).forEach(revoke)})
 </script>
 
