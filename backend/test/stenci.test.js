@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { getStenciConfig, publicConfig } = require('../../integrations/stenci/config')
+const { getStenciConfig, publicConfig, DEFAULT_STENCI_USER_AGENT } = require('../../integrations/stenci/config')
 const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciService = require('../../integrations/stenci/StenciService')
 const StenciSession = require('../../integrations/stenci/StenciSession')
@@ -22,12 +22,38 @@ test('Stenci is disabled by default and validates every required environment val
   await assert.rejects(missing.authenticate('user', 'password', 'device'), (error) => error.code === 'STENCI_NOT_CONFIGURED' && error.message.includes('STENCI_API_BASE_URL') && error.message.includes('STENCI_BRANCH_ID') && !error.message.includes('STENCI_DEVICE_ID'))
 })
 
-test('authentication and branch selection use only the HAR-confirmed payloads', async () => {
+test('all Stenci requests use the application headers observed in the successful HAR', async () => {
   const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, json: async () => ({ ok: true }) } }
   const client = new StenciClient({ config: getStenciConfig(env), fetchImpl }); await client.authenticateSession('interactive-user', 'interactive-password', 'persistent-device')
   assert.equal(calls[0].url, 'https://api-x.example/v1/auth'); assert.deepEqual(JSON.parse(calls[0].options.body), { username: 'interactive-user', password: 'interactive-password', deviceId: 'persistent-device' })
   assert.equal(calls[1].url, 'https://api-x.example/v1/me/branch'); assert.deepEqual(JSON.parse(calls[1].options.body), { branchId: 'configured-branch', deviceId: 'persistent-device' })
+  for (const { options } of calls) {
+    assert.equal(options.headers.Accept, 'application/json, text/plain, */*')
+    assert.equal(options.headers.Origin, 'https://stenci.app')
+    assert.equal(options.headers.Referer, 'https://stenci.app/')
+    assert.equal(options.headers['Accept-Language'], 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7')
+    assert.equal(options.headers['User-Agent'], DEFAULT_STENCI_USER_AGENT)
+  }
+  assert.equal(calls[0].options.headers['Content-Type'], 'application/json')
+  assert.equal(calls[1].options.headers['Content-Type'], 'application/json')
+  assert.equal(calls[2].options.headers['Content-Type'], undefined)
   assert.equal(calls.some(({ options }) => options.headers.Authorization || options.headers.Cookie), false)
+})
+
+test('optional Stenci browser headers can be configured without becoming required', () => {
+  const defaults = getStenciConfig(env)
+  assert.equal(defaults.origin, 'https://stenci.app')
+  assert.equal(defaults.referer, 'https://stenci.app/')
+  assert.equal(defaults.userAgent, DEFAULT_STENCI_USER_AGENT)
+  const custom = getStenciConfig({ ...env, STENCI_ORIGIN: 'https://custom.example', STENCI_REFERER: 'https://custom.example/app', STENCI_USER_AGENT: 'Realmed test agent' })
+  assert.equal(custom.origin, 'https://custom.example')
+  assert.equal(custom.referer, 'https://custom.example/app')
+  assert.equal(custom.userAgent, 'Realmed test agent')
+})
+
+test('StenciClient rejects non-string usernames instead of coercing them', async () => {
+  const client = new StenciClient({ config: getStenciConfig(env), fetchImpl: async () => assert.fail('fetch should not be called') })
+  await assert.rejects(client.authenticate(5286020984, 'password', 'device'), { name: 'TypeError' })
 })
 
 test('patient search reuses its session and never authenticates again', async () => {

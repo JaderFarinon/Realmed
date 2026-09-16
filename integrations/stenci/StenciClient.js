@@ -26,13 +26,37 @@ class StenciClient {
     const url = new URL(path, base === 'apiX' ? this.config.apiXBaseUrl : this.config.apiBaseUrl)
     Object.entries(query).forEach(([key, value]) => value != null && value !== '' && url.searchParams.set(key, String(value)))
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), this.config.timeoutMs)
-    const options = { method, signal: controller.signal, headers: { Accept: 'application/json' } }
+    const options = { method, signal: controller.signal, headers: {
+      Accept: 'application/json, text/plain, */*',
+      Origin: this.config.origin,
+      Referer: this.config.referer,
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'User-Agent': this.config.userAgent,
+    } }
     if (this.authState.cookie) options.headers.Cookie = this.authState.cookie
     if (this.authState.authorization) options.headers.Authorization = this.authState.authorization
     if (body !== undefined) { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body) }
     const label = stage && `[STENCI ${stage.toUpperCase()}]`
     if (label) {
       this.logger.info(`${label} iniciando ${url.pathname}`, { url: url.origin + url.pathname, method, deviceIdPresent: Boolean(body?.deviceId) })
+    }
+    if (stage === 'auth' && process.env.NODE_ENV === 'development') {
+      this.logger.info('[STENCI AUTH] request:', {
+        method,
+        url: url.origin + url.pathname,
+        usernameLength: body.username.length,
+        usernameStartsWithZero: body.username.startsWith('0'),
+        passwordPresent: body.password.length > 0,
+        deviceIdLength: body.deviceId.length,
+        headers: {
+          accept: options.headers.Accept,
+          'content-type': options.headers['Content-Type'],
+          origin: options.headers.Origin,
+          referer: options.headers.Referer,
+          'accept-language': options.headers['Accept-Language'],
+          'user-agent': options.headers['User-Agent'],
+        },
+      })
     }
     try {
       const response = await this.fetch(url, options)
@@ -84,6 +108,8 @@ class StenciClient {
 
   async authenticate(username, password, deviceId) {
     this.assertConfigured({ requireCredentials: true, username, password })
+    if (typeof username !== 'string') throw new TypeError('username deve ser uma string para autenticar no Stenci.')
+    if (typeof password !== 'string') throw new TypeError('password deve ser uma string para autenticar no Stenci.')
     if (!deviceId) throw new TypeError('deviceId é obrigatório para autenticar no Stenci.')
     return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username, password, deviceId }, stage: 'auth' })
   }
