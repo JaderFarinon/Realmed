@@ -9,7 +9,7 @@ O Stenci usa duas origens distintas:
 - API X (`https://api-x.stenci.pro`): `POST /v1/auth`, `POST /v1/me/branch` e `GET /v1/me`;
 - API principal (`https://api.stenci.pro`): `GET /v1/patients/search`.
 
-O login envia `username`, `password` e `deviceId`. A seleção da empresa envia `branchId` e o mesmo `deviceId` persistente. Como o HAR não demonstrou token, cookie ou cabeçalho adicional, o cliente não presume nem cria nenhum deles.
+O login gera um `deviceId` aleatório por sessão e envia `username`, `password` e `deviceId`. A seleção da empresa envia `branchId` e exatamente o mesmo `deviceId`. O contexto permanece somente no servidor, associado ao `sid` do JWT, e é reutilizado durante a validade da sessão.
 
 No login de funcionário, `POST /api/auth/login` recebe as credenciais individuais, executa autenticação, seleção automática da branch e `GET /v1/me`. O backend guarda um `StenciSession` em um `StenciSessionStore` com TTL e inclui no JWT Realmed somente o identificador aleatório `sid`. A senha é descartada ao fim da requisição; não existem credenciais Stenci fixas nem fallback técnico.
 
@@ -23,12 +23,11 @@ A busca envia `limit` (30 por padrão), `offset` (0 por padrão), `notFilterBran
 STENCI_ENABLED=false
 STENCI_API_X_BASE_URL=https://api-x.stenci.pro
 STENCI_API_BASE_URL=https://api.stenci.pro
-STENCI_DEVICE_ID=
 STENCI_BRANCH_ID=
 STENCI_TIMEOUT_MS=10000
 ```
 
-As URLs, o identificador persistente da instalação e a branch devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se `STENCI_DEVICE_ID` ou `STENCI_BRANCH_ID` estiver ausente. Senhas de funcionários nunca são configuradas no ambiente.
+As URLs e a branch devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se uma URL ou `STENCI_BRANCH_ID` estiver ausente. O `deviceId` é gerado no login e senhas de funcionários nunca são configuradas no ambiente.
 
 ## Mapeamento e sincronização
 

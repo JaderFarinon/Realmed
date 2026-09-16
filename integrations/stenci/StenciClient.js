@@ -7,7 +7,7 @@ class StenciClient {
   assertConfigured({ requireCredentials = false, username, password } = {}) {
     if (!this.config?.enabled) throw new StenciError('Integração Stenci desabilitada.', { code: 'STENCI_DISABLED', status: 503 })
     const missing = []
-    for (const [key, value] of [['STENCI_API_X_BASE_URL', this.config.apiXBaseUrl], ['STENCI_API_BASE_URL', this.config.apiBaseUrl], ['STENCI_DEVICE_ID', this.config.deviceId], ['STENCI_BRANCH_ID', this.config.branchId]]) if (!value) missing.push(key)
+    for (const [key, value] of [['STENCI_API_X_BASE_URL', this.config.apiXBaseUrl], ['STENCI_API_BASE_URL', this.config.apiBaseUrl], ['STENCI_BRANCH_ID', this.config.branchId]]) if (!value) missing.push(key)
     if (requireCredentials) {
       if (!username) missing.push('username')
       if (!password) missing.push('password')
@@ -36,17 +36,21 @@ class StenciClient {
     } finally { clearTimeout(timer) }
   }
 
-  async authenticate(username, password) {
+  async authenticate(username, password, deviceId) {
     this.assertConfigured({ requireCredentials: true, username, password })
-    return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username, password, deviceId: this.config.deviceId } })
+    if (!deviceId) throw new TypeError('deviceId é obrigatório para autenticar no Stenci.')
+    return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username, password, deviceId } })
   }
-  selectBranch() { return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId: this.config.branchId, deviceId: this.config.deviceId } }) }
+  selectBranch(branchId, deviceId) {
+    if (!deviceId) throw new TypeError('deviceId é obrigatório para selecionar a branch no Stenci.')
+    return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId, deviceId } })
+  }
   getMe() { return this.request('/v1/me', { base: 'apiX' }) }
-  async authenticateSession(username, password) {
-    await this.authenticate(username, password)
-    await this.selectBranch()
+  async authenticateSession(username, password, deviceId) {
+    await this.authenticate(username, password, deviceId)
+    await this.selectBranch(this.config.branchId, deviceId)
     const me = await this.getMe()
-    this.session = new StenciSession({ deviceId: this.config.deviceId, branchId: this.config.branchId })
+    this.session = new StenciSession({ deviceId, branchId: this.config.branchId })
     return me
   }
 
