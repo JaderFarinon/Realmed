@@ -25,9 +25,12 @@ STENCI_API_X_BASE_URL=https://api-x.stenci.pro
 STENCI_API_BASE_URL=https://api.stenci.pro
 STENCI_BRANCH_ID=
 STENCI_TIMEOUT_MS=10000
+STENCI_ORIGIN=https://stenci.app
+STENCI_REFERER=https://stenci.app/
+STENCI_USER_AGENT=
 ```
 
-As URLs e a branch devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se uma URL ou `STENCI_BRANCH_ID` estiver ausente. O `deviceId` é gerado no login e senhas de funcionários nunca são configuradas no ambiente.
+As URLs e a branch devem existir somente no `.env` do backend. `STENCI_ORIGIN`, `STENCI_REFERER` e `STENCI_USER_AGENT` são opcionais e usam padrões compatíveis com o cliente web oficial. A integração retorna um erro de configuração claro se uma URL ou `STENCI_BRANCH_ID` estiver ausente. O `deviceId` é gerado no login e senhas de funcionários nunca são configuradas no ambiente.
 
 ## Mapeamento e sincronização
 

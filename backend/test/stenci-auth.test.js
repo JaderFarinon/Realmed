@@ -161,13 +161,26 @@ test('cookies and auth tokens returned by auth remain server-side and are reused
   assert.equal(session.authorization, 'Bearer private-token')
 })
 
-test('diagnostic logs contain stages and statuses but never credentials or response bodies', async () => {
+test('development auth diagnostics contain sanitized request metadata and never credentials or sensitive headers', async () => {
   const entries = []
   const logger = Object.fromEntries(['info', 'warn', 'error'].map((level) => [level, (...values) => entries.push(values)]))
-  const client = new StenciClient({ config, logger, fetchImpl: async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ message: 'invalid', password: 'leaked-password' }) }) })
-  await assert.rejects(client.authenticateSession('private-user', 'private-password', 'device-id'), { code: 'STENCI_INVALID_CREDENTIALS' })
+  const previousNodeEnv = process.env.NODE_ENV
+  process.env.NODE_ENV = 'development'
+  const client = new StenciClient({ config, session: new StenciSession({ deviceId: 'stored-device', branchId: 'realmed-branch', cookie: 'private-cookie', authorization: 'Bearer private-token' }), logger, fetchImpl: async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ message: 'invalid', password: 'leaked-password' }) }) })
+  try {
+    await assert.rejects(client.authenticateSession('05286020984', 'private-password', '0123456789abcdef0123456789abcdef'), { code: 'STENCI_INVALID_CREDENTIALS' })
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previousNodeEnv
+  }
   const output = JSON.stringify(entries)
   assert.match(output, /STENCI AUTH/)
+  assert.match(output, /\[STENCI AUTH\] request:/)
   assert.match(output, /status: 401/)
-  assert.doesNotMatch(output, /private-user|private-password|leaked-password/)
+  assert.match(output, /"usernameLength":11/)
+  assert.match(output, /"usernameStartsWithZero":true/)
+  assert.match(output, /"passwordPresent":true/)
+  assert.match(output, /"deviceIdLength":32/)
+  assert.match(output, /"accept":"application\/json, text\/plain, \*\/\*"/)
+  assert.doesNotMatch(output, /05286020984|private-password|leaked-password|private-cookie|private-token|authorization|cookie/i)
 })
