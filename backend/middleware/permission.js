@@ -85,6 +85,9 @@ const canManageRole = (currentRole, targetRole) => {
 
 const db = require('../db');
 const modulePermission = (moduleKey, action = 'view') => async (req, res, next) => {
+  // Authentication is still enforced by each router before this middleware.
+  // Module authorization is feature-flagged until the permission matrix is ready.
+  if (process.env.PERMISSIONS_ENABLED !== 'true') return next();
   if (normalizeRoleValue(req.user?.role) === 'masteradmin') return next();
   const column = { view: 'can_view', create: 'can_create', edit: 'can_edit', delete: 'can_delete' }[action];
   if (!column) return res.status(500).json({ error: 'Ação de permissão inválida.' });

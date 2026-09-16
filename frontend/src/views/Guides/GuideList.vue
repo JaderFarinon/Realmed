@@ -4,6 +4,7 @@
       <button v-for="tab in tabs" :key="tab.key" class="whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-semibold" :class="activeTab === tab.key ? 'border-brand-600 bg-brand-600 text-white' : 'border-gray-200 bg-white text-gray-600'" @click="selectTab(tab.key)">{{ tab.label }}</button>
     </nav>
 
+    <p v-if="loadError" class="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{{ loadError }}</p>
     <section class="panel space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div><h2 class="font-semibold text-gray-900">{{ currentTabLabel }}</h2><p class="text-sm text-gray-500">{{ total }} tratamento(s) nesta visão</p></div>
@@ -47,7 +48,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import { authorizationStatusLabels, billingStatusLabels, documentStatusLabels, treatmentStatusLabels } from '@/utils/guideLabels'
 import { treatmentStatusLabel } from '@/utils/treatmentStatus'
 
-const route = useRoute(), router = useRouter(), data = ref<any[]>([]), insurers = ref<any[]>([]), professionals = ref<any[]>([]), page = ref(1), pages = ref(1), total = ref(0), showFilters = ref(false)
+const route = useRoute(), router = useRouter(), data = ref<any[]>([]), insurers = ref<any[]>([]), professionals = ref<any[]>([]), page = ref(1), pages = ref(1), total = ref(0), showFilters = ref(false), loadError = ref('')
 const tabs = [{key:'READY',label:'Pendentes'},{key:'IN_PROGRESS,PENDING',label:'Encaminhados ao Convênio'},{key:'DENIED',label:'Não Liberados'},{key:'AUTHORIZED,SESSION_TOKEN,NOT_REQUIRED',label:'Liberados'},{key:'NOT_READY',label:'Faltando Documentação'},{key:'ALL',label:'Todos'}]
 const filters = reactive<Record<string,string>>({ search:'', insurance_provider_id:'', physiotherapist_id:'', requesting_doctor_id:'', authorization_status:'READY', document_status:'', treatment_status:'', billing_status:'', priority:'', assessment_date_from:'', assessment_date_to:'', expected_start_date_from:'', expected_start_date_to:'', sort:'start_asc' })
 const activeTab = computed(() => tabs.some(t => t.key === filters.authorization_status) ? filters.authorization_status : 'ALL')
@@ -64,7 +65,7 @@ async function load(target=1){const params=Object.fromEntries(Object.entries(fil
 function selectTab(key:string){filters.authorization_status=key==='ALL'?'':key;load(1)}
 function clearFilters(){Object.keys(filters).forEach(key=>filters[key]='');filters.sort='start_asc';selectTab('READY')}
 function removeFilter(key:string){filters[key]='';load(1)}
-onMounted(async()=>{const queue=typeof route.query.queue==='string'?route.query.queue:'READY';filters.authorization_status=queue==='ALL'?'':queue;for(const key of ['document_status','treatment_status','billing_status'])if(typeof route.query[key]==='string')filters[key]=route.query[key] as string;[insurers.value,professionals.value]=await Promise.all([(await api.get('/insurance-providers',{params:{active:true}})).data,(await api.get('/professionals',{params:{active:true}})).data]);await load()})
+onMounted(async()=>{const queue=typeof route.query.queue==='string'?route.query.queue:'READY';filters.authorization_status=queue==='ALL'?'':queue;for(const key of ['document_status','treatment_status','billing_status'])if(typeof route.query[key]==='string')filters[key]=route.query[key] as string;try{[insurers.value,professionals.value]=await Promise.all([(await api.get('/insurance-providers',{params:{active:true}})).data,(await api.get('/professionals',{params:{active:true}})).data]);await load()}catch{loadError.value='Não foi possível carregar os tratamentos e seus filtros.'}})
 </script>
 
 <style scoped>.filter-label{display:flex;flex-direction:column;gap:.35rem;font-size:.75rem;font-weight:600;color:#475467}.filter-label .input{width:100%;font-weight:400;color:#344054}</style>
