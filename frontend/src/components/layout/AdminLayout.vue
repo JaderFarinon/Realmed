@@ -60,14 +60,17 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthUser } from '@/composables/useAuthUser'
+import api from '@/plugins/axios'
 const open = ref(false)
 const router = useRouter()
 const { authUser, clearUser } = useAuthUser()
 const isAdmin = computed(() => ['masteradmin', 'admin'].includes(authUser.value?.role || ''))
-const logout = () => {
-  localStorage.removeItem('token')
-  clearUser()
-  router.push('/login')
+const logout = async () => {
+  try { await api.post('/auth/logout') } finally {
+    localStorage.removeItem('token')
+    clearUser()
+    await router.push('/login')
+  }
 }
 ;</script>
 <style scoped>

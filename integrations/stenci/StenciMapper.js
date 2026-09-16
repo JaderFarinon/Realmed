@@ -1,4 +1,16 @@
 class StenciMapper {
+  static userIdentity(me, loginUsername) {
+    if (!me || typeof me !== 'object' || Array.isArray(me)) throw new Error('Resposta de usuário Stenci inválida.')
+    const source = me.user && typeof me.user === 'object' ? me.user : me
+    const externalId = source.identityId ?? source.id
+    if (externalId == null || String(externalId).trim() === '') throw new Error('Usuário Stenci sem identificador estável.')
+    return {
+      stenci_user_id: String(externalId),
+      stenci_username: source.username || source.login || loginUsername || null,
+      name: source.name || source.fullName || null,
+      email: source.email || null,
+    }
+  }
   static patient(item) {
     if (!item || item.id == null || String(item.id).trim() === '') throw new Error('Paciente Stenci sem identificador externo.')
     return {

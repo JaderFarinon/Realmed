@@ -6,7 +6,7 @@
       <div class="mb-8 text-center">
         <img src="/images/logo/logo-icon.svg" class="mx-auto h-14 w-14" alt="Realmed" />
         <h1 class="mt-4 text-2xl font-bold dark:text-white">REALMED</h1>
-        <p class="mt-1 text-sm text-gray-500">Entre para acessar o sistema</p>
+        <p class="mt-1 text-sm text-gray-500">Utilize seu usuário corporativo.</p>
       </div>
       <form class="space-y-5" @submit.prevent="submit">
         <label class="block text-sm font-medium dark:text-gray-200"
