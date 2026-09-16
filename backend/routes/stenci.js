@@ -5,10 +5,10 @@ const auth = require('../middleware/auth')
 const { modulePermission, permissionMiddleware } = require('../middleware/permission')
 const { createIntegrationLog } = require('../services/integrationLogService')
 const { getStenciConfig, publicConfig } = require('../../integrations/stenci/config')
-const StenciClient = require('../../integrations/stenci/StenciClient')
-const StenciService = require('../../integrations/stenci/StenciService')
 const StenciMapper = require('../../integrations/stenci/StenciMapper')
 const { syncPatientFromStenci } = require('../../integrations/stenci/StenciPatientSyncService')
+const { stenciSessionStore } = require('../services/StenciSessionStore')
+const { getAuthenticatedStenciService, normalizeStenciSessionError } = require('../services/authenticatedStenciService')
 
 const knex = knexFactory(knexConfig[process.env.NODE_ENV || 'development'] || knexConfig.development)
 const admin = [permissionMiddleware(['masteradmin', 'admin']), modulePermission('integrations')]
@@ -27,25 +27,27 @@ function validatedPatient(body, externalId) {
   }
 }
 
-function createStenciRouter({ db = knex, configFactory = getStenciConfig, serviceFactory, sync = syncPatientFromStenci } = {}) {
+function createStenciRouter({ db = knex, configFactory = getStenciConfig, serviceFactory, sessionStore = stenciSessionStore, sync = syncPatientFromStenci } = {}) {
   const router = express.Router(); router.use(auth)
-  const makeService = () => { const config = configFactory(); return { config, service: serviceFactory ? serviceFactory(config) : new StenciService(new StenciClient({ config })) } }
+  const makeService = (req) => getAuthenticatedStenciService(req, { configFactory, serviceFactory, sessionStore })
   const log = async (entry) => { try { await createIntegrationLog(db, entry) } catch (error) { console.error('[Stenci] Falha ao registrar log:', error.message) } }
   const latestLog = () => db('integration_logs').where({ integration: 'STENCI' }).orderBy('created_at', 'desc').first()
 
   router.get('/status', ...admin, async (_req, res) => { try { const config = configFactory(), latest = await latestLog(); const status = !config.enabled ? 'DISABLED' : latest?.status === 'ERROR' ? 'ERROR' : latest?.status === 'SUCCESS' ? 'CONNECTED' : 'CONFIGURED'; res.json({ ...publicConfig(config), status, last_operation: latest ? { operation: latest.operation, status: latest.status, started_at: latest.started_at, finished_at: latest.finished_at, records_processed: latest.records_processed } : null, last_error: latest?.status === 'ERROR' ? latest.error_message : null }) } catch (_error) { res.status(500).json({ error: 'Não foi possível consultar o status da integração.' }) } })
   router.get('/logs', ...admin, async (_req, res) => { try { res.json(await db('integration_logs').where({ integration: 'STENCI' }).select('id', 'integration', 'operation', 'status', 'started_at', 'finished_at', 'duration_ms', 'records_processed', 'error_message', 'metadata', 'created_at').orderBy('created_at', 'desc').limit(100)) } catch (_error) { res.status(500).json({ error: 'Não foi possível consultar os logs da integração.' }) } })
-  router.post('/test-connection', ...admin, async (_req, res) => {
+  router.post('/test-connection', ...admin, async (req, res) => {
     const started = new Date()
-    try { const { service } = makeService(); await service.testConnection(); const finished = new Date(); await log({ integration: 'STENCI', operation: 'TEST_CONNECTION', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0 }); res.json({ message: 'Conexão com o Stenci realizada com sucesso.' }) }
-    catch (error) { const finished = new Date(); await log({ integration: 'STENCI', operation: 'TEST_CONNECTION', status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message }); res.status(error.status || 503).json({ error: error.message || 'Falha controlada ao consultar o Stenci.', code: error.code || 'STENCI_ERROR' }) }
+    let context
+    try { context = makeService(req); await context.service.testConnection(); const finished = new Date(); await log({ integration: 'STENCI', operation: 'TEST_CONNECTION', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0 }); res.json({ message: 'Integração Stenci validada com sua sessão atual.' }) }
+    catch (originalError) { const error = normalizeStenciSessionError(originalError, context?.sid || req.user?.sid, sessionStore); const finished = new Date(); await log({ integration: 'STENCI', operation: 'TEST_CONNECTION', status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message }); res.status(error.status || 503).json({ error: error.message || 'Falha controlada ao consultar o Stenci.', code: error.code || 'STENCI_ERROR' }) }
   })
 
   router.get('/patients/search', modulePermission('guide_processes', 'create'), async (req, res) => {
     const started = new Date(), search = String(req.query.search || '').trim(), limit = Math.min(30, Math.max(1, Number(req.query.limit) || 30)), offset = Math.max(0, Number(req.query.offset) || 0)
     if (search.length < 2) return res.status(400).json({ error: 'Informe pelo menos 2 caracteres para buscar.' })
-    try { const { service } = makeService(), result = await service.searchPatients(search, { limit, offset }); const items = result.items.map((item) => ({ ...StenciMapper.patient(item), insurance: StenciMapper.insurance(item), raw: validatedPatient(item, item.id) })); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: items.length }); res.json({ items, hasMore: result.hasMore }) }
-    catch (error) { const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message }); res.status(error.status || 503).json({ error: error.code === 'STENCI_HTTP_401' ? 'A autenticação com o Stenci falhou. Contate o administrador.' : 'Não foi possível consultar o Stenci no momento.', code: error.code || 'STENCI_ERROR' }) }
+    let context
+    try { context = makeService(req); const result = await context.service.searchPatients(search, { limit, offset }); const items = result.items.map((item) => ({ ...StenciMapper.patient(item), insurance: StenciMapper.insurance(item), raw: validatedPatient(item, item.id) })); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'SUCCESS', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: items.length }); res.json({ items, hasMore: result.hasMore }) }
+    catch (originalError) { const error = normalizeStenciSessionError(originalError, context?.sid || req.user?.sid, sessionStore); const finished = new Date(); await log({ integration: 'STENCI', operation: 'PATIENT_SEARCH', status: 'ERROR', started_at: started, finished_at: finished, duration_ms: finished - started, records_processed: 0, error_message: error.message }); res.status(error.status || 503).json({ error: error.code === 'STENCI_SESSION_EXPIRED' ? 'Sua sessão expirou. Entre novamente.' : 'Não foi possível consultar o Stenci no momento.', code: error.code || 'STENCI_ERROR' }) }
   })
   router.post('/patients/:externalId/sync', modulePermission('guide_processes', 'create'), async (req, res) => {
     const started = new Date()

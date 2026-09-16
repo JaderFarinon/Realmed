@@ -11,7 +11,9 @@ O Stenci usa duas origens distintas:
 
 O login envia `username`, `password` e `deviceId`. A seleção da empresa envia `branchId` e o mesmo `deviceId` persistente. Como o HAR não demonstrou token, cookie ou cabeçalho adicional, o cliente não presume nem cria nenhum deles.
 
-No login de funcionário, `POST /api/auth/login` recebe as credenciais individuais, executa autenticação, seleção automática da branch e `GET /v1/me`, e então emite somente o JWT próprio do Realmed. `STENCI_USERNAME` e `STENCI_PASSWORD` continuam reservados à integração técnica existente de pacientes e não são usados como fallback para o login do funcionário.
+No login de funcionário, `POST /api/auth/login` recebe as credenciais individuais, executa autenticação, seleção automática da branch e `GET /v1/me`. O backend guarda um `StenciSession` em um `StenciSessionStore` com TTL e inclui no JWT Realmed somente o identificador aleatório `sid`. A senha é descartada ao fim da requisição; não existem credenciais Stenci fixas nem fallback técnico.
+
+Consultas posteriores resolvem o `sid` exclusivamente no backend e criam um cliente contextualizado para aquela sessão. Elas não repetem `/v1/auth` ou `/v1/me/branch`. Como o HAR não mostrou `Authorization`, cookie ou token Stenci, o contexto representa somente o estado comprovado (device, branch e autenticação concluída), sem inventar cabeçalhos. Respostas 401/403 invalidam o contexto e retornam `STENCI_SESSION_EXPIRED`, exigindo novo login interativo.
 
 A busca envia `limit` (30 por padrão), `offset` (0 por padrão), `notFilterBranch=true` e `search`. O parâmetro `notFilterBranch=true` é preservado porque foi observado explicitamente no HAR. A resposta esperada contém `items` e `hasMore`; cada item possui os dados da pessoa em nível superior e o convênio atual em `patient.insurance`.
 
@@ -21,15 +23,12 @@ A busca envia `limit` (30 por padrão), `offset` (0 por padrão), `notFilterBran
 STENCI_ENABLED=false
 STENCI_API_X_BASE_URL=https://api-x.stenci.pro
 STENCI_API_BASE_URL=https://api.stenci.pro
-# Somente para a integração técnica de pacientes:
-STENCI_USERNAME=
-STENCI_PASSWORD=
 STENCI_DEVICE_ID=
 STENCI_BRANCH_ID=
 STENCI_TIMEOUT_MS=10000
 ```
 
-Todos os valores de identificação e autenticação técnica devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se qualquer valor obrigatório para a operação estiver ausente. Senhas de funcionários nunca são configuradas no ambiente.
+As URLs, o identificador persistente da instalação e a branch devem existir somente no `.env` do backend. A integração retorna um erro de configuração claro se `STENCI_DEVICE_ID` ou `STENCI_BRANCH_ID` estiver ausente. Senhas de funcionários nunca são configuradas no ambiente.
 
 ## Mapeamento e sincronização
 

@@ -1,7 +1,8 @@
 const StenciError = require('./StenciError')
+const StenciSession = require('./StenciSession')
 
 class StenciClient {
-  constructor({ config, fetchImpl = global.fetch } = {}) { this.config = config; this.fetch = fetchImpl }
+  constructor({ config, session = null, fetchImpl = global.fetch } = {}) { this.config = config; this.fetch = fetchImpl; this.session = session }
 
   assertConfigured({ requireCredentials = false, username, password } = {}) {
     if (!this.config?.enabled) throw new StenciError('Integração Stenci desabilitada.', { code: 'STENCI_DISABLED', status: 503 })
@@ -35,13 +36,25 @@ class StenciClient {
     } finally { clearTimeout(timer) }
   }
 
-  async authenticate(username = this.config.username, password = this.config.password) {
+  async authenticate(username, password) {
     this.assertConfigured({ requireCredentials: true, username, password })
     return this.request('/v1/auth', { base: 'apiX', method: 'POST', body: { username, password, deviceId: this.config.deviceId } })
   }
   selectBranch() { return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId: this.config.branchId, deviceId: this.config.deviceId } }) }
   getMe() { return this.request('/v1/me', { base: 'apiX' }) }
-  async prepareSession(username, password) { await this.authenticate(username, password); await this.selectBranch() }
+  async authenticateSession(username, password) {
+    await this.authenticate(username, password)
+    await this.selectBranch()
+    const me = await this.getMe()
+    this.session = new StenciSession({ deviceId: this.config.deviceId, branchId: this.config.branchId })
+    return me
+  }
+
+  getSession() { return this.session }
+
+  assertAuthenticated() {
+    if (!this.session) throw new StenciError('Sessão Stenci ausente ou expirada.', { code: 'STENCI_SESSION_EXPIRED', status: 401 })
+  }
 }
 
 module.exports = StenciClient

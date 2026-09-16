@@ -42,7 +42,8 @@ import api from '@/plugins/axios'
 import { useAuthUser } from '@/composables/useAuthUser'
 const username = ref('')
 const password = ref('')
-const error = ref('')
+const error = ref(sessionStorage.getItem('auth_message') || '')
+sessionStorage.removeItem('auth_message')
 const loading = ref(false)
 const router = useRouter()
 const route = useRoute()
