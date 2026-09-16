@@ -14,6 +14,8 @@ const StenciService = require('../../integrations/stenci/StenciService')
 const { getStenciConfig } = require('../../integrations/stenci/config')
 const { createAuthRouter } = require('../routes/auth')
 const express = require('express')
+const StenciSession = require('../../integrations/stenci/StenciSession')
+const { StenciSessionStore } = require('../services/StenciSessionStore')
 
 const config = getStenciConfig({
   STENCI_ENABLED: 'true',
@@ -54,18 +56,22 @@ test('valid Stenci login creates once, reuses internal user, issues a safe Realm
     }
     return users.get(identity.stenci_user_id)
   }
-  const serviceFactory = () => ({ authenticateUser: async () => ({ stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }) })
-  const router = createAuthRouter({ configFactory: () => config, serviceFactory, syncUser, jwtSecret: process.env.JWT_SECRET })
+  const storedSession = new StenciSession({ deviceId: 'fixed-device', branchId: 'realmed-branch' })
+  const serviceFactory = () => ({ authenticateUser: async () => ({ stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }), getSession: () => storedSession })
+  const sessionStore = new StenciSessionStore({ ttlMs: 60_000 })
+  const router = createAuthRouter({ configFactory: () => config, serviceFactory, syncUser, jwtSecret: process.env.JWT_SECRET, sessionStore })
   await withServer(router, async (base) => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'joao', password: 'never-persist-this' }) })
       assert.equal(response.status, 200)
       const result = await response.json(); const claims = jwt.verify(result.token, process.env.JWT_SECRET)
-      assert.equal(claims.id, 1); assert.equal(claims.password, undefined)
+      assert.equal(claims.id, 1); assert.equal(typeof claims.sid, 'string'); assert.equal(claims.password, undefined); assert.equal(claims.username, 'joao')
+      assert.equal(result.user.sid, undefined); assert.equal(sessionStore.get(claims.sid), storedSession)
       assert.equal(JSON.stringify(result).includes('never-persist-this'), false)
       assert.equal(result.user.permissions, undefined)
       const logout = await fetch(`${base}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${result.token}` } })
       assert.equal(logout.status, 204)
+      assert.equal(sessionStore.get(claims.sid), null)
     }
   })
   assert.equal(created, 1)

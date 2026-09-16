@@ -8,6 +8,7 @@ const { syncStenciUser } = require('../services/stenciUserService')
 const { getStenciConfig } = require('../../integrations/stenci/config')
 const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciService = require('../../integrations/stenci/StenciService')
+const { stenciSessionStore } = require('../services/StenciSessionStore')
 
 const publicUser = (user) => ({
   id: user.id,
@@ -26,6 +27,7 @@ function createAuthRouter({
   serviceFactory,
   syncUser = syncStenciUser,
   jwtSecret = process.env.JWT_SECRET,
+  sessionStore = stenciSessionStore,
 } = {}) {
   const router = express.Router()
 
@@ -35,17 +37,22 @@ function createAuthRouter({
     if (!username || !password) return res.status(400).json({ error: 'Usuário e senha são obrigatórios.' })
     if (!jwtSecret) return res.status(500).json({ error: 'Autenticação não configurada.' })
 
+    let sid
     try {
       const config = configFactory()
       const service = serviceFactory
         ? serviceFactory(config)
         : new StenciService(new StenciClient({ config }))
       const identity = await service.authenticateUser(username, password)
+      const stenciSession = service.getSession()
+      if (!stenciSession) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_MISSING' })
       const user = await syncUser(db, identity)
-      const payload = publicUser(user)
+      sid = sessionStore.create(stenciSession)
+      const payload = { ...publicUser(user), sid }
       const token = jwt.sign(payload, jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
-      return res.json({ token, user: payload })
+      return res.json({ token, user: publicUser(user) })
     } catch (error) {
+      if (sid) sessionStore.delete(sid)
       const invalidCredentials = ['STENCI_HTTP_401', 'STENCI_HTTP_403'].includes(error.code)
       if (invalidCredentials) return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
       console.error('[Auth] Falha controlada na autenticação Stenci:', error.code || error.name)
@@ -53,7 +60,10 @@ function createAuthRouter({
     }
   })
 
-  router.post('/logout', authMiddleware, (_req, res) => res.status(204).end())
+  router.post('/logout', authMiddleware, (req, res) => {
+    sessionStore.delete(req.user.sid)
+    res.status(204).end()
+  })
 
   router.get('/me', authMiddleware, async (req, res) => {
     try {
