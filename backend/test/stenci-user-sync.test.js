@@ -1,6 +1,11 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { syncStenciUser, UserSyncError, databaseDiagnostic } = require('../services/stenciUserService')
+const {
+  syncStenciUser,
+  buildUserSyncLockKey,
+  UserSyncError,
+  databaseDiagnostic,
+} = require('../services/stenciUserService')
 const StenciMapper = require('../../integrations/stenci/StenciMapper')
 
 class MemoryPool {
@@ -33,6 +38,10 @@ test('links an existing user by email when stenci_user_id is null',async()=>{con
 test('links by username/CPF and preserves its leading zero and string type',async()=>{const p=legacy({username:'05286020984',email:'old@example.test'}); await syncStenciUser(p,identity({email:'new@example.test'})); assert.equal(p.users[0].stenci_user_id,'stenci-1'); assert.equal(p.users[0].username,'05286020984'); assert.equal(typeof p.people[0].cpf,'string')})
 test('same email with another stenci_user_id returns identity conflict',async()=>{const p=legacy({stenci:'other'}); await assert.rejects(syncStenciUser(p,identity()),e=>e instanceof UserSyncError&&e.code==='USER_IDENTITY_CONFLICT'&&e.status===409); assert.equal(p.users[0].stenci_user_id,'other')})
 test('repeated and simultaneous synchronization create one user',async()=>{const p=new MemoryPool(); await syncStenciUser(p,identity()); await syncStenciUser(p,identity()); assert.equal(p.users.length,1); const c=new MemoryPool(); const users=await Promise.all([syncStenciUser(c,identity()),syncStenciUser(c,identity())]); assert.equal(c.users.length,1); assert.deepEqual(users.map(x=>x.id),[1,1])})
+test('builds a short, deterministic and opaque lock name from stenci_user_id',()=>{const personal='user@example.test-05286020984-Maria'; const first=buildUserSyncLockKey(personal); assert.equal(first.length,36); assert.ok(first.length<=64); assert.equal(first,buildUserSyncLockKey(personal)); assert.notEqual(first,buildUserSyncLockKey('another-user')); assert.doesNotMatch(first,/user|example|05286020984|Maria/i)})
+test('GET_LOCK and RELEASE_LOCK receive exactly the same key',async()=>{const calls=[]; const p=new MemoryPool(); const connection=await p.getConnection(); const original=connection.query.bind(connection); connection.query=async(sql,values)=>{if(/GET_LOCK|RELEASE_LOCK/.test(sql))calls.push({sql,lockName:values[0]}); return original(sql,values)}; p.getConnection=async()=>connection; await syncStenciUser(p,identity()); assert.equal(calls.length,2); assert.match(calls[0].sql,/GET_LOCK/); assert.match(calls[1].sql,/RELEASE_LOCK/); assert.equal(calls[0].lockName,calls[1].lockName)})
+test('an error during synchronization still releases the acquired lock',async()=>{const calls=[]; const connection={query:async(sql,values)=>{if(sql.includes('GET_LOCK'))return [[{acquired:1}]]; if(sql.includes('RELEASE_LOCK')){calls.push(values[0]); return [[{released:1}]]} throw new Error('sync failed')},beginTransaction:async()=>{},rollback:async()=>{},release(){}}; await assert.rejects(syncStenciUser({getConnection:async()=>connection},identity()),{code:'REALMED_USER_SYNC_FAILED'}); assert.deepEqual(calls,[buildUserSyncLockKey('stenci-1')])})
+test('lock timeout and lock errors return controlled codes without attempting release',async()=>{for(const [result,code] of [[0,'USER_SYNC_LOCK_TIMEOUT'],[null,'USER_SYNC_LOCK_ERROR']]){let releases=0; const connection={query:async(sql)=>{if(sql.includes('GET_LOCK'))return [[{acquired:result}]]; if(sql.includes('RELEASE_LOCK'))releases++; return [[]]},release(){}}; await assert.rejects(syncStenciUser({getConnection:async()=>connection},identity()),error=>error instanceof UserSyncError&&error.code===code); assert.equal(releases,0)}})
 test('reuses an unlinked person found by CPF instead of inserting a duplicate',async()=>{const p=new MemoryPool({people:[{id:9,cpf:'05286020984',email:'old@example.test',full_name:'Old'}]}); const u=await syncStenciUser(p,identity()); assert.equal(u.person_id,9); assert.equal(p.people.length,1)})
 test('reuses an unlinked person found by email instead of inserting a duplicate',async()=>{const p=new MemoryPool({people:[{id:9,cpf:null,email:'maria@example.test',full_name:'Old'}]}); const u=await syncStenciUser(p,identity({identity:null})); assert.equal(u.person_id,9); assert.equal(p.people.length,1)})
 test('a Stenci-linked user is safely rebound to its unique matching legacy person',async()=>{const p=legacy({stenci:'stenci-1',email:'old@example.test',cpf:null}); p.people.push({id:9,cpf:'05286020984',email:'maria@example.test',full_name:'Matching'}); const u=await syncStenciUser(p,identity()); assert.equal(u.id,7); assert.equal(u.person_id,9); assert.equal(p.people.length,2)})

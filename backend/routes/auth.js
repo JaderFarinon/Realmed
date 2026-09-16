@@ -60,9 +60,9 @@ function createAuthRouter({
       if (sid) sessionStore.delete(sid)
       if (error.code === 'STENCI_INVALID_CREDENTIALS') return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
       if (error.code === 'USER_IDENTITY_CONFLICT') return res.status(409).json({ error: error.message, code: error.code })
-      if (error.code === 'REALMED_USER_SYNC_FAILED') {
+      if (['REALMED_USER_SYNC_FAILED', 'USER_SYNC_LOCK_TIMEOUT', 'USER_SYNC_LOCK_ERROR'].includes(error.code)) {
         logger.error('[REALMED USER SYNC] falha', databaseDiagnostic(error.cause))
-        return res.status(500).json({ error: error.message, code: error.code })
+        return res.status(error.status || 500).json({ error: error.message, code: error.code })
       }
       logger.error('[REALMED AUTH] falha na autenticação Stenci', { code: error.code || error.name, stage: error.stage, upstreamStatus: error.upstreamStatus })
       if (error.code === 'STENCI_BRANCH_FAILED') return res.status(502).json({ error: 'Não foi possível selecionar a unidade da Realmed no Stenci.' })
