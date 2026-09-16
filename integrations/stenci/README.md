@@ -13,7 +13,7 @@ O login gera um `deviceId` aleatório por sessão e envia `username`, `password`
 
 No login de funcionário, `POST /api/auth/login` recebe as credenciais individuais, executa autenticação, seleção automática da branch e `GET /v1/me`. O backend guarda um `StenciSession` em um `StenciSessionStore` com TTL e inclui no JWT Realmed somente o identificador aleatório `sid`. A senha é descartada ao fim da requisição; não existem credenciais Stenci fixas nem fallback técnico.
 
-Consultas posteriores resolvem o `sid` exclusivamente no backend e criam um cliente contextualizado para aquela sessão. Elas não repetem `/v1/auth` ou `/v1/me/branch`. Como o HAR não mostrou `Authorization`, cookie ou token Stenci, o contexto representa somente o estado comprovado (device, branch e autenticação concluída), sem inventar cabeçalhos. Respostas 401/403 invalidam o contexto e retornam `STENCI_SESSION_EXPIRED`, exigindo novo login interativo.
+Consultas posteriores resolvem o `sid` exclusivamente no backend e criam um cliente contextualizado para aquela sessão. Elas não repetem `/v1/auth` ou `/v1/me/branch`: o token retornado pela autenticação (ou o token renovado pela seleção da branch) permanece apenas na sessão do servidor e é enviado como `Authorization: JWT <token>`. Respostas 401/403 invalidam o contexto e retornam `STENCI_SESSION_EXPIRED`, exigindo novo login interativo.
 
 A busca envia `limit` (30 por padrão), `offset` (0 por padrão), `notFilterBranch=true` e `search`. O parâmetro `notFilterBranch=true` é preservado porque foi observado explicitamente no HAR. A resposta esperada contém `items` e `hasMore`; cada item possui os dados da pessoa em nível superior e o convênio atual em `patient.insurance`.
 

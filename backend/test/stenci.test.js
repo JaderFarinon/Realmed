@@ -11,7 +11,7 @@ const { syncPatientFromStenci } = require('../../integrations/stenci/StenciPatie
 const { sanitize, createIntegrationLog } = require('../services/integrationLogService')
 
 const env = { STENCI_ENABLED: 'true', STENCI_API_X_BASE_URL: 'https://api-x.example', STENCI_API_BASE_URL: 'https://api.example', STENCI_BRANCH_ID: 'configured-branch', STENCI_TIMEOUT_MS: '500' }
-const session = new StenciSession({ deviceId: 'persistent-device', branchId: 'configured-branch' })
+const session = new StenciSession({ deviceId: 'persistent-device', branchId: 'configured-branch', token: 'session-token' })
 const externalPatient = { id: 'patient-1', identityId: 'identity-1', name: 'Maria da Silva', identity: { type: 'cpf', value: '12345678900' }, cellphone: '41999999999', phone: '4133333333', email: 'maria@example.test', birthDate: '1970-03-10', gender: 'female', patient: { cns: null, insurance: { id: 'insurance-1', name: 'Unimed Curitiba', planId: 'plan-1', plan: { id: 'plan-1', name: 'Fisioterapia' }, record: '0032', validity: '2027-01-31' } } }
 
 test('Stenci is disabled by default and validates every required environment value', async () => {
@@ -22,8 +22,8 @@ test('Stenci is disabled by default and validates every required environment val
   await assert.rejects(missing.authenticate('user', 'password', 'device'), (error) => error.code === 'STENCI_NOT_CONFIGURED' && error.message.includes('STENCI_API_BASE_URL') && error.message.includes('STENCI_BRANCH_ID') && !error.message.includes('STENCI_DEVICE_ID'))
 })
 
-test('all Stenci requests use the application headers observed in the successful HAR', async () => {
-  const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, json: async () => ({ ok: true }) } }
+test('all Stenci requests use the application headers and JWT scheme', async () => {
+  const calls = [], fetchImpl = async (url, options) => { calls.push({ url: String(url), options }); return { ok: true, json: async () => new URL(url).pathname === '/v1/auth' ? ({ token: 'auth-token' }) : ({ ok: true }) } }
   const client = new StenciClient({ config: getStenciConfig(env), fetchImpl }); await client.authenticateSession('interactive-user', 'interactive-password', 'persistent-device')
   assert.equal(calls[0].url, 'https://api-x.example/v1/auth'); assert.deepEqual(JSON.parse(calls[0].options.body), { username: 'interactive-user', password: 'interactive-password', deviceId: 'persistent-device' })
   assert.equal(calls[1].url, 'https://api-x.example/v1/me/branch'); assert.deepEqual(JSON.parse(calls[1].options.body), { branchId: 'configured-branch', deviceId: 'persistent-device' })
@@ -37,7 +37,9 @@ test('all Stenci requests use the application headers observed in the successful
   assert.equal(calls[0].options.headers['Content-Type'], 'application/json')
   assert.equal(calls[1].options.headers['Content-Type'], 'application/json')
   assert.equal(calls[2].options.headers['Content-Type'], undefined)
-  assert.equal(calls.some(({ options }) => options.headers.Authorization || options.headers.Cookie), false)
+  assert.equal(calls[0].options.headers.Authorization, undefined)
+  assert.equal(calls[1].options.headers.Authorization, 'JWT auth-token')
+  assert.equal(calls[2].options.headers.Authorization, 'JWT auth-token')
 })
 
 test('optional Stenci browser headers can be configured without becoming required', () => {

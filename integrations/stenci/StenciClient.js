@@ -7,7 +7,7 @@ class StenciClient {
     this.fetch = fetchImpl
     this.session = session
     this.logger = logger
-    this.authState = session ? { cookie: session.cookie, authorization: session.authorization } : {}
+    this.authState = session ? { cookie: session.cookie, token: session.token } : {}
   }
 
   assertConfigured({ requireCredentials = false, username, password } = {}) {
@@ -34,33 +34,18 @@ class StenciClient {
       'User-Agent': this.config.userAgent,
     } }
     if (this.authState.cookie) options.headers.Cookie = this.authState.cookie
-    if (this.authState.authorization) options.headers.Authorization = this.authState.authorization
+    if (this.authState.token) options.headers.Authorization = `JWT ${this.authState.token}`
     if (body !== undefined) { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body) }
     const label = stage && `[STENCI ${stage.toUpperCase()}]`
-    if (label) {
+    const development = process.env.NODE_ENV === 'development'
+    if (development && stage === 'branch') {
       this.logger.info(`${label} iniciando ${url.pathname}`, { url: url.origin + url.pathname, method, deviceIdPresent: Boolean(body?.deviceId) })
-    }
-    if (stage === 'auth' && process.env.NODE_ENV === 'development') {
-      this.logger.info('[STENCI AUTH] request:', {
-        method,
-        url: url.origin + url.pathname,
-        usernameLength: body.username.length,
-        usernameStartsWithZero: body.username.startsWith('0'),
-        passwordPresent: body.password.length > 0,
-        deviceIdLength: body.deviceId.length,
-        headers: {
-          accept: options.headers.Accept,
-          'content-type': options.headers['Content-Type'],
-          origin: options.headers.Origin,
-          referer: options.headers.Referer,
-          'accept-language': options.headers['Accept-Language'],
-          'user-agent': options.headers['User-Agent'],
-        },
-      })
+      this.logger.info('[STENCI BRANCH] authorizationScheme: JWT')
+      this.logger.info('[STENCI BRANCH] tokenPresent: true')
     }
     try {
       const response = await this.fetch(url, options)
-      if (label) this.logger.info(`${label} status: ${response.status}`)
+      if (development && label) this.logger.info(`${label} status: ${response.status}`)
       if (!response.ok) {
         const remote = await this.safeError(response)
         if (label && remote) this.logger.warn(`${label} erro do Stenci`, remote)
@@ -72,7 +57,7 @@ class StenciClient {
       }
       try {
         const data = await response.json()
-        if (stage === 'auth') this.captureAuthState(response, data)
+        if (stage === 'auth' || stage === 'branch') this.captureAuthState(response, data, stage)
         return data
       } catch (cause) { throw new StenciError('Resposta inválida recebida do Stenci.', { code: stage ? `STENCI_${stage.toUpperCase()}_FAILED` : 'STENCI_INVALID_RESPONSE', status: 502, stage, cause }) }
     } catch (error) {
@@ -93,17 +78,16 @@ class StenciClient {
     } catch { return null }
   }
 
-  captureAuthState(response, data) {
+  captureAuthState(response, data, stage = 'auth') {
     const headers = response.headers
     const setCookies = typeof headers?.getSetCookie === 'function' ? headers.getSetCookie() : [headers?.get?.('set-cookie')].filter(Boolean)
     if (setCookies.length) this.authState.cookie = setCookies.map((value) => value.split(';', 1)[0]).join('; ')
-    const headerAuthorization = headers?.get?.('authorization')
-    if (headerAuthorization) this.authState.authorization = headerAuthorization
-    else {
-      const token = data?.accessToken || data?.token
-      if (typeof token === 'string' && token) this.authState.authorization = `Bearer ${token}`
+    const token = data?.token || data?.accessToken
+    if (typeof token === 'string' && token) this.authState.token = token
+    if (process.env.NODE_ENV === 'development' && stage === 'auth') {
+      this.logger.info('[STENCI AUTH] tokenPresent:', Boolean(this.authState.token))
+      this.logger.info('[STENCI AUTH] contexto de sessão recebido', { tokenPresent: Boolean(this.authState.token) })
     }
-    this.logger.info('[STENCI AUTH] contexto de sessão recebido', { cookiePresent: Boolean(this.authState.cookie), tokenPresent: Boolean(this.authState.authorization) })
   }
 
   async authenticate(username, password, deviceId) {
@@ -115,6 +99,7 @@ class StenciClient {
   }
   selectBranch(branchId, deviceId) {
     if (!deviceId) throw new TypeError('deviceId é obrigatório para selecionar a branch no Stenci.')
+    if (!this.authState.token) throw new StenciError('Token de autenticação Stenci ausente.', { code: 'STENCI_AUTH_TOKEN_MISSING', status: 401, stage: 'branch' })
     return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId, deviceId }, stage: 'branch' })
   }
   getMe() { return this.request('/v1/me', { base: 'apiX', stage: 'me' }) }

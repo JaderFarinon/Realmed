@@ -35,7 +35,7 @@ test('employee authentication uses credentials once, fixed branch, session devic
   const calls = []
   const fetchImpl = async (url, options) => {
     calls.push({ path: new URL(url).pathname, body: options.body && JSON.parse(options.body) })
-    return { ok: true, json: async () => new URL(url).pathname === '/v1/me' ? { identityId: 'identity-7', username: 'maria', name: 'Maria', email: 'maria@example.test' } : {} }
+    return { ok: true, json: async () => new URL(url).pathname === '/v1/auth' ? { token: 'auth-token' } : new URL(url).pathname === '/v1/me' ? { identityId: 'identity-7', username: 'maria', name: 'Maria', email: 'maria@example.test' } : {} }
   }
   const identity = await new StenciService(new StenciClient({ config, fetchImpl })).authenticateUser('maria', 'secret-value', 'session-device')
   assert.deepEqual(calls, [
@@ -61,7 +61,7 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
     return {
       authenticateUser: async (_username, _password, deviceId) => {
         receivedDeviceIds.push(deviceId)
-        storedSession = new StenciSession({ deviceId, branchId: 'realmed-branch' })
+        storedSession = new StenciSession({ deviceId, branchId: 'realmed-branch', token: 'server-only-stenci-token' })
         return { stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }
       },
       getSession: () => storedSession,
@@ -80,6 +80,7 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
       assert.equal(session.deviceId, receivedDeviceIds[attempt])
       assert.match(session.deviceId, /^[0-9a-f]{32}$/)
       assert.equal(JSON.stringify(result).includes('never-persist-this'), false)
+      assert.equal(JSON.stringify(result).includes('server-only-stenci-token'), false)
       assert.equal(result.user.permissions, undefined)
       const logout = await fetch(`${base}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${result.token}` } })
       assert.equal(logout.status, 204)
@@ -115,7 +116,7 @@ test('authentication stages have distinct errors and preserve a string username 
     const fetchImpl = async (_url, options) => {
       calls.push(options)
       const status = scenario.statuses[calls.length - 1]
-      return { ok: status === 200, status, headers: { get: () => null }, json: async () => ({ code: 'remote_error', message: 'safe diagnostic' }) }
+      return { ok: status === 200, status, headers: { get: () => null }, json: async () => calls.length === 1 && status === 200 ? { token: 'auth-token' } : { code: 'remote_error', message: 'safe diagnostic' } }
     }
     const client = new StenciClient({ config, fetchImpl, logger: { info() {}, warn() {}, error() {} } })
     await assert.rejects(client.authenticateSession('05286020984', 'top-secret', 'same-device'), (error) => {
@@ -137,16 +138,17 @@ test('network failures retain their stage and become connection errors', async (
   await assert.rejects(client.authenticateSession('user', 'secret', 'device'), { code: 'STENCI_CONNECTION_ERROR', stage: 'auth', status: 503 })
 })
 
-test('cookies and auth tokens returned by auth remain server-side and are reused', async () => {
+test('auth token remains server-side, branch can replace it, and current token uses JWT', async () => {
   const calls = []
   const fetchImpl = async (url, options) => {
     calls.push({ path: new URL(url).pathname, headers: options.headers })
-    const auth = calls.length === 1
+    const path = new URL(url).pathname
+    const auth = path === '/v1/auth'
     return {
       ok: true,
       status: 200,
-      headers: { getSetCookie: () => auth ? ['session=private-cookie; HttpOnly; Path=/'] : [], get: (name) => auth && name === 'authorization' ? 'Bearer private-token' : null },
-      json: async () => new URL(url).pathname === '/v1/me' ? { identityId: '1', username: 'user' } : {},
+      headers: { getSetCookie: () => auth ? ['session=private-cookie; HttpOnly; Path=/'] : [], get: () => null },
+      json: async () => auth ? { user: { id: '1' }, token: 'auth-token' } : path === '/v1/me/branch' ? { token: 'branch-token' } : { identityId: '1', username: 'user' },
     }
   }
   const client = new StenciClient({ config, fetchImpl, logger: { info() {} } })
@@ -154,19 +156,21 @@ test('cookies and auth tokens returned by auth remain server-side and are reused
   assert.equal(calls[0].headers.Cookie, undefined)
   for (const call of calls.slice(1)) {
     assert.equal(call.headers.Cookie, 'session=private-cookie')
-    assert.equal(call.headers.Authorization, 'Bearer private-token')
+    assert.notEqual(call.headers.Authorization, 'Bearer auth-token')
   }
+  assert.equal(calls[1].headers.Authorization, 'JWT auth-token')
+  assert.equal(calls[2].headers.Authorization, 'JWT branch-token')
   const session = client.getSession()
   assert.equal(session.cookie, 'session=private-cookie')
-  assert.equal(session.authorization, 'Bearer private-token')
+  assert.equal(session.token, 'branch-token')
 })
 
-test('development auth diagnostics contain sanitized request metadata and never credentials or sensitive headers', async () => {
+test('development auth diagnostics contain status and token presence but never credentials', async () => {
   const entries = []
   const logger = Object.fromEntries(['info', 'warn', 'error'].map((level) => [level, (...values) => entries.push(values)]))
   const previousNodeEnv = process.env.NODE_ENV
   process.env.NODE_ENV = 'development'
-  const client = new StenciClient({ config, session: new StenciSession({ deviceId: 'stored-device', branchId: 'realmed-branch', cookie: 'private-cookie', authorization: 'Bearer private-token' }), logger, fetchImpl: async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ message: 'invalid', password: 'leaked-password' }) }) })
+  const client = new StenciClient({ config, session: new StenciSession({ deviceId: 'stored-device', branchId: 'realmed-branch', cookie: 'private-cookie', token: 'private-token' }), logger, fetchImpl: async () => ({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({ message: 'invalid', password: 'leaked-password' }) }) })
   try {
     await assert.rejects(client.authenticateSession('05286020984', 'private-password', '0123456789abcdef0123456789abcdef'), { code: 'STENCI_INVALID_CREDENTIALS' })
   } finally {
@@ -175,12 +179,13 @@ test('development auth diagnostics contain sanitized request metadata and never 
   }
   const output = JSON.stringify(entries)
   assert.match(output, /STENCI AUTH/)
-  assert.match(output, /\[STENCI AUTH\] request:/)
   assert.match(output, /status: 401/)
-  assert.match(output, /"usernameLength":11/)
-  assert.match(output, /"usernameStartsWithZero":true/)
-  assert.match(output, /"passwordPresent":true/)
-  assert.match(output, /"deviceIdLength":32/)
-  assert.match(output, /"accept":"application\/json, text\/plain, \*\/\*"/)
   assert.doesNotMatch(output, /05286020984|private-password|leaked-password|private-cookie|private-token|authorization|cookie/i)
+})
+
+test('branch is not called when auth does not return a token', async () => {
+  let calls = 0
+  const client = new StenciClient({ config, fetchImpl: async () => { calls += 1; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ user: {} }) } }, logger: { info() {} } })
+  await assert.rejects(client.authenticateSession('user', 'password', 'same-device'), { code: 'STENCI_AUTH_TOKEN_MISSING', stage: 'branch', status: 401 })
+  assert.equal(calls, 1)
 })
