@@ -80,7 +80,7 @@
           ><label class="field span-2"
             >Número da carteirinha<input v-model="cardNumber" class="input" /></label
           ><label class="field span-2"
-            >Validade da carteirinha<input v-model="cardExpiration" type="date" class="input"
+            >Validade da carteirinha<MaskedDateInput v-model="cardExpiration"
           /></label>
           <p v-if="catalogErrors.insurances" class="error-text">{{ catalogErrors.insurances }}</p>
           <p v-if="catalogErrors.plans" class="error-text">{{ catalogErrors.plans }}</p>
@@ -117,20 +117,15 @@
           </p>
 
           <label class="field span-4"
-            >Data da avaliação<input
-              v-model="form.assessment_date"
-              type="date"
-              class="input" /></label
+            >Data da avaliação<MaskedDateInput v-model="form.assessment_date" /></label
           ><label class="field span-4"
-            >Data prevista de início<input
-              v-model="form.expected_start_date"
-              type="date"
-              class="input" /></label
+            >Data prevista de início<MaskedDateInput v-model="form.expected_start_date" /></label
           ><label class="field span-4"
             >Quantidade de sessões<input
               v-model.number="form.requested_sessions"
               type="number"
               min="1"
+              step="1"
               class="input" /></label
           ><label class="field span-12"
             >Observações<textarea v-model="form.notes" class="input min-h-20"></textarea>
@@ -263,6 +258,7 @@ import { useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import MaskedDateInput from '@/components/MaskedDateInput.vue'
 const router = useRouter(),
   patients = ref<any[]>([]),
   patientOption = ref<any>(null),
@@ -458,6 +454,7 @@ async function upload(processId: number, type: string, file: File) {
 async function save() {
   if (!selectedPatient.value) return window.alert('Selecione um paciente.')
   saving.value = true
+  let treatmentId: number | null = null
   try {
     const proceduresPayload = Object.values(procedureSelection).filter((p: any) => p.procedure_id)
     const stenci = {
@@ -485,12 +482,39 @@ async function save() {
         stenci,
       })
     ).data
+    treatmentId = treatment.id
+  } catch (error: any) {
+    window.alert(error.response?.data?.error || 'Não foi possível salvar o tratamento.')
+    saving.value = false
+    return
+  }
+
+  const failedUploads: string[] = []
+  try {
     for (const card of documentCards) {
       const file = files[card.type]
-      if (file) await upload(treatment.id, card.type, file)
+      if (file) {
+        try {
+          await upload(treatmentId!, card.type, file)
+        } catch {
+          failedUploads.push(file.name)
+        }
+      }
     }
-    for (const file of otherFiles.value) await upload(treatment.id, 'OTHER', file)
-    await router.push(`/central-de-guias/tratamentos/${treatment.id}`)
+    for (const file of otherFiles.value) {
+      try {
+        await upload(treatmentId!, 'OTHER', file)
+      } catch {
+        failedUploads.push(file.name)
+      }
+    }
+    await router.push({
+      path: `/central-de-guias/tratamentos/${treatmentId}`,
+      query: {
+        saved: '1',
+        ...(failedUploads.length ? { uploadFailures: String(failedUploads.length) } : {}),
+      },
+    })
   } finally {
     saving.value = false
   }
@@ -545,9 +569,12 @@ onMounted(async () => {
   font-size: 0.8rem;
   font-weight: 600;
   color: #475467;
+  min-width: 0;
 }
-.field .input {
+.field .input,
+.field > * {
   width: 100%;
+  min-width: 0;
   font-weight: 400;
   color: #344054;
 }
@@ -559,7 +586,7 @@ onMounted(async () => {
 }
 .treatment-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 .span-2 {
@@ -589,23 +616,42 @@ onMounted(async () => {
   font-size: 0.875rem;
   font-weight: 600;
 }
-@media (max-width: 1023px) {
+@media (min-width: 640px) {
+  .treatment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .span-2,
   .span-4,
   .span-6 {
+    grid-column: span 1;
+  }
+  .span-12 {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 1200px) {
+  .treatment-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .span-2 {
+    grid-column: span 2;
+  }
+  .span-4 {
+    grid-column: span 4;
+  }
+  .span-6 {
     grid-column: span 6;
   }
+  .span-12 {
+    grid-column: span 12;
+  }
+}
+@media (max-width: 1023px) {
   .schedule-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 639px) {
-  .span-2,
-  .span-4,
-  .span-6,
-  .span-12 {
-    grid-column: 1 / -1;
-  }
   .schedule-grid {
     grid-template-columns: minmax(0, 1fr);
   }

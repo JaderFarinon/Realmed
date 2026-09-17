@@ -7,6 +7,7 @@ export interface AuthUser {
   role: string
   name?: string | null
   email?: string | null
+  permissionsEnabled?: boolean
   permissions?: Array<{
     moduleKey: string
     canView: boolean
@@ -45,10 +46,21 @@ export function useAuthUser() {
   const clearUser = () => {
     user.value = null
   }
+  const canOperational = (
+    moduleKey: string,
+    permission: 'canView' | 'canCreate' | 'canEdit' | 'canDelete' = 'canEdit',
+  ) => {
+    if (!user.value) return false
+    if (user.value.permissionsEnabled === false || user.value.role === 'masteradmin') return true
+    return Boolean(
+      user.value.permissions?.find((item) => item.moduleKey === moduleKey)?.[permission],
+    )
+  }
   return {
     authUser: computed(() => user.value),
     role: computed(() => user.value?.role ?? null),
     loadUser,
     clearUser,
+    canOperational,
   }
 }

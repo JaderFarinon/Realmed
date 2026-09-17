@@ -1,9 +1,9 @@
 <template>
-  <div ref="root" class="relative">
-    <div class="relative">
+  <div ref="root" class="relative w-full min-w-0">
+    <div class="relative w-full min-w-0">
       <input
         :value="query"
-        class="input pr-9"
+        class="input w-full min-w-0 pr-9"
         :placeholder="placeholder"
         :disabled="disabled"
         role="combobox"
@@ -16,7 +16,7 @@
       <button
         v-if="modelValue"
         type="button"
-        class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
         aria-label="Limpar seleção"
         @click="clear"
       >
@@ -25,7 +25,7 @@
     </div>
     <div
       v-if="open"
-      class="absolute z-999 mt-1 max-h-80 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-theme-lg"
+      class="absolute left-0 top-[calc(100%+4px)] z-[1000] max-h-[260px] w-full min-w-full max-w-full overflow-x-hidden overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-theme-lg"
       role="listbox"
     >
       <p v-if="loading" class="p-3 text-sm text-gray-500">{{ loadingText }}</p>
