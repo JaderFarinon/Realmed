@@ -92,6 +92,28 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
   assert.equal(new Set(receivedDeviceIds).size, 2)
 })
 
+test('current user exposes the backend permission mode to operational clients', async () => {
+  const db = { query: async (sql) => [sql.includes('FROM users')
+    ? [{ id: 7, username: 'operador', role: 'user', status: 'active', person_id: 3, full_name: 'Operador' }]
+    : []] }
+  const router = createAuthRouter({ db, jwtSecret: process.env.JWT_SECRET })
+  const token = jwt.sign({ id: 7, role: 'user' }, process.env.JWT_SECRET)
+  const previous = process.env.PERMISSIONS_ENABLED
+  try {
+    for (const [configured, expected] of [['false', false], ['true', true]]) {
+      process.env.PERMISSIONS_ENABLED = configured
+      await withServer(router, async (base) => {
+        const response = await fetch(`${base}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+        assert.equal(response.status, 200)
+        assert.equal((await response.json()).user.permissionsEnabled, expected)
+      })
+    }
+  } finally {
+    if (previous === undefined) delete process.env.PERMISSIONS_ENABLED
+    else process.env.PERMISSIONS_ENABLED = previous
+  }
+})
+
 test('invalid credentials and unavailable Stenci return controlled messages', async () => {
   for (const scenario of [
     { error: Object.assign(new Error('remote body'), { code: 'STENCI_INVALID_CREDENTIALS', stage: 'auth', upstreamStatus: 401 }), status: 401, message: 'Usuário ou senha inválidos.' },

@@ -92,6 +92,7 @@ function createAuthRouter({
       )
       return res.json({ user: {
         ...publicUser(rows[0]),
+        permissionsEnabled: process.env.PERMISSIONS_ENABLED === 'true',
         permissions: permissionRows.map((permission) => ({
           moduleKey: permission.module_key, canView: Boolean(permission.can_view),
           canCreate: Boolean(permission.can_create), canEdit: Boolean(permission.can_edit),

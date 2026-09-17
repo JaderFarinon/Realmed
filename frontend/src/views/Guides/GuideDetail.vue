@@ -4,6 +4,30 @@
     subtitle="Documentos para liberação e acompanhamento pelo faturamento"
   >
     <div v-if="process" class="space-y-5">
+      <div
+        v-if="saveNotice"
+        class="rounded-xl border border-success-200 bg-success-50 p-4 text-sm text-success-800"
+        role="status"
+      >
+        <b>{{
+          uploadFailures
+            ? 'Tratamento salvo, mas alguns documentos não puderam ser enviados.'
+            : '✓ Tratamento salvo com pendências.'
+        }}</b>
+        <p v-if="savePendingItems.length" class="mt-2">
+          Pendências: {{ savePendingItems.join('; ') }}.
+        </p>
+      </div>
+      <p
+        v-if="documentActionMessage"
+        class="rounded-xl p-3 text-sm font-semibold"
+        :class="
+          documentActionError ? 'bg-error-50 text-error-700' : 'bg-success-50 text-success-700'
+        "
+        role="status"
+      >
+        {{ documentActionMessage }}
+      </p>
       <header class="panel border-l-4 border-l-brand-600">
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -48,31 +72,157 @@
 
       <section class="panel">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 class="section-title mb-1">Avaliação fisioterapêutica digital</h2><p class="text-sm text-gray-600">Dados clínicos: <b>{{ evaluationStatus }}</b></p></div>
-          <button v-if="canEdit" class="btn-secondary" @click="evaluationOpen = !evaluationOpen">{{ evaluationOpen ? 'Fechar' : evaluation ? 'Continuar avaliação' : 'Avaliar paciente' }}</button>
+          <div>
+            <h2 class="section-title mb-1">Avaliação fisioterapêutica digital</h2>
+            <p class="text-sm text-gray-600">
+              Dados clínicos: <b>{{ evaluationStatus }}</b>
+            </p>
+          </div>
+          <button v-if="canEdit" class="btn-secondary" @click="evaluationOpen = !evaluationOpen">
+            {{
+              evaluationOpen ? 'Fechar' : evaluation ? 'Continuar avaliação' : 'Avaliar paciente'
+            }}
+          </button>
         </div>
         <form v-if="evaluationOpen" class="evaluation-grid mt-5 border-t pt-5" @submit.prevent>
-          <label class="field full">Queixa principal<textarea v-model="evaluationForm.chief_complaint" class="input min-h-20" /></label>
-          <label class="field full">História do quadro atual<textarea v-model="evaluationForm.current_history" class="input" /></label>
-          <label class="field half">Limitações funcionais<textarea v-model="evaluationForm.functional_limitations" class="input" /></label>
-          <label class="field half">Exame físico / achados<textarea v-model="evaluationForm.physical_exam" class="input" /></label>
-          <label class="field">Dor EVA (0–10)<input v-model.number="evaluationForm.pain_score" type="number" min="0" max="10" class="input" /></label>
-          <label class="field">Classificação da dor<input v-model="evaluationForm.pain_classification" class="input" /></label>
-          <label class="field half">Localização predominante<input v-model="evaluationForm.pain_location" class="input" /></label>
-          <label class="field">Gravidade<select v-model="evaluationForm.severity" class="input"><option value="">Selecione</option><option value="MILD">Leve</option><option value="MODERATE">Moderada</option><option value="SEVERE">Grave</option></select></label>
-          <label class="field">Risco assistencial<select v-model="evaluationForm.care_risk" class="input"><option value="">Selecione</option><option value="LOW">Baixo</option><option value="MODERATE">Moderado</option><option value="HIGH">Alto</option></select></label>
-          <label class="field half">Justificativa da gravidade<input v-model="evaluationForm.severity_justification" class="input" /></label>
-          <fieldset class="choice-box full"><legend>Regiões e lateralidade</legend><div class="choice-grid"><label v-for="region in regions" :key="region"><input type="checkbox" :checked="hasRegion(region)" @change="toggleRegion(region)" /> {{ region }}</label></div></fieldset>
-          <fieldset class="choice-box full"><legend>Riscos / precauções</legend><div class="choice-grid"><label v-for="item in precautions" :key="item"><input v-model="evaluationForm.precautions" type="checkbox" :value="item" /> {{ item }}</label></div></fieldset>
-          <label class="field full">Observações / cuidados específicos<textarea v-model="evaluationForm.specific_care_notes" class="input" /></label>
-          <label class="field full">Objetivos terapêuticos<textarea v-model="evaluationForm.therapeutic_goals" class="input" /></label>
-          <fieldset class="choice-box full"><legend>Condutas</legend><div class="choice-grid"><label v-for="item in conducts" :key="item"><input v-model="evaluationForm.conducts" type="checkbox" :value="item" /> {{ item }}</label></div></fieldset>
-          <label class="field full">Descrição / parâmetros / progressão<textarea v-model="evaluationForm.conduct_description" class="input" /></label>
-          <label class="field">Previsão de reavaliação<input v-model="evaluationForm.reevaluation_date" type="date" class="input" /></label>
-          <label class="field half">Critério / observação<input v-model="evaluationForm.reevaluation_notes" class="input" /></label>
-          <label class="field">Acompanhamento individualizado<select v-model="evaluationForm.individual_monitoring" class="input"><option :value="null">Selecione</option><option :value="true">Sim</option><option :value="false">Não</option></select></label>
-          <div class="full flex flex-wrap gap-2"><button class="btn-secondary" :disabled="savingEvaluation" @click="saveEvaluation">Salvar rascunho</button><button class="btn" :disabled="savingEvaluation" @click="completeEvaluation">Concluir avaliação</button></div>
-          <p v-if="evaluationMessage" class="full text-sm font-semibold" :class="evaluationError ? 'text-error-700' : 'text-success-700'">{{ evaluationMessage }}</p>
+          <label class="field full"
+            >Queixa principal<textarea
+              v-model="evaluationForm.chief_complaint"
+              class="input min-h-20"
+            />
+          </label>
+          <label class="field full"
+            >História do quadro atual<textarea
+              v-model="evaluationForm.current_history"
+              class="input"
+            />
+          </label>
+          <label class="field half"
+            >Limitações funcionais<textarea
+              v-model="evaluationForm.functional_limitations"
+              class="input"
+            />
+          </label>
+          <label class="field half"
+            >Exame físico / achados<textarea v-model="evaluationForm.physical_exam" class="input" />
+          </label>
+          <label class="field"
+            >Dor EVA (0–10)<input
+              v-model.number="evaluationForm.pain_score"
+              type="number"
+              min="0"
+              max="10"
+              class="input"
+          /></label>
+          <label class="field"
+            >Classificação da dor<input v-model="evaluationForm.pain_classification" class="input"
+          /></label>
+          <label class="field half"
+            >Localização predominante<input v-model="evaluationForm.pain_location" class="input"
+          /></label>
+          <label class="field"
+            >Gravidade<select v-model="evaluationForm.severity" class="input">
+              <option value="">Selecione</option>
+              <option value="MILD">Leve</option>
+              <option value="MODERATE">Moderada</option>
+              <option value="SEVERE">Grave</option>
+            </select></label
+          >
+          <label class="field"
+            >Risco assistencial<select v-model="evaluationForm.care_risk" class="input">
+              <option value="">Selecione</option>
+              <option value="LOW">Baixo</option>
+              <option value="MODERATE">Moderado</option>
+              <option value="HIGH">Alto</option>
+            </select></label
+          >
+          <label class="field half"
+            >Justificativa da gravidade<input
+              v-model="evaluationForm.severity_justification"
+              class="input"
+          /></label>
+          <fieldset class="choice-box full">
+            <legend>Regiões e lateralidade</legend>
+            <div class="choice-grid">
+              <label v-for="region in regions" :key="region"
+                ><input
+                  type="checkbox"
+                  :checked="hasRegion(region)"
+                  @change="toggleRegion(region)"
+                />
+                {{ region }}</label
+              >
+            </div>
+          </fieldset>
+          <fieldset class="choice-box full">
+            <legend>Riscos / precauções</legend>
+            <div class="choice-grid">
+              <label v-for="item in precautions" :key="item"
+                ><input v-model="evaluationForm.precautions" type="checkbox" :value="item" />
+                {{ item }}</label
+              >
+            </div>
+          </fieldset>
+          <label class="field full"
+            >Observações / cuidados específicos<textarea
+              v-model="evaluationForm.specific_care_notes"
+              class="input"
+            />
+          </label>
+          <label class="field full"
+            >Objetivos terapêuticos<textarea
+              v-model="evaluationForm.therapeutic_goals"
+              class="input"
+            />
+          </label>
+          <fieldset class="choice-box full">
+            <legend>Condutas</legend>
+            <div class="choice-grid">
+              <label v-for="item in conducts" :key="item"
+                ><input v-model="evaluationForm.conducts" type="checkbox" :value="item" />
+                {{ item }}</label
+              >
+            </div>
+          </fieldset>
+          <label class="field full"
+            >Descrição / parâmetros / progressão<textarea
+              v-model="evaluationForm.conduct_description"
+              class="input"
+            />
+          </label>
+          <label class="field"
+            >Previsão de reavaliação<input
+              v-model="evaluationForm.reevaluation_date"
+              type="date"
+              class="input"
+          /></label>
+          <label class="field half"
+            >Critério / observação<input v-model="evaluationForm.reevaluation_notes" class="input"
+          /></label>
+          <label class="field"
+            >Acompanhamento individualizado<select
+              v-model="evaluationForm.individual_monitoring"
+              class="input"
+            >
+              <option :value="null">Selecione</option>
+              <option :value="true">Sim</option>
+              <option :value="false">Não</option>
+            </select></label
+          >
+          <div class="full flex flex-wrap gap-2">
+            <button class="btn-secondary" :disabled="savingEvaluation" @click="saveEvaluation">
+              Salvar rascunho</button
+            ><button class="btn" :disabled="savingEvaluation" @click="completeEvaluation">
+              Concluir avaliação
+            </button>
+          </div>
+          <p
+            v-if="evaluationMessage"
+            class="full text-sm font-semibold"
+            :class="evaluationError ? 'text-error-700' : 'text-success-700'"
+          >
+            {{ evaluationMessage }}
+          </p>
         </form>
       </section>
 
@@ -147,7 +297,13 @@
               </div>
             </div>
             <div v-if="generatable.includes(type)" class="mt-3">
-              <select v-model="selectedTemplates[type]" class="input w-full text-sm">
+              <p v-if="!templatesFor(type).length" class="text-sm font-medium text-warning-700">
+                Modelo não configurado.
+              </p>
+              <p v-else-if="templatesFor(type).length === 1" class="text-xs text-gray-500">
+                Modelo: {{ templatesFor(type)[0].name }} v{{ templatesFor(type)[0].version }}
+              </p>
+              <select v-else v-model="selectedTemplates[type]" class="input w-full text-sm">
                 <option value="">Selecionar modelo</option>
                 <option
                   v-for="template in templatesFor(type)"
@@ -158,8 +314,20 @@
                 </option>
               </select>
               <div class="mt-2 flex gap-3">
-                <button class="link" @click="preview(type)">Pré-visualizar</button
-                ><button v-if="canEdit" class="link" @click="generate(type)">Gerar</button>
+                <button
+                  class="link disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!selectedTemplates[type]"
+                  @click="preview(type)"
+                >
+                  Pré-visualizar</button
+                ><button
+                  v-if="canEdit"
+                  class="link disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!selectedTemplates[type]"
+                  @click="generate(type)"
+                >
+                  {{ generatedDocs(type).length ? 'Gerar nova versão' : 'Gerar documento' }}
+                </button>
               </div>
             </div>
             <label v-if="canEdit" class="btn-secondary mt-3 inline-block"
@@ -247,7 +415,11 @@
             v-if="process.authorization_status === 'READY' && canAuthorize"
             class="btn px-6 py-3"
             :disabled="forwardingMissing.length > 0"
-            :title="forwardingMissing.length ? 'Complete os dados obrigatórios e a documentação antes de encaminhar ao convênio.' : ''"
+            :title="
+              forwardingMissing.length
+                ? 'Complete os dados obrigatórios e a documentação antes de encaminhar ao convênio.'
+                : ''
+            "
             @click="startAuthorization"
           >
             Encaminhar ao Convênio</button
@@ -262,7 +434,12 @@
         <p v-if="process.authorization_status === 'READY'" class="mt-4 text-sm text-gray-600">
           Confira os documentos acima e inicie explicitamente o trabalho de liberação.
         </p>
-        <div v-if="forwardingMissing.length" class="mt-3 rounded-xl bg-warning-50 p-3 text-sm text-warning-800"><b>Complete antes de encaminhar:</b> {{ forwardingMissing.join(', ') }}.</div>
+        <div
+          v-if="forwardingMissing.length"
+          class="mt-3 rounded-xl bg-warning-50 p-3 text-sm text-warning-800"
+        >
+          <b>Complete antes de encaminhar:</b> {{ forwardingMissing.join(', ') }}.
+        </div>
         <form
           v-if="process.authorization_status === 'IN_PROGRESS'"
           class="mt-5 grid gap-3 border-t pt-5 md:grid-cols-2 xl:grid-cols-3"
@@ -427,7 +604,7 @@ const Info = defineComponent({
   },
 })
 const route = useRoute(),
-  { authUser } = useAuthUser(),
+  { canOperational } = useAuthUser(),
   process = ref<any>(),
   templates = ref<any[]>([]),
   selectedTemplates = reactive<Record<string, number | string>>({}),
@@ -438,7 +615,14 @@ const route = useRoute(),
   savingEvaluation = ref(false),
   evaluationMessage = ref(''),
   evaluationError = ref(false),
-  evaluationForm = reactive<any>({ precautions: [], conducts: [], regions: [], individual_monitoring: null }),
+  documentActionMessage = ref(''),
+  documentActionError = ref(false),
+  evaluationForm = reactive<any>({
+    precautions: [],
+    conducts: [],
+    regions: [],
+    individual_monitoring: null,
+  }),
   pending = reactive({ description: '', notes: '' }),
   authorization = reactive<any>({
     authorization_number: '',
@@ -452,21 +636,69 @@ const requiredTypes = ['CONSULTATION_GUIDE', 'PHYSIOTHERAPY_GUIDE', 'PHYSIO_ASSE
     Object.keys(documentTypeLabels) as Array<keyof typeof documentTypeLabels>
   ).filter((type) => type !== 'PHYSIOTHERAPY_EVALUATION'),
   generatable = ['CONSULTATION_GUIDE', 'PHYSIOTHERAPY_GUIDE', 'ELECTROSTIMULATION']
-const regions = ['Cervical/cabeça','Ombro','Braço','Cotovelo','Antebraço','Punho/mão','Torácica','Lombar','Quadril','Coxa','Joelho','Perna','Tornozelo/pé','Outro']
-const precautions = ['Risco de queda','Alteração de sensibilidade','Pós-operatório','Doença cardiovascular','Déficit neurológico','Lesão de pele','Marcapasso / implante eletrônico','Gestação','Trombose / risco vascular','Dor intensa','Outro']
-const conducts = ['Cinesioterapia','Alongamento','Fortalecimento','Treino funcional','Terapia manual','Eletroterapia','Termoterapia','Crioterapia','Propriocepção/equilíbrio','Treino de marcha','Orientações domiciliares','Outra']
-const evaluationStatus = computed(() => evaluation.value?.status === 'COMPLETED' ? 'Concluídos' : evaluation.value ? 'Em preenchimento' : 'Não iniciados')
-const canEdit = computed(() => can('guide_processes', 'canEdit')),
-  canAuthorize = computed(() => can('authorizations', 'canEdit'))
+const regions = [
+  'Cervical/cabeça',
+  'Ombro',
+  'Braço',
+  'Cotovelo',
+  'Antebraço',
+  'Punho/mão',
+  'Torácica',
+  'Lombar',
+  'Quadril',
+  'Coxa',
+  'Joelho',
+  'Perna',
+  'Tornozelo/pé',
+  'Outro',
+]
+const precautions = [
+  'Risco de queda',
+  'Alteração de sensibilidade',
+  'Pós-operatório',
+  'Doença cardiovascular',
+  'Déficit neurológico',
+  'Lesão de pele',
+  'Marcapasso / implante eletrônico',
+  'Gestação',
+  'Trombose / risco vascular',
+  'Dor intensa',
+  'Outro',
+]
+const conducts = [
+  'Cinesioterapia',
+  'Alongamento',
+  'Fortalecimento',
+  'Treino funcional',
+  'Terapia manual',
+  'Eletroterapia',
+  'Termoterapia',
+  'Crioterapia',
+  'Propriocepção/equilíbrio',
+  'Treino de marcha',
+  'Orientações domiciliares',
+  'Outra',
+]
+const evaluationStatus = computed(() =>
+  evaluation.value?.status === 'COMPLETED'
+    ? 'Concluídos'
+    : evaluation.value
+      ? 'Em preenchimento'
+      : 'Não iniciados',
+)
+const canEdit = computed(() => canOperational('guide_processes', 'canEdit')),
+  canAuthorize = computed(() => canOperational('authorizations', 'canEdit'))
+const saveNotice = computed(() => route.query.saved === '1')
+const uploadFailures = computed(() => Number(route.query.uploadFailures || 0))
 const forwardingMissing = computed(() => {
   if (!process.value) return []
-  const missing:string[]=[]
-  if(!process.value.patient_insurance_id) missing.push('convênio e plano')
-  if(!process.value.requesting_doctor_id) missing.push('médico solicitante')
-  if(!process.value.physiotherapist_id) missing.push('fisioterapeuta')
-  if(!process.value.requested_sessions) missing.push('sessões')
-  if(process.value.document_status !== 'COMPLETE') missing.push('documentação obrigatória')
-  if(evaluation.value?.status !== 'COMPLETED') missing.push('avaliação concluída')
+  const missing: string[] = []
+  if (!process.value.patient_insurance_id) missing.push('convênio e plano')
+  if (!process.value.requesting_doctor_id) missing.push('médico solicitante')
+  if (!process.value.physiotherapist_id) missing.push('fisioterapeuta')
+  if (!process.value.requested_sessions) missing.push('sessões')
+  if (process.value.document_status !== 'COMPLETE') missing.push('documentação obrigatória')
+  if (evaluation.value?.status !== 'COMPLETED') missing.push('avaliação concluída')
   return missing
 })
 const usableDocs = (type: string) =>
@@ -486,15 +718,19 @@ const requiredPresent = computed(
       .filter((type) => !usableDocs(type).length)
       .map((type) => documentTypeLabels[type as keyof typeof documentTypeLabels]),
   )
-function can(moduleKey: string, permission: 'canEdit') {
-  if (authUser.value?.role === 'masteradmin') return true
-  const entry = authUser.value?.permissions?.find((item) => item.moduleKey === moduleKey)
-  return Boolean(entry?.[permission])
-}
+const savePendingItems = computed(() => {
+  const items: string[] = [...missingLabels.value]
+  if (!process.value?.physiotherapist_id) items.push('fisioterapeuta não informado')
+  if (!process.value?.requesting_doctor_id) items.push('médico solicitante não informado')
+  if (!process.value?.patient_insurance_id) items.push('convênio e plano não informados')
+  if (!process.value?.requested_sessions) items.push('quantidade de sessões não informada')
+  return items
+})
 const date = (value: string) =>
     value ? new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—',
   docs = (type: string) =>
     process.value?.documents.filter((d: any) => d.document_type === type) || [],
+  generatedDocs = (type: string) => docs(type).filter((d: any) => d.document_role === 'GENERATED'),
   priorityLabel = (value: number) =>
     Number(value) >= 2 ? 'Urgente' : Number(value) === 1 ? 'Alta' : 'Normal'
 const dateTime = (value: string) => (value ? new Date(value).toLocaleString('pt-BR') : '—')
@@ -507,7 +743,19 @@ function translatedValue(value: string) {
 async function load() {
   process.value = (await api.get(`/guide-processes/${route.params.id}`)).data
   evaluation.value = (await api.get(`/guide-processes/${route.params.id}/evaluation`)).data
-  Object.assign(evaluationForm, { precautions: [], conducts: [], regions: [], individual_monitoring: null, physiotherapist_id: process.value.physiotherapist_id, evaluation_date: process.value.assessment_date?.slice(0, 10) || new Date().toISOString().slice(0, 10) }, evaluation.value || {})
+  Object.assign(
+    evaluationForm,
+    {
+      precautions: [],
+      conducts: [],
+      regions: [],
+      individual_monitoring: null,
+      physiotherapist_id: process.value.physiotherapist_id,
+      evaluation_date:
+        process.value.assessment_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+    },
+    evaluation.value || {},
+  )
   templates.value = (await api.get('/document-templates', { params: { active: true } })).data
   const latest = process.value.authorizations[0]
   if (latest) Object.assign(authorization, latest)
@@ -516,20 +764,49 @@ async function load() {
     if (matches.length === 1) selectedTemplates[type] = matches[0].id
   }
 }
-function hasRegion(region: string) { return evaluationForm.regions.some((item: any) => item.region === region) }
-function toggleRegion(region: string) { const index=evaluationForm.regions.findIndex((item:any)=>item.region===region); if(index>=0)evaluationForm.regions.splice(index,1);else evaluationForm.regions.push({region,laterality:'BILATERAL'}) }
+function hasRegion(region: string) {
+  return evaluationForm.regions.some((item: any) => item.region === region)
+}
+function toggleRegion(region: string) {
+  const index = evaluationForm.regions.findIndex((item: any) => item.region === region)
+  if (index >= 0) evaluationForm.regions.splice(index, 1)
+  else evaluationForm.regions.push({ region, laterality: 'BILATERAL' })
+}
 async function saveEvaluation() {
-  savingEvaluation.value=true; evaluationMessage.value=''; evaluationError.value=false
-  try { const response=await api[evaluation.value?'put':'post'](`/guide-processes/${route.params.id}/evaluation`, evaluationForm); evaluation.value=response.data; evaluationMessage.value='Rascunho salvo com sucesso.' }
-  catch(error:any){evaluationError.value=true;evaluationMessage.value=error.response?.data?.error||'Não foi possível salvar a avaliação.'}
-  finally{savingEvaluation.value=false}
+  savingEvaluation.value = true
+  evaluationMessage.value = ''
+  evaluationError.value = false
+  try {
+    const response = await api[evaluation.value ? 'put' : 'post'](
+      `/guide-processes/${route.params.id}/evaluation`,
+      evaluationForm,
+    )
+    evaluation.value = response.data
+    evaluationMessage.value = 'Rascunho salvo com sucesso.'
+  } catch (error: any) {
+    evaluationError.value = true
+    evaluationMessage.value = error.response?.data?.error || 'Não foi possível salvar a avaliação.'
+  } finally {
+    savingEvaluation.value = false
+  }
 }
 async function completeEvaluation() {
-  await saveEvaluation(); if(evaluationError.value)return
-  savingEvaluation.value=true
-  try { evaluation.value=(await api.post(`/guide-processes/${route.params.id}/evaluation/complete`)).data; evaluationMessage.value='Avaliação concluída.'; await load() }
-  catch(error:any){evaluationError.value=true;evaluationMessage.value=error.response?.data?.error||'Não foi possível concluir a avaliação.'}
-  finally{savingEvaluation.value=false}
+  await saveEvaluation()
+  if (evaluationError.value) return
+  savingEvaluation.value = true
+  try {
+    evaluation.value = (
+      await api.post(`/guide-processes/${route.params.id}/evaluation/complete`)
+    ).data
+    evaluationMessage.value = 'Avaliação concluída.'
+    await load()
+  } catch (error: any) {
+    evaluationError.value = true
+    evaluationMessage.value =
+      error.response?.data?.error || 'Não foi possível concluir a avaliação.'
+  } finally {
+    savingEvaluation.value = false
+  }
 }
 function templatesFor(type: string) {
   return templates.value.filter(
@@ -578,20 +855,56 @@ async function removeDocument(id: number) {
   }
 }
 async function preview(type: string) {
-  if (!selectedTemplates[type]) return
-  const response = await api.post(
-    `/guide-processes/${route.params.id}/documents/preview`,
-    { template_id: selectedTemplates[type] },
-    { responseType: 'blob' },
-  )
-  window.open(URL.createObjectURL(response.data), '_blank')
+  if (!selectedTemplates[type]) return showDocumentError('Selecione um modelo para pré-visualizar.')
+  clearDocumentMessage()
+  try {
+    const response = await api.post(
+      `/guide-processes/${route.params.id}/documents/preview`,
+      { template_id: selectedTemplates[type] },
+      { responseType: 'blob' },
+    )
+    window.open(URL.createObjectURL(response.data), '_blank')
+  } catch (error: any) {
+    await showGenerationError(error)
+  }
 }
 async function generate(type: string) {
-  if (!selectedTemplates[type]) return
-  await api.post(`/guide-processes/${route.params.id}/documents/generate`, {
-    template_id: selectedTemplates[type],
-  })
-  await load()
+  if (!selectedTemplates[type])
+    return showDocumentError('Selecione um modelo para gerar o documento.')
+  clearDocumentMessage()
+  try {
+    await api.post(`/guide-processes/${route.params.id}/documents/generate`, {
+      template_id: selectedTemplates[type],
+    })
+    documentActionMessage.value = 'Documento gerado com sucesso.'
+    await load()
+  } catch (error: any) {
+    await showGenerationError(error)
+  }
+}
+function clearDocumentMessage() {
+  documentActionMessage.value = ''
+  documentActionError.value = false
+}
+function showDocumentError(message: string) {
+  documentActionError.value = true
+  documentActionMessage.value = message
+}
+async function showGenerationError(error: any) {
+  let payload = error.response?.data
+  if (payload instanceof Blob) {
+    try {
+      payload = JSON.parse(await payload.text())
+    } catch {
+      payload = null
+    }
+  }
+  const missing = Array.isArray(payload?.missing) ? payload.missing : []
+  showDocumentError(
+    missing.length
+      ? `Não foi possível gerar a guia. Faltam: ${missing.join(', ')}.`
+      : payload?.error || 'Não foi possível gerar o documento.',
+  )
 }
 async function previewEvaluation() {
   const response = await api.post(
@@ -640,11 +953,43 @@ onMounted(load)
   font-weight: 400;
   color: #344054;
 }
-.evaluation-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; }
-.evaluation-grid .half { grid-column:span 2; }
-.evaluation-grid .full { grid-column:1 / -1; }
-.choice-box { border:1px solid #e5e7eb; border-radius:.75rem; padding:1rem; }
-.choice-box legend { padding:0 .35rem; font-weight:600; color:#475467; }
-.choice-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.6rem; font-size:.875rem; }
-@media(max-width:768px){.evaluation-grid{grid-template-columns:1fr}.evaluation-grid .half,.evaluation-grid .full{grid-column:1}.choice-grid{grid-template-columns:1fr}}
+.evaluation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+.evaluation-grid .half {
+  grid-column: span 2;
+}
+.evaluation-grid .full {
+  grid-column: 1 / -1;
+}
+.choice-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.choice-box legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+  color: #475467;
+}
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  font-size: 0.875rem;
+}
+@media (max-width: 768px) {
+  .evaluation-grid {
+    grid-template-columns: 1fr;
+  }
+  .evaluation-grid .half,
+  .evaluation-grid .full {
+    grid-column: 1;
+  }
+  .choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
