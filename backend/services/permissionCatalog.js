@@ -1,0 +1,22 @@
+const permissionCatalog = [
+  ["guide_processes", "Central de Guias — Tratamentos"],
+  ["patients", "Pacientes"],
+  ["insurance_providers", "Convênios"],
+  ["professionals", "Profissionais"],
+  ["procedures", "Procedimentos"],
+  ["document_templates", "Modelos de documentos"],
+  ["authorizations", "Autorizações"],
+  ["integrations", "Integração Stenci"],
+  ["inventory_dashboard", "Estoque — Resumo operacional"],
+  ["inventory_stock", "Estoque — Saldos e ajustes"],
+  ["inventory_products", "Estoque — Produtos"],
+  ["inventory_suppliers", "Estoque — Fornecedores"],
+  ["inventory_sectors", "Estoque — Setores"],
+  ["inventory_categories", "Estoque — Categorias"],
+  ["inventory_presentations", "Estoque — Apresentações"],
+  ["inventory_invoices", "Estoque — Notas fiscais"],
+  ["inventory_requests", "Estoque — Pedidos"],
+  ["inventory_fulfillment", "Estoque — Atendimento de pedidos"],
+  ["inventory_reports", "Estoque — Relatórios"],
+].map(([key, label]) => ({ key, label }));
+module.exports = { permissionCatalog };

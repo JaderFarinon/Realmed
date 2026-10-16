@@ -1,57 +1,45 @@
 <template>
-  <AdminLayout
-    ><div
-      class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
+  <PageShell title="Usuários" subtitle="Gerencie os acessos administrativos" list>
+    <p v-if="message" class="text-error-700" role="alert">{{ message }}</p>
+    <DataList
+      v-model:selected="selected"
+      :items="filteredUsers"
+      :columns="columns"
+      :actions="toolbarActions"
+      :loading="loading"
+      bounded
+      selection-key="nome"
+      :row-height="64"
     >
-      <div class="mb-5 flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-semibold dark:text-white">Usuários</h1>
-          <p class="text-sm text-gray-500">Gerencie os acessos administrativos.</p>
-        </div>
-        <button class="rounded-lg bg-brand-500 px-4 py-2 text-white" @click="edit()">
-          Novo usuário
-        </button>
-      </div>
-      <p v-if="message" class="mb-4 text-sm text-red-600">{{ message }}</p>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b dark:border-gray-700">
-            <tr>
-              <th class="p-3">Nome</th>
-              <th class="p-3">Login</th>
-              <th class="p-3">Perfil</th>
-              <th class="p-3">Status</th>
-              <th class="p-3 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading">
-              <td colspan="5" class="p-6 text-center">Carregando...</td>
-            </tr>
-            <tr v-for="user in users" :key="user.id" class="border-b dark:border-gray-800">
-              <td class="p-3">
-                {{ user.nome }}<small class="block text-gray-500">{{ user.email }}</small>
-              </td>
-              <td class="p-3">{{ user.login }}</td>
-              <td class="p-3">{{ user.role }}</td>
-              <td class="p-3">{{ user.status }}</td>
-              <td class="p-3 text-right">
-                <button class="mr-3 text-brand-500" @click="edit(user)">Editar</button
-                ><button class="text-red-600" @click="remove(user)">Excluir</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div v-if="show" class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <form
-        class="grid w-full max-w-2xl grid-cols-1 gap-4 rounded-2xl bg-white p-6 dark:bg-gray-900 sm:grid-cols-2"
-        @submit.prevent="save"
+      <template #filters
+        ><div class="list-filter-grid">
+          <label class="filter-search"
+            >Pesquisar<input
+              v-model="search"
+              class="input"
+              placeholder="Nome, login ou e-mail" /></label
+          ><label
+            >Status<select v-model="statusFilter" class="input">
+              <option value="">Todos</option>
+              <option value="active">Ativos</option>
+              <option value="inactive">Inativos</option>
+              <option value="blocked">Bloqueados</option>
+            </select></label
+          ><button class="btn-secondary" @click="clearListFilters">Limpar</button>
+        </div></template
       >
-        <h2 class="text-xl font-semibold dark:text-white sm:col-span-2">
-          {{ form.id ? 'Editar' : 'Novo' }} usuário
-        </h2>
+      <template #cell-nome="{ item }"
+        ><b>{{ item.nome }}</b
+        ><small class="block text-gray-500">{{ item.email }}</small></template
+      >
+    </DataList>
+    <ListDetailDialog
+      :open="show"
+      :title="form.id ? 'Editar usuário' : 'Novo usuário'"
+      @close="show = false"
+    >
+      <form class="grid grid-cols-1 gap-4 sm:grid-cols-2" @submit.prevent="save">
+        <p v-if="message" class="text-error-700 sm:col-span-2" role="alert">{{ message }}</p>
         <label v-for="field in fields" :key="field.key" class="text-sm dark:text-gray-200"
           >{{ field.label
           }}<input
@@ -81,13 +69,16 @@
             Cancelar</button
           ><button class="rounded-lg bg-brand-500 px-4 py-2 text-white">Salvar</button>
         </div>
-      </form>
-    </div></AdminLayout
-  >
+      </form></ListDetailDialog
+    >
+  </PageShell>
 </template>
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import AdminLayout from '@/components/layout/AdminLayout.vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import PageShell from '@/components/PageShell.vue'
+import DataList from '@/components/DataList.vue'
+import ListDetailDialog from '@/components/ListDetailDialog.vue'
+import { useRouter } from 'vue-router'
 import {
   atualizarUsuario,
   criarUsuario,
@@ -162,5 +153,68 @@ const remove = async (u: Usuario) => {
     message.value = errorMessage(error, 'Erro ao excluir usuário.')
   }
 }
+const router = useRouter(),
+  selected = ref<Usuario | null>(null),
+  search = ref(''),
+  statusFilter = ref('')
+const roleLabels: Record<string, string> = {
+  admin: 'Administrador',
+  masteradmin: 'Administrador principal',
+  user: 'Usuário',
+  doctor: 'Médico',
+  nurse: 'Enfermagem',
+  pharmacist: 'Farmacêutico',
+  patient: 'Paciente',
+}
+const statusLabels: Record<string, string> = {
+  active: 'Ativo',
+  inactive: 'Inativo',
+  blocked: 'Bloqueado',
+}
+const columns = [
+  { key: 'nome', label: 'Nome' },
+  { key: 'login', label: 'Login' },
+  { key: 'role', label: 'Perfil', format: (v: string) => roleLabels[v] || v },
+  { key: 'status', label: 'Status', format: (v: string) => statusLabels[v] || v },
+]
+const filteredUsers = computed(() =>
+  users.value.filter(
+    (u) =>
+      (!statusFilter.value || u.status === statusFilter.value) &&
+      [u.nome, u.login, u.email].some((v) =>
+        String(v || '')
+          .toLowerCase()
+          .includes(search.value.toLowerCase()),
+      ),
+  ),
+)
+const toolbarActions = computed(() => [
+  { icon: 'add', label: 'Novo usuário', variant: 'primary' as const, onClick: () => edit() },
+  {
+    icon: 'edit',
+    label: 'Editar usuário selecionado',
+    disabled: !selected.value,
+    onClick: () => selected.value && edit(selected.value),
+  },
+  {
+    icon: 'delete',
+    label: 'Excluir usuário selecionado',
+    variant: 'danger' as const,
+    disabled: !selected.value,
+    onClick: () => selected.value && remove(selected.value),
+  },
+  {
+    icon: 'open',
+    label: 'Gerenciar permissões',
+    disabled: !selected.value,
+    onClick: () =>
+      router.push({ path: '/configuracoes/permissoes', query: { userId: selected.value!.id } }),
+  },
+  { icon: 'refresh', label: 'Atualizar', onClick: load },
+])
 onMounted(load)
+function clearListFilters() {
+  search.value = ''
+  statusFilter.value = ''
+}
 </script>

@@ -66,6 +66,7 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
         return { stenci_user_id: 'stable-1', stenci_username: 'joao', name: 'João', email: null }
       },
       getSession: () => storedSession,
+      logout: async () => { storedSession = null },
     }
   }
   const sessionStore = new StenciSessionStore({ ttlMs: 60_000 })
@@ -80,6 +81,9 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
       const session = sessionStore.get(claims.sid)
       assert.equal(session.deviceId, receivedDeviceIds[attempt])
       assert.match(session.deviceId, /^[0-9a-f]{32}$/)
+      assert.equal(session.mode, 'detached')
+      assert.equal(session.token, undefined)
+      assert.equal(session.password, undefined)
       assert.equal(JSON.stringify(result).includes('never-persist-this'), false)
       assert.equal(JSON.stringify(result).includes('server-only-stenci-token'), false)
       assert.equal(result.user.permissions, undefined)
@@ -119,7 +123,7 @@ test('invalid credentials and unavailable Stenci return controlled messages', as
     { error: Object.assign(new Error('remote body'), { code: 'STENCI_INVALID_CREDENTIALS', stage: 'auth', upstreamStatus: 401 }), status: 401, message: 'Usuário ou senha inválidos.' },
     { error: Object.assign(new Error('socket and headers'), { code: 'STENCI_CONNECTION_ERROR', stage: 'auth' }), status: 503, message: 'Não foi possível validar seu acesso no momento. Tente novamente.' },
   ]) {
-    const router = createAuthRouter({ configFactory: () => config, serviceFactory: () => ({ authenticateUser: async () => { throw scenario.error } }), jwtSecret: process.env.JWT_SECRET })
+    const router = createAuthRouter({ configFactory: () => config, serviceFactory: () => ({ authenticateUser: async () => { throw scenario.error }, logout: async () => {} }), jwtSecret: process.env.JWT_SECRET })
     await withServer(router, async (base) => {
       const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'x', password: 'sensitive' }) })
       assert.equal(response.status, scenario.status)
@@ -144,6 +148,7 @@ test('user sync failures log only sanitized MySQL diagnostics before returning 5
         return { stenci_user_id: 'stable-1', stenci_username: 'private-cpf', email: 'private@example.test' }
       },
       getSession: () => session,
+      logout: async () => { session = null },
     }
   }
   const router = createAuthRouter({

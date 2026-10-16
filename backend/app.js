@@ -19,6 +19,7 @@ function createApp() {
   const app = express()
 
   app.disable('x-powered-by')
+  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY)
   app.use(helmet())
   app.use(cors())
   app.use(express.json({ limit: '1mb' }))
@@ -38,6 +39,7 @@ function createApp() {
   app.use('/api', guideOperationsRoutes)
   app.use('/api', documentGenerationRoutes)
   app.use('/api', physiotherapyEvaluationRoutes)
+  app.use('/api/inventory', require('./routes/inventory'))
   app.use('/api/integrations/stenci', createStenciRouter())
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota não encontrada.' }))
@@ -58,7 +60,7 @@ async function start() {
     connection.release()
   }
 
-  return createApp().listen(PORT, () => console.log(`API disponível na porta ${PORT}`))
+  return createApp().listen(PORT, process.env.HOST || '0.0.0.0', () => console.log(`API disponível na porta ${PORT}`))
 }
 
 if (require.main === module) {

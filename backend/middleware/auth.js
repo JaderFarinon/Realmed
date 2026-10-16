@@ -11,7 +11,7 @@ function authMiddleware(req, res, next) {
   const [scheme, token] = auth.split(' ');
   if (scheme !== 'Bearer' || !token) return res.status(401).json({ error: 'Token not provided' });
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
+    if (err) return res.status(401).json({ error: 'Invalid or expired token', code: 'AUTH_SESSION_EXPIRED' });
     const normalizedRole = normalizeRoleValue(user.role);
     req.user = {
       ...user,

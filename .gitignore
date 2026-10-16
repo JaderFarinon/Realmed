@@ -141,3 +141,4 @@ storage/**
 !storage/**/.gitkeep
 backend/uploads/
 cd.zip
+.deployment/

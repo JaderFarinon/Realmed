@@ -51,8 +51,13 @@ export function useAuthUser() {
     permission: 'canView' | 'canCreate' | 'canEdit' | 'canDelete' = 'canEdit',
   ) => {
     if (!user.value) return false
-    if (user.value.permissionsEnabled === false || user.value.role === 'masteradmin') return true
+    if (
+      user.value.permissionsEnabled === false ||
+      ['admin', 'masteradmin'].includes(user.value.role)
+    )
+      return true
     return Boolean(
+      user.value.permissions?.find((item) => item.moduleKey === moduleKey)?.canView &&
       user.value.permissions?.find((item) => item.moduleKey === moduleKey)?.[permission],
     )
   }

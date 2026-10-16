@@ -2,229 +2,206 @@
   <PageShell
     title="Gestão de Tratamentos"
     subtitle="Fila do faturamento para liberação dos tratamentos"
+    :list="!showFilters"
   >
-    <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Filas da Central de Guias">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-semibold"
-        :class="
-          activeTab === tab.key
-            ? 'border-brand-600 bg-brand-600 text-white'
-            : 'border-gray-200 bg-white text-gray-600'
-        "
-        @click="selectTab(tab.key)"
-      >
-        {{ tab.label }} <span class="ml-1 opacity-80">({{ queueCounts[tab.key] ?? '…' }})</span>
-      </button>
-    </nav>
-
-    <p v-if="loadError" class="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
-      {{ loadError }}
-    </p>
-    <section class="panel space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="font-semibold text-gray-900">{{ currentTabLabel }}</h2>
-          <p class="text-sm text-gray-500">{{ total }} tratamento(s) nesta visão</p>
-        </div>
-        <button
-          class="btn-secondary"
-          :aria-expanded="showFilters"
-          @click="showFilters = !showFilters"
-        >
-          ⚙ Filtros
-          <span
-            v-if="activeFilterCount"
-            class="ml-1 rounded-full bg-brand-100 px-2 text-brand-700"
-            >{{ activeFilterCount }}</span
-          >
-        </button>
-      </div>
-      <form
-        v-show="showFilters"
-        class="grid gap-3 border-t pt-4 sm:grid-cols-2 xl:grid-cols-4"
-        @submit.prevent="load(1)"
-      >
-        <label class="filter-label xl:col-span-2"
-          >Buscar paciente<input
-            v-model="filters.search"
-            class="input"
-            placeholder="Nome do paciente"
-        /></label>
-        <label class="filter-label"
-          >Convênio<select v-model="filters.insurance_provider_id" class="input">
-            <option value="">Todos</option>
-            <option v-for="item in insurers" :key="item.id" :value="item.id">
-              {{ item.name }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Fisioterapeuta<select v-model="filters.physiotherapist_id" class="input">
-            <option value="">Todos</option>
-            <option v-for="item in physiotherapists" :key="item.id" :value="item.id">
-              {{ item.full_name }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Médico solicitante<select v-model="filters.requesting_doctor_id" class="input">
-            <option value="">Todos</option>
-            <option v-for="item in doctors" :key="item.id" :value="item.id">
-              {{ item.full_name }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Status da liberação<select v-model="filters.authorization_status" class="input">
-            <option value="">Todos</option>
-            <option v-for="(label, value) in authorizationStatusLabels" :key="value" :value="value">
-              {{ label }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Documentação<select v-model="filters.document_status" class="input">
-            <option value="">Todos</option>
-            <option v-for="(label, value) in documentStatusLabels" :key="value" :value="value">
-              {{ label }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Tratamento<select v-model="filters.treatment_status" class="input">
-            <option value="">Todos</option>
-            <option v-for="(label, value) in treatmentStatusLabels" :key="value" :value="value">
-              {{ label }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Faturamento<select v-model="filters.billing_status" class="input">
-            <option value="">Todos</option>
-            <option v-for="(label, value) in billingStatusLabels" :key="value" :value="value">
-              {{ label }}
-            </option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Prioridade<select v-model="filters.priority" class="input">
-            <option value="">Todas</option>
-            <option value="2">Urgente</option>
-            <option value="1">Alta</option>
-            <option value="0">Normal</option>
-          </select></label
-        >
-        <label class="filter-label"
-          >Avaliação de<input
-            v-model="filters.assessment_date_from"
-            type="date"
-            class="input" /></label
-        ><label class="filter-label"
-          >Avaliação até<input v-model="filters.assessment_date_to" type="date" class="input"
-        /></label>
-        <label class="filter-label"
-          >Início previsto de<input
-            v-model="filters.expected_start_date_from"
-            type="date"
-            class="input" /></label
-        ><label class="filter-label"
-          >Início previsto até<input
-            v-model="filters.expected_start_date_to"
-            type="date"
-            class="input"
-        /></label>
-        <div class="flex items-end gap-2 xl:col-span-4">
-          <button class="btn" type="submit">Aplicar filtros</button
-          ><button class="btn-secondary" type="button" @click="clearFilters">Limpar filtros</button>
-        </div>
-      </form>
-      <div v-if="activeChips.length" class="flex flex-wrap gap-2 border-t pt-3">
-        <button
-          v-for="chip in activeChips"
-          :key="chip.key"
-          class="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
-          @click="removeFilter(chip.key)"
-        >
-          {{ chip.label }} ×
-        </button>
-      </div>
-    </section>
-
-    <div class="flex justify-end">
-      <label class="flex items-center gap-2 text-sm font-medium text-gray-600"
-        >Ordenar por<select v-model="filters.sort" class="input" @change="load(1)">
-          <option value="start_asc">Início mais próximo</option>
-          <option value="start_desc">Início mais distante</option>
-          <option value="assessment_desc">Avaliações mais recentes</option>
-          <option value="assessment_asc">Avaliações mais antigas</option>
-          <option value="priority_desc">Maior prioridade</option>
-          <option value="created_asc">Cadastro mais antigo</option>
-          <option value="created_desc">Cadastro mais recente</option>
-        </select></label
-      >
-    </div>
-
-    <div class="panel overflow-x-auto p-0">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Paciente</th>
-            <th>Convênio</th>
-            <th>Fisioterapeuta</th>
-            <th>Avaliação</th>
-            <th>Início previsto</th>
-            <th>Sessões</th>
-            <th>Documentação</th>
-            <th>Liberação</th>
-            <th>Prioridade</th>
-            <th>Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in data" :key="item.id">
-            <td class="font-semibold text-gray-900">{{ item.patient_name }}</td>
-            <td>{{ item.insurance_name }}</td>
-            <td>{{ item.physiotherapist_name }}</td>
-            <td>{{ date(item.assessment_date) }}</td>
-            <td class="font-medium">{{ date(item.expected_start_date) }}</td>
-            <td class="whitespace-nowrap">
-              <b>{{ item.requested_sessions }}</b> solicitadas<br /><span class="text-gray-500"
-                >{{ item.authorized_sessions ?? '—' }} autorizadas</span
+    <p v-if="loadError" class="text-error-700" role="alert">{{ loadError }}</p>
+    <DataList
+      v-model:selected="selected"
+      :items="data"
+      :columns="columns"
+      :actions="toolbarActions"
+      :bounded="!showFilters"
+      :loading="loading"
+      :server-total="total"
+      :page="page"
+      selection-key="patient_name"
+      :row-height="64"
+      @update:page="load"
+      @update:page-size="resizePage"
+    >
+      <template #filters
+        ><div class="space-y-3">
+          <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Filas da Central de Guias">
+            <button
+              v-for="tab in tabs"
+              :key="tab.key"
+              class="whitespace-nowrap rounded-xl border px-4 py-2.5 text-sm font-semibold"
+              :class="
+                activeTab === tab.key
+                  ? 'border-brand-600 bg-brand-600 text-white'
+                  : 'border-gray-200 bg-white text-gray-600'
+              "
+              @click="selectTab(tab.key)"
+            >
+              {{ tab.label }}
+              <span class="ml-1 opacity-80">({{ queueCounts[tab.key] ?? '…' }})</span>
+            </button>
+          </nav>
+          <form @submit.prevent="load(1)">
+            <label class="filter-search"
+              >Paciente<input
+                v-model="filters.search"
+                class="input"
+                placeholder="Buscar paciente" /></label
+            ><label
+              >Ordenar por<select v-model="filters.sort" class="input" @change="load(1)">
+                <option value="start_asc">Início mais próximo</option>
+                <option value="start_desc">Início mais distante</option>
+                <option value="assessment_desc">Avaliação mais recente</option>
+                <option value="assessment_asc">Avaliação mais antiga</option>
+                <option value="priority_desc">Prioridade</option>
+                <option value="created_asc">Criação mais antiga</option>
+                <option value="created_desc">Criação mais recente</option>
+              </select></label
+            ><button class="btn-primary" type="submit">Aplicar</button
+            ><button
+              class="btn-secondary"
+              type="button"
+              :aria-expanded="showFilters"
+              @click="showFilters = !showFilters"
+            >
+              Mais filtros{{ activeFilterCount ? ' (' + activeFilterCount + ')' : '' }}</button
+            ><button class="btn-secondary" type="button" @click="clearFilters">Limpar</button>
+          </form>
+          <div v-if="showFilters">
+            <form class="advanced-filter-grid" @submit.prevent="load(1)">
+              <label class="filter-label xl:col-span-2"
+                >Buscar paciente<input
+                  v-model="filters.search"
+                  class="input"
+                  placeholder="Nome do paciente"
+              /></label>
+              <label class="filter-label"
+                >Convênio<select v-model="filters.insurance_provider_id" class="input">
+                  <option value="">Todos</option>
+                  <option v-for="item in insurers" :key="item.id" :value="item.id">
+                    {{ item.name }}
+                  </option>
+                </select></label
               >
-            </td>
-            <td><StatusBadge :value="item.document_status" :labels="documentStatusLabels" /></td>
-            <td>
-              <span class="whitespace-nowrap font-semibold">{{ treatmentStatusLabel(item) }}</span>
-              <p v-if="item.authorization_status === 'PENDING'" class="text-xs text-error-700">
-                Pendência do convênio
-              </p>
-            </td>
-            <td>{{ priorityLabel(item.priority) }}</td>
-            <td>
-              <RouterLink
-                class="btn-secondary inline-block"
-                :to="`/central-de-guias/tratamentos/${item.id}`"
-                >Abrir</RouterLink
+              <label class="filter-label"
+                >Fisioterapeuta<select v-model="filters.physiotherapist_id" class="input">
+                  <option value="">Todos</option>
+                  <option v-for="item in physiotherapists" :key="item.id" :value="item.id">
+                    {{ item.full_name }}
+                  </option>
+                </select></label
               >
-            </td>
-          </tr>
-          <tr v-if="!data.length">
-            <td colspan="10" class="py-10 text-center text-gray-500">
-              Nenhum tratamento encontrado nesta fila.
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="flex items-center justify-between p-4 text-sm">
-        <button class="btn-secondary" :disabled="page <= 1" @click="load(page - 1)">Anterior</button
-        ><span>Página {{ page }} de {{ pages }}</span
-        ><button class="btn-secondary" :disabled="page >= pages" @click="load(page + 1)">
-          Próxima
-        </button>
-      </div>
-    </div>
+              <label class="filter-label"
+                >Médico solicitante<select v-model="filters.requesting_doctor_id" class="input">
+                  <option value="">Todos</option>
+                  <option v-for="item in doctors" :key="item.id" :value="item.id">
+                    {{ item.full_name }}
+                  </option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Status da liberação<select v-model="filters.authorization_status" class="input">
+                  <option value="">Todos</option>
+                  <option
+                    v-for="(label, value) in authorizationStatusLabels"
+                    :key="value"
+                    :value="value"
+                  >
+                    {{ label }}
+                  </option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Documentação<select v-model="filters.document_status" class="input">
+                  <option value="">Todos</option>
+                  <option
+                    v-for="(label, value) in documentStatusLabels"
+                    :key="value"
+                    :value="value"
+                  >
+                    {{ label }}
+                  </option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Tratamento<select v-model="filters.treatment_status" class="input">
+                  <option value="">Todos</option>
+                  <option
+                    v-for="(label, value) in treatmentStatusLabels"
+                    :key="value"
+                    :value="value"
+                  >
+                    {{ label }}
+                  </option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Faturamento<select v-model="filters.billing_status" class="input">
+                  <option value="">Todos</option>
+                  <option v-for="(label, value) in billingStatusLabels" :key="value" :value="value">
+                    {{ label }}
+                  </option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Prioridade<select v-model="filters.priority" class="input">
+                  <option value="">Todas</option>
+                  <option value="2">Urgente</option>
+                  <option value="1">Alta</option>
+                  <option value="0">Normal</option>
+                </select></label
+              >
+              <label class="filter-label"
+                >Avaliação de<input
+                  v-model="filters.assessment_date_from"
+                  type="date"
+                  class="input" /></label
+              ><label class="filter-label"
+                >Avaliação até<input v-model="filters.assessment_date_to" type="date" class="input"
+              /></label>
+              <label class="filter-label"
+                >Início previsto de<input
+                  v-model="filters.expected_start_date_from"
+                  type="date"
+                  class="input" /></label
+              ><label class="filter-label"
+                >Início previsto até<input
+                  v-model="filters.expected_start_date_to"
+                  type="date"
+                  class="input"
+              /></label>
+              <div class="flex items-end gap-2 xl:col-span-4">
+                <button class="btn" type="submit">Aplicar filtros</button
+                ><button class="btn-secondary" type="button" @click="clearFilters">
+                  Limpar filtros
+                </button>
+              </div>
+            </form>
+          </div>
+          <div v-if="activeChips.length" class="flex flex-wrap gap-2">
+            <button
+              v-for="chip in activeChips"
+              :key="chip.key"
+              class="rounded-full bg-gray-100 px-3 py-1 text-xs"
+              @click="removeFilter(chip.key)"
+            >
+              {{ chip.label }} ×
+            </button>
+          </div>
+        </div></template
+      >
+      <template #cell-patient_name="{ value }"
+        ><b>{{ value }}</b></template
+      ><template #cell-requested_sessions="{ item }"
+        ><b>{{ item.requested_sessions ?? '—' }} solicitadas</b
+        ><small class="block text-gray-500"
+          >{{ item.authorized_sessions ?? '—' }} autorizadas</small
+        ></template
+      ><template #cell-document_status="{ item }"
+        ><StatusBadge :value="item.document_status" :labels="documentStatusLabels" /></template
+      ><template #cell-authorization_status="{ item }"
+        ><b>{{ treatmentStatusLabel(item) }}</b
+        ><small v-if="item.authorization_status === 'PENDING'" class="block text-error-700"
+          >Pendência do convênio</small
+        ></template
+      >
+    </DataList>
   </PageShell>
 </template>
 
@@ -234,6 +211,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
+import DataList from '@/components/DataList.vue'
+import { useAuthUser } from '@/composables/useAuthUser'
 import StatusBadge from '@/components/StatusBadge.vue'
 import {
   authorizationStatusLabels,
@@ -324,19 +303,80 @@ function displayValue(key: string, value: string) {
     ] as string) || priorityLabel(Number(value))
   )
 }
+let loadSequence = 0
+const selected = ref<any>(null),
+  pageSize = ref(10),
+  loading = ref(false),
+  { canOperational } = useAuthUser()
+const columns = [
+  { key: 'patient_name', label: 'Paciente', width: '18%' },
+  { key: 'insurance_name', label: 'Convênio' },
+  { key: 'physiotherapist_name', label: 'Fisioterapeuta' },
+  { key: 'assessment_date', label: 'Avaliação', format: date },
+  { key: 'expected_start_date', label: 'Início previsto', format: date },
+  { key: 'requested_sessions', label: 'Sessões' },
+  { key: 'document_status', label: 'Documentação' },
+  { key: 'authorization_status', label: 'Liberação', width: '18%' },
+  { key: 'priority', label: 'Prioridade', format: priorityLabel },
+]
+const toolbarActions = computed(() => [
+  {
+    icon: 'add',
+    label: 'Novo tratamento',
+    variant: 'primary' as const,
+    disabled: !canOperational('guide_processes', 'canCreate'),
+    onClick: () => router.push('/central-de-guias/novo'),
+  },
+  {
+    icon: 'open',
+    label: 'Abrir tratamento selecionado',
+    disabled: !selected.value,
+    onClick: () => router.push('/central-de-guias/tratamentos/' + selected.value.id),
+  },
+  {
+    icon: 'edit',
+    label: 'Avaliar tratamento selecionado',
+    disabled: !selected.value || !canOperational('guide_processes', 'canEdit'),
+    onClick: () =>
+      router.push({
+        path: '/central-de-guias/tratamentos/' + selected.value.id,
+        query: { evaluate: '1' },
+      }),
+  },
+  { icon: 'refresh', label: 'Atualizar', onClick: () => load(page.value) },
+])
+function resizePage(size: number) {
+  if (size === pageSize.value) return
+  pageSize.value = size
+  load(1)
+}
 async function load(target = 1) {
-  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v))
-  const response = await api.get('/guide-processes', { params: { ...params, page: target } })
-  data.value = response.data.data
-  page.value = response.data.pagination.page
-  pages.value = response.data.pagination.pages || 1
-  total.value = response.data.pagination.total
-  await router.replace({
-    query: {
-      ...route.query,
-      queue: activeTab.value === 'ALL' ? 'ALL' : filters.authorization_status,
-    },
-  })
+  const sequence = ++loadSequence
+  loading.value = true
+  selected.value = null
+  try {
+    const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v))
+    const response = await api.get('/guide-processes', {
+      params: { ...params, page: target, pageSize: pageSize.value },
+    })
+    if (sequence !== loadSequence) return
+    data.value = response.data.data
+    page.value = response.data.pagination.page
+    pages.value = response.data.pagination.pages || 1
+    total.value = response.data.pagination.total
+    await router.replace({
+      query: {
+        ...route.query,
+        queue: activeTab.value === 'ALL' ? 'ALL' : filters.authorization_status,
+      },
+    })
+  } catch (e) {
+    if (sequence === loadSequence)
+      loadError.value =
+        (e as any).response?.data?.error || 'Não foi possível carregar os tratamentos.'
+  } finally {
+    if (sequence === loadSequence) loading.value = false
+  }
 }
 async function loadQueueCounts() {
   await Promise.all(

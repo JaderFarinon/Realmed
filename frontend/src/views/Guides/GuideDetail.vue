@@ -2,7 +2,16 @@
   <PageShell
     title="Tratamento"
     subtitle="Documentos para liberação e acompanhamento pelo faturamento"
-  >
+    ><template #actions
+      ><TableActionToolbar
+        :actions="[
+          {
+            icon: 'open',
+            label: 'Voltar à gestão de tratamentos',
+            onClick: () => router.push('/central-de-guias/tratamentos'),
+          },
+        ]"
+    /></template>
     <div v-if="process" class="space-y-5">
       <div
         v-if="saveNotice"
@@ -343,65 +352,24 @@
       </section>
 
       <section class="panel">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="section-title mb-1">Ficha de Avaliação Fisioterapêutica</h2>
-            <p class="text-sm text-gray-600">
-              PDF A4 de duas páginas pré-preenchido com os dados atualmente salvos no tratamento.
-            </p>
-            <p
-              class="mt-1 text-sm font-semibold"
-              :class="evaluationDocs.length ? 'text-success-700' : 'text-gray-500'"
-            >
-              {{
-                evaluationDocs.length
-                  ? `Gerada · Atualizada em ${dateTime(evaluationDocs[0].created_at)}`
-                  : 'Não gerada'
-              }}
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button class="btn-secondary" @click="previewEvaluation">Visualizar prévia</button
-            ><button
-              v-if="canEdit"
-              class="btn"
-              :disabled="generatingEvaluation"
-              @click="generateEvaluation"
-            >
-              {{ evaluationDocs.length ? 'Gerar nova versão' : 'Gerar' }}
-            </button>
-          </div>
-        </div>
-        <div v-if="evaluationDocs.length" class="mt-4 overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Versão</th>
-                <th>Gerada em</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(doc, index) in evaluationDocs" :key="doc.id">
-                <td class="font-semibold">
-                  v{{ doc.document_version || evaluationDocs.length - index }}
-                </td>
-                <td>{{ dateTime(doc.created_at) }}</td>
-                <td>{{ index === 0 ? 'Atual' : 'Histórico' }}</td>
-                <td>
-                  <div class="flex gap-3">
-                    <button class="link" @click="download(doc.id)">Visualizar</button
-                    ><button class="link" @click="download(doc.id)">Baixar</button
-                    ><button class="link" @click="printDocument(doc.id)">Imprimir</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <h2 class="section-title">Ficha de Avaliação Fisioterapêutica</h2>
+        <p class="mb-4 text-sm text-gray-500">
+          PDF de duas páginas com os dados atualmente salvos.
+          {{
+            evaluationDocs.length
+              ? 'Última geração: ' + dateTime(evaluationDocs[0].created_at)
+              : 'Não gerada.'
+          }}
+        </p>
+        <DataList
+          v-model:selected="selectedEvaluationDoc"
+          :items="evaluationDocs"
+          :columns="evaluationColumns"
+          :actions="evaluationActions"
+          embedded
+          selection-key="original_name"
+        />
       </section>
-
       <section class="panel">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -577,9 +545,11 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
+import DataList from '@/components/DataList.vue'
+import TableActionToolbar from '@/components/TableActionToolbar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useAuthUser } from '@/composables/useAuthUser'
 import {
@@ -937,7 +907,55 @@ async function upload(event: Event, type: string) {
   })
   await load()
 }
-onMounted(load)
+const router = useRouter(),
+  selectedEvaluationDoc = ref<any>(null)
+const evaluationColumns = computed(() => [
+  {
+    key: 'document_version',
+    label: 'Versão',
+    format: (v: any, item: any) =>
+      'v' +
+      (v ||
+        evaluationDocs.value.length - evaluationDocs.value.findIndex((d: any) => d.id === item.id)),
+  },
+  { key: 'created_at', label: 'Gerada em', format: dateTime },
+  {
+    key: 'id',
+    label: 'Status',
+    format: (v: any) => (evaluationDocs.value[0]?.id === v ? 'Atual' : 'Histórico'),
+  },
+])
+const evaluationActions = computed(() => [
+  { icon: 'file', label: 'Visualizar prévia da ficha', onClick: previewEvaluation },
+  {
+    icon: 'add',
+    label: evaluationDocs.value.length ? 'Gerar nova versão da ficha' : 'Gerar ficha',
+    disabled: !canEdit.value || generatingEvaluation.value,
+    onClick: generateEvaluation,
+  },
+  {
+    icon: 'open',
+    label: 'Visualizar versão selecionada',
+    disabled: !selectedEvaluationDoc.value,
+    onClick: () => selectedEvaluationDoc.value && download(selectedEvaluationDoc.value.id),
+  },
+  {
+    icon: 'download',
+    label: 'Baixar versão selecionada',
+    disabled: !selectedEvaluationDoc.value,
+    onClick: () => selectedEvaluationDoc.value && download(selectedEvaluationDoc.value.id),
+  },
+  {
+    icon: 'print',
+    label: 'Imprimir versão selecionada',
+    disabled: !selectedEvaluationDoc.value,
+    onClick: () => selectedEvaluationDoc.value && printDocument(selectedEvaluationDoc.value.id),
+  },
+])
+onMounted(async () => {
+  await load()
+  if (route.query.evaluate === '1') evaluationOpen.value = true
+})
 </script>
 <style scoped>
 .filter-label {

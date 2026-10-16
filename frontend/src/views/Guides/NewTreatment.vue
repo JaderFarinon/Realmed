@@ -2,8 +2,12 @@
   <PageShell
     title="Novo Tratamento"
     subtitle="Prepare o tratamento e a documentação recebida antes de encaminhá-lo ao faturamento"
-  >
-    <form class="space-y-5" @submit.prevent="save">
+    ><template #actions
+      ><button class="btn-primary" type="submit" form="new-treatment-form" :disabled="saving">
+        {{ saving ? 'Salvando...' : 'Salvar tratamento' }}
+      </button></template
+    >
+    <form id="new-treatment-form" class="space-y-5" @submit.prevent="save">
       <section class="panel">
         <h2 class="section-title">1. Paciente</h2>
         <label class="field patient-search"

@@ -41,5 +41,6 @@ class StenciService {
     return require('./StenciMapper').userIdentity(me, username)
   }
   getSession() { return this.client.getSession() }
+  logout() { return this.client.logout() }
 }
 module.exports = StenciService

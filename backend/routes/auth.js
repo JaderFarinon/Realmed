@@ -10,6 +10,7 @@ const { getStenciConfig } = require('../../integrations/stenci/config')
 const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciService = require('../../integrations/stenci/StenciService')
 const { stenciSessionStore } = require('../services/StenciSessionStore')
+const { withTransientStenci } = require('../services/transientStenciService')
 
 const publicUser = (user) => ({
   id: user.id,
@@ -47,11 +48,12 @@ function createAuthRouter({
         ? serviceFactory(config)
         : new StenciService(new StenciClient({ config }))
       const deviceId = deviceIdFactory()
-      const identity = await service.authenticateUser(username, password, deviceId)
-      const stenciSession = service.getSession()
-      if (!stenciSession) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_ERROR', stage: 'session' })
-      const user = await syncUser(db, identity)
-      sid = sessionStore.create(stenciSession)
+      const { user, identity } = await withTransientStenci(service, async () => {
+        const identity = await service.authenticateUser(username, password, deviceId)
+        if (!service.getSession()) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_ERROR', stage: 'session' })
+        return { identity, user: await syncUser(db, identity) }
+      }, logger)
+      sid = sessionStore.create({ mode: 'detached', deviceId, branchId: config.branchId, stenciUserId: identity.stenci_user_id, cache: new Map() })
       const payload = { ...publicUser(user), sid }
       const token = jwt.sign(payload, jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
       logger.info('[REALMED AUTH] login concluído')
@@ -65,6 +67,7 @@ function createAuthRouter({
         return res.status(error.status || 500).json({ error: error.message, code: error.code })
       }
       logger.error('[REALMED AUTH] falha na autenticação Stenci', { code: error.code || error.name, stage: error.stage, upstreamStatus: error.upstreamStatus })
+      if (error.code === 'STENCI_LOGOUT_FAILED') return res.status(502).json({ error: error.message, code: error.code })
       if (error.code === 'STENCI_BRANCH_FAILED') return res.status(502).json({ error: 'Não foi possível selecionar a unidade da Realmed no Stenci.' })
       if (error.code === 'STENCI_ME_FAILED') return res.status(502).json({ error: 'Autenticação realizada, mas não foi possível validar o usuário no Stenci.' })
       return res.status(error.code === 'STENCI_CONNECTION_ERROR' ? 503 : 502).json({ error: 'Não foi possível validar seu acesso no momento. Tente novamente.' })
@@ -92,7 +95,7 @@ function createAuthRouter({
       )
       return res.json({ user: {
         ...publicUser(rows[0]),
-        permissionsEnabled: process.env.PERMISSIONS_ENABLED === 'true',
+        permissionsEnabled: process.env.PERMISSIONS_ENABLED !== 'false',
         permissions: permissionRows.map((permission) => ({
           moduleKey: permission.module_key, canView: Boolean(permission.can_view),
           canCreate: Boolean(permission.can_create), canEdit: Boolean(permission.can_edit),

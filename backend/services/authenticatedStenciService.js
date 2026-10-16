@@ -3,6 +3,7 @@ const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciError = require('../../integrations/stenci/StenciError')
 const StenciService = require('../../integrations/stenci/StenciService')
 const { stenciSessionStore } = require('./StenciSessionStore')
+const { detachedService } = require('./transientStenciService')
 
 function getAuthenticatedStenciService(req, {
   configFactory = getStenciConfig,
@@ -12,6 +13,7 @@ function getAuthenticatedStenciService(req, {
   const sid = req.user?.sid
   const session = sessionStore.get(sid)
   if (!session) throw new StenciError('Sua sessão expirou. Entre novamente.', { code: 'STENCI_SESSION_EXPIRED', status: 401 })
+  if (session.mode === 'detached') return { service: detachedService(session), sid, sessionStore }
   const config = configFactory()
   const service = serviceFactory
     ? serviceFactory(config, session)

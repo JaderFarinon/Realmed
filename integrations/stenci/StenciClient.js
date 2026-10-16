@@ -55,6 +55,7 @@ class StenciClient {
               : stage === 'me' ? 'STENCI_ME_FAILED' : `STENCI_HTTP_${response.status}`
         throw new StenciError('Falha controlada na consulta ao Stenci.', { code, status: code === 'STENCI_INVALID_CREDENTIALS' ? 401 : 502, stage, upstreamStatus: response.status })
       }
+      if (response.status === 204) return null
       try {
         const data = await response.json()
         if (stage === 'auth' || stage === 'branch') this.captureAuthState(response, data, stage)
@@ -103,6 +104,17 @@ class StenciClient {
     return this.request('/v1/me/branch', { base: 'apiX', method: 'POST', body: { branchId, deviceId }, stage: 'branch' })
   }
   getMe() { return this.request('/v1/me', { base: 'apiX', stage: 'me' }) }
+  async logout() {
+    if (!this.authState.token && !this.authState.cookie) return
+    try {
+      await this.request('/v1/logout', { base: 'apiX', method: 'POST', stage: 'logout' })
+    } catch (error) {
+      // An already-invalid context cannot hold a usable authenticated session.
+      if (![401, 403].includes(error.upstreamStatus)) throw error
+    }
+    this.authState = {}
+    this.session = null
+  }
   async authenticateSession(username, password, deviceId) {
     await this.authenticate(username, password, deviceId)
     await this.selectBranch(this.config.branchId, deviceId)
