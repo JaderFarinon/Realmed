@@ -9,7 +9,8 @@ export const authorizationStatusLabels = {
   IN_PROGRESS: 'Encaminhado ao convênio',
   PENDING: 'Pendência do convênio',
   AUTHORIZED: 'Liberado',
-  DENIED: 'Não liberado',
+  DENIED: 'Negado',
+  IN_APPEAL: 'Em recurso',
   SESSION_TOKEN: 'Liberação por sessão / token',
   NOT_REQUIRED: 'Não requer liberação',
 } as const
@@ -55,8 +56,17 @@ export const documentTypeLabels = {
 export const pendingStatusLabels = { OPEN: 'Em aberto', RESOLVED: 'Resolvida' } as const
 
 export const historyLabels: Record<string, string> = {
+  GUIDE_AUTHORIZATION_UPDATED: 'Liberação da guia atualizada',
+  GUIDE_BILLING_UPDATED: 'Faturamento da guia atualizado',
+  PHYSIOTHERAPY_ROTATION_CONFIRMED: 'Rodízio de fisioterapia confirmado',
+  STAGE_COMPLETED: 'Etapa finalizada',
+  STAGE_REOPENED: 'Etapa reaberta para edição',
   PROCESS_CREATED: 'Tratamento criado',
   TREATMENT_CREATED: 'Tratamento criado',
+  DOCUMENT_REQUIREMENTS_UPDATED: 'Obrigatoriedade dos documentos atualizada',
+  AUTHORIZATION_DOCUMENT_ATTACHED: 'Documento da liberação anexado',
+  GUIDE_CONTINUITY_ADDED: 'Guia de continuidade adicionada',
+  GUIDE_CONTINUITY_CREATED: 'Continuidade criada sem nova avaliação',
   DOCUMENT_RECEIVED: 'Documento recebido',
   DOCUMENT_MARKED_USABLE: 'Documento marcado como adequado',
   DOCUMENT_MARKED_NEEDS_ADJUSTMENT: 'Documento marcado como necessitando ajuste',
@@ -64,12 +74,16 @@ export const historyLabels: Record<string, string> = {
   DOCUMENT_UPLOADED: 'Documento anexado',
   DOCUMENT_REPLACED: 'Documento substituído',
   DOCUMENT_REMOVED: 'Documento removido',
+  PATIENT_STENCI_REFRESHED: 'Dados do paciente atualizados do Stenci',
   DOCUMENT_GENERATED: 'Documento gerado',
+  GUIDE_CODES_READ: 'Códigos da guia original lidos para conferência',
   DOCUMENT_PREVIEWED: 'Documento pré-visualizado',
   DOCUMENT_REGENERATED: 'Documento gerado novamente',
   STATUS_CHANGED: 'Status alterado',
   FIELD_CHANGED: 'Informação alterada',
   AUTHORIZATION_STARTED: 'Liberação iniciada',
+  AUTHORIZATION_APPEALED: 'Recurso de autorização registrado',
+  AUTHORIZATION_STATUS_CHANGED: 'Situação da liberação alterada',
   SENT_TO_INSURANCE: 'Encaminhado ao convênio',
   AUTHORIZATION_PENDING: 'Pendência do convênio registrada',
   AUTHORIZED: 'Tratamento liberado',
@@ -90,4 +104,17 @@ export function statusTone(value: string) {
   if (['INCOMPLETE', 'PENDING', 'DENIED'].includes(value)) return 'danger'
   if (['READY', 'SESSION_TOKEN'].includes(value)) return 'warning'
   return 'info'
+}
+
+export const processStageLabels: Record<string, string> = {
+  assessment: 'Aguardando Avaliação',
+  preparation: 'Aguardando Central de Guias',
+  ready: 'Pendente de Liberação',
+  authorizing: 'Encaminhado ao Convênio',
+  pending: 'Pendência do Convênio',
+  denied: 'Não Liberado',
+  appeals: 'Em Recurso',
+  authorized: 'Liberado',
+  treatment: 'Em Tratamento',
+  billing: 'Faturar',
 }

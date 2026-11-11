@@ -1,10 +1,14 @@
 <template>
   <ListTableFrame
-    v-model:page-size="size"
+    :page-size="size"
+    @update:page-size="autoSize"
     :row-height="rowHeight"
+    :measure-rows="measureRows"
+    :loading="loading"
     :bounded="bounded"
     :embedded="embedded"
   >
+    <template v-if="$slots.tabs" #tabs><slot name="tabs" /></template>
     <template v-if="$slots.filters" #filters><slot name="filters" /></template>
     <template #actions
       ><TableActionToolbar
@@ -19,7 +23,8 @@
               : ''
         " /><slot name="actions"
     /></template>
-    <table class="table list-table">
+    <span v-if="loading && rows.length" class="sr-only" role="status">Atualizando...</span>
+    <table class="table list-table" :aria-busy="loading || undefined">
       <thead>
         <tr>
           <th
@@ -29,7 +34,7 @@
             :title="column.label"
             scope="col"
           >
-            {{ column.label }}
+            <FieldLabel :required="column.required">{{ column.label }}</FieldLabel>
           </th>
         </tr>
       </thead>
@@ -41,6 +46,7 @@
           :aria-selected="selectable ? selected?.[rowKey] === item[rowKey] : undefined"
           :class="rowClass?.(item)"
           @click="select(item, $event)"
+          @dblclick="doubleClick(item, $event)"
           @keydown.enter.prevent="select(item, $event)"
           @keydown.space.prevent="select(item, $event)"
         >
@@ -55,7 +61,7 @@
             }}</slot>
           </td>
         </tr>
-        <tr v-if="loading || !rows.length">
+        <tr v-if="!rows.length">
           <td :colspan="columns.length" class="list-empty" role="status">
             {{ loading ? 'Carregando...' : emptyText }}
           </td>
@@ -68,13 +74,16 @@
         :page-size="size"
         :total="serverTotal ?? items.length"
         :loading="loading"
+        :page-size-options="pageSizeOptions"
         @update:page="changePage"
+        @update:page-size="chooseSize"
     /></template>
   </ListTableFrame>
 </template>
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, ref, watch } from 'vue'
+import FieldLabel from '@/components/FieldLabel.vue'
 import ListTableFrame from '@/components/ListTableFrame.vue'
 import TableActionToolbar, { type TableAction } from '@/components/TableActionToolbar.vue'
 import TablePagination from '@/components/TablePagination.vue'
@@ -83,6 +92,7 @@ export interface ListColumn {
   key: string
   label: string
   width?: string
+  required?: boolean
   format?: (value: any, item: any) => unknown
 }
 const props = withDefaults(
@@ -97,10 +107,12 @@ const props = withDefaults(
     bounded?: boolean
     embedded?: boolean
     rowHeight?: number
+    measureRows?: boolean
     selectable?: boolean
     serverTotal?: number
     page?: number
     allRows?: boolean
+    pageSizeOptions?: number[]
     emptyText?: string
     rowClass?: (item: any) => string
   }>(),
@@ -109,11 +121,13 @@ const props = withDefaults(
     rowKey: 'id',
     selectionKey: 'name',
     rowHeight: 48,
+    measureRows: true,
     selectable: true,
     emptyText: 'Nenhum registro encontrado para os filtros aplicados.',
   },
 )
 const emit = defineEmits<{
+  'row-dblclick': [item: any]
   'update:selected': [item: any]
   'update:page': [page: number]
   'update:pageSize': [size: number]
@@ -122,9 +136,7 @@ const size = ref(10),
   localPage = ref(1)
 const currentPage = computed(() => props.page ?? localPage.value)
 const rows = computed(() =>
-  props.loading
-    ? []
-    : props.serverTotal !== undefined || props.allRows
+  props.serverTotal !== undefined || props.allRows
       ? props.items
       : props.items.slice((localPage.value - 1) * size.value, localPage.value * size.value),
 )
@@ -143,10 +155,27 @@ function select(item: any, event: Event) {
     return
   emit('update:selected', props.selected?.[props.rowKey] === item[props.rowKey] ? null : item)
 }
+function doubleClick(item: any, event: MouseEvent) {
+  if (
+    !props.selectable ||
+    props.loading ||
+    (event.target as Element).closest('a,button,input,select,textarea')
+  )
+    return
+  emit('row-dblclick', item)
+}
 function changePage(page: number) {
   emit('update:selected', null)
   localPage.value = page
   emit('update:page', page)
+}
+function autoSize(value: number) {
+  if (!props.pageSizeOptions?.length) size.value = value
+}
+function chooseSize(value: number) {
+  if (!props.pageSizeOptions?.includes(value)) return
+  changePage(1)
+  size.value = value
 }
 watch(size, (value) => {
   emit('update:selected', null)

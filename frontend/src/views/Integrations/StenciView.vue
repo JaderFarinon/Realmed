@@ -12,9 +12,7 @@
     <div v-if="loading" class="rounded-xl border bg-white p-6 text-gray-500">
       Carregando status...
     </div>
-    <div v-else-if="loadError" class="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
-      {{ loadError }}
-    </div>
+    
     <section v-else-if="status" class="panel space-y-5">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -73,6 +71,8 @@
 </template>
 
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
 import { computed, onMounted, ref } from 'vue'
 import PageShell from '@/components/PageShell.vue'
 import TableActionToolbar from '@/components/TableActionToolbar.vue'
@@ -135,4 +135,6 @@ async function testConnection() {
   }
 }
 onMounted(load)
+
+useFeedback(() => unwrapNoticeValue(loadError), () => 'error')
 </script>

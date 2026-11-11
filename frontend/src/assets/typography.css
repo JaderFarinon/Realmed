@@ -1,0 +1,112 @@
+/* Shared application typography. Keep screen-specific CSS focused on layout. */
+:root {
+  --realmed-font-family: var(--font-outfit);
+  --realmed-text-size: 0.875rem;
+  --realmed-help-size: 0.75rem;
+  --realmed-field-touch-size: 1rem;
+  --realmed-title-size: 1.5rem;
+  --realmed-patient-name-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  --realmed-dialog-title-size: 1.25rem;
+  --realmed-section-size: 1.125rem;
+  --realmed-subsection-size: 1rem;
+  --realmed-metric-size: 1.75rem;
+  --realmed-weight-regular: 400;
+  --realmed-weight-medium: 500;
+  --realmed-weight-emphasis: 600;
+}
+
+@media screen {
+  button {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    font-weight: var(--realmed-weight-medium);
+    line-height: 1.5;
+  }
+  .typography-metric {
+    font-size: var(--realmed-metric-size);
+    font-weight: var(--realmed-weight-emphasis);
+    line-height: 2rem;
+  }
+  body {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    font-weight: var(--realmed-weight-regular);
+    line-height: 1.5;
+    letter-spacing: normal;
+  }
+
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(h1, h2, h3, h4, legend) {
+    font-family: var(--realmed-font-family);
+    font-weight: var(--realmed-weight-emphasis);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  :is(.page-shell, .realmed-standalone) h1 {
+    font-size: var(--realmed-title-size);
+    line-height: 2rem;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) h2 {
+    font-size: var(--realmed-section-size);
+    line-height: 1.75rem;
+  }
+  .list-detail-dialog > header h2 {
+    font-size: var(--realmed-dialog-title-size);
+    line-height: 1.75rem;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) h3 {
+    font-size: var(--realmed-subsection-size);
+    line-height: 1.5rem;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(h4, legend) {
+    font-size: var(--realmed-text-size);
+    line-height: 1.5rem;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(label, dt, .field, .filter-label) {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    font-weight: var(--realmed-weight-medium);
+    line-height: 1.5;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(input, select, textarea, .input) {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    font-weight: var(--realmed-weight-regular);
+    line-height: 1.5;
+    letter-spacing: normal;
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone)
+    :is(button, .btn, .btn-primary, .btn-secondary, .link, summary) {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    font-weight: var(--realmed-weight-medium);
+    line-height: 1.5;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  :is(.page-shell, .list-detail-dialog) :is(table, th, td) {
+    font-family: var(--realmed-font-family);
+    font-size: var(--realmed-text-size);
+    line-height: 1.5;
+  }
+  :is(.page-shell, .list-detail-dialog) th {
+    font-weight: var(--realmed-weight-emphasis);
+    text-transform: none;
+  }
+  :is(.page-shell, .list-detail-dialog) td {
+    font-weight: var(--realmed-weight-regular);
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(b, strong) {
+    font-weight: var(--realmed-weight-emphasis);
+  }
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone)
+    :is(small, .table-selection-label, .table-pagination, .typography-help) {
+    font-size: var(--realmed-help-size);
+    line-height: 1.5;
+  }
+}
+
+@media screen and (max-width: 1024px), screen and (pointer: coarse) {
+  :is(.page-shell, .list-detail-dialog, .realmed-standalone) :is(input, select, textarea, .input) {
+    font-size: var(--realmed-field-touch-size);
+  }
+}

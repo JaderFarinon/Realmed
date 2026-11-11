@@ -7,6 +7,24 @@ const origin = process.env.REALMED_UI_TEST_URL || 'http://127.0.0.1:5186'
 async function run() {
   const browser = await chromium.launch({ headless: true })
   try {
+    const automatic=await browser.newPage({viewport:{width:1366,height:768}})
+    await prepare(automatic)
+    const automaticRequests=[]
+    await automatic.route('**/api/integrations/stenci/**',route=>{
+      assert.equal(route.request().method(),'GET','Automatic consultations never send credentials from the browser')
+      const url=new URL(route.request().url());automaticRequests.push(url.pathname)
+      const data=url.pathname.endsWith('/search')?{items:[{external_id:'auto-1',full_name:'Paciente automático fictício',raw:{id:'auto-1',name:'Paciente automático fictício',patient:{}}}],hasMore:false}:{items:[],hasMore:false}
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)})
+    })
+    await automatic.goto(origin+'/central-de-guias/novo')
+    await automatic.getByPlaceholder('Digite nome, CPF etc.').fill('Paciente')
+    await automatic.getByText('Paciente automático fictício',{exact:true}).waitFor()
+    assert.equal(await automatic.getByRole('dialog',{name:'Consultar dados do Stenci'}).count(),0)
+    assert.ok(automaticRequests.some(path=>path.endsWith('/insurances')))
+    assert.ok(automaticRequests.some(path=>path.endsWith('/insurance-plans')))
+    assert.ok(automaticRequests.some(path=>path.endsWith('/professionals')))
+    assert.equal(await automatic.evaluate(()=>Object.keys({...localStorage,...sessionStorage}).some(key=>/password|senha|credential/i.test(key))),false)
+    await automatic.close()
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
     await prepare(page)
     const consulted = new Set(), operationsReceived = [], errors = []

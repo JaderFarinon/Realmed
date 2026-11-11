@@ -54,10 +54,18 @@ withDefaults(
 )
 const icons: Record<string, string> = {
   add: 'M12 5v14M5 12h14',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
+  fileAdd: 'M5 3h9l5 5v4M5 3v18h7M14 3v6h5M17 14v8M13 18h8',
+  scan: 'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M7 9h10M7 12h10M7 15h7',
+  attach: 'm8 12 7-7a4 4 0 0 1 6 6L10 22a6 6 0 0 1-8-8L13 3M6 16 17 5',
   edit: 'm16 3 5 5-13 13H3v-5L16 3Zm-2 2 5 5',
   open: 'M8 4H4v16h16v-4M14 4h6v6M20 4 10 14',
+  back: 'M19 12H5m7-7-7 7 7 7',
   delete: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
+  archive: 'M3 5h18v4H3V5Zm2 4v12h14V9M9 13h6',
+  trashEye: 'M2 7h10M4 7V5h6v2M4 7l.8 13h4.5L10 7M5.5 10v7M8 10v7M14 12s1.2-2 3.5-2 3.5 2 3.5 2-1.2 2-3.5 2-3.5-2-3.5-2Zm3.5 0h.01',
   refresh: 'M20 7a8 8 0 1 0 1 7M20 3v5h-5',
+  restore: 'M4 7v5h5M4.5 12a8 8 0 1 0 2-5.5L4 9',
   toggle: 'M7 6h10a6 6 0 0 1 0 12H7A6 6 0 0 1 7 6Zm0 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
   download: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
   upload: 'M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5',

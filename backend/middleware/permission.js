@@ -141,7 +141,51 @@ const modulePermission =
     }
   };
 
+const modulePermissionAny = (modules) => async (req, res, next) => {
+  try {
+    if (process.env.PERMISSIONS_ENABLED === "false") {
+      req.realmedAllowedModules = modules.map((m) => m[0]);
+      return next();
+    }
+    await refreshRole(req);
+    if (
+      process.env.PERMISSIONS_ENABLED === "false" ||
+      ["admin", "masteradmin"].includes(req.user.role)
+    ) {
+      req.realmedAllowedModules = modules.map((m) => m[0]);
+      return next();
+    }
+    if (!req.user.role)
+      return res.status(401).json({ error: "Usuário inativo." });
+    const columns = {
+      view: "can_view",
+      create: "can_create",
+      edit: "can_edit",
+      delete: "can_delete",
+    };
+    const [rows] = await db.query(
+      "SELECT module_key,can_view,can_create,can_edit,can_delete FROM user_permissions WHERE user_id = ?",
+      [req.user.id],
+    );
+    req.realmedAllowedModules = modules
+      .filter(([key, action]) =>
+        rows.some(
+          (r) => r.module_key === key && r.can_view && r[columns[action]],
+        ),
+      )
+      .map((m) => m[0]);
+    if (req.realmedAllowedModules.length) return next();
+    return res
+      .status(403)
+      .json({ error: DEFAULT_DENIED_MESSAGE, code: "PERMISSION_DENIED" });
+  } catch {
+    return res
+      .status(500)
+      .json({ error: "Não foi possível validar a permissão." });
+  }
+};
 module.exports = {
+  modulePermissionAny,
   permissionMiddleware,
   canManageRole,
   ROLE_LEVEL,

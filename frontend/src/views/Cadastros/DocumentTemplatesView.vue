@@ -4,7 +4,7 @@
     subtitle="Templates PDF e posicionamento dos campos"
     list
   >
-    <p v-if="message" class="text-error-700" role="alert">{{ message }}</p>
+    
     <DataList
       v-model:selected="selected"
       :items="filteredTemplates"
@@ -35,9 +35,13 @@
       @close="editorOpen = false"
     >
       <form class="grid gap-3 md:grid-cols-4" @submit.prevent="saveTemplate">
-        <label>Nome<input v-model="form.name" class="input" placeholder="Nome" required /></label>
         <label
-          >Tipo<select v-model="form.document_type" class="input" required>
+          ><FieldLabel :required="true">Nome</FieldLabel
+          ><input v-model="form.name" class="input" placeholder="Nome" required
+        /></label>
+        <label
+          ><FieldLabel :required="true">Tipo</FieldLabel
+          ><select v-model="form.document_type" class="input" required>
             <option value="" disabled>Tipo</option>
             <option v-for="type in types" :key="type" :value="type">
               {{ documentTypeLabels[type as keyof typeof documentTypeLabels] }}
@@ -112,6 +116,9 @@
   </PageShell>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
+import FieldLabel from '@/components/FieldLabel.vue'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '@/plugins/axios'
@@ -227,8 +234,32 @@ async function uploadTemplate(event: Event, id: number) {
   await load()
 }
 async function toggle(item: any) {
-  await api.put(`/document-templates/${item.id}`, { active: !item.active })
+  await api.patch(`/document-templates/${item.id}/active`, { active: !item.active })
   await load()
+}
+const deleting = ref(false)
+const messageError = ref(false)
+async function removeTemplate(item: any) {
+  if (
+    !window.confirm(
+      `Excluir o modelo “${item.name}”? Os campos e o PDF exclusivo deste modelo também serão removidos. Modelos vinculados a documentos não podem ser excluídos.`,
+    )
+  )
+    return
+  deleting.value = true
+  message.value = ''
+  try {
+    await api.delete(`/document-templates/${item.id}`)
+    selected.value = null
+    messageError.value = false
+    message.value = 'Modelo excluído.'
+    await load()
+  } catch (error: any) {
+    messageError.value = true
+    message.value = error.response?.data?.error || 'Não foi possível excluir o modelo.'
+  } finally {
+    deleting.value = false
+  }
 }
 const selectedField = ref<any>(null)
 const fieldRows = computed(() =>
@@ -237,11 +268,16 @@ const fieldRows = computed(() =>
   ),
 )
 const fieldColumns = [
-  { key: '_rowKey', label: 'Linha', width: '64px', format: (_value: any, item: any) => fields.value.indexOf(item) + 1 },
-  { key: 'field_key', label: 'Campo' },
-  { key: 'page', label: 'Página' },
-  { key: 'x', label: 'X' },
-  { key: 'y', label: 'Y' },
+  {
+    key: '_rowKey',
+    label: 'Linha',
+    width: '64px',
+    format: (_value: any, item: any) => fields.value.indexOf(item) + 1,
+  },
+  { key: 'field_key', label: 'Campo', required: true },
+  { key: 'page', label: 'Página', required: true },
+  { key: 'x', label: 'X', required: true },
+  { key: 'y', label: 'Y', required: true },
   { key: 'width', label: 'Largura' },
   { key: 'height', label: 'Altura' },
   { key: 'font_size', label: 'Fonte' },
@@ -328,8 +364,18 @@ const toolbarActions = computed(() => [
   {
     icon: 'toggle',
     label: selected.value?.active ? 'Desativar modelo' : 'Ativar modelo',
-    disabled: !selected.value || !canOperational('document_templates', 'canEdit'),
+    disabled: !selected.value || !canOperational('document_templates', 'canDelete'),
     onClick: () => selected.value && toggle(selected.value),
+  },
+  {
+    icon: 'delete',
+    label: 'Excluir modelo selecionado',
+    variant: 'danger' as const,
+    disabled:
+      !selected.value ||
+      deleting.value ||
+      !canOperational('document_templates', 'canDelete'),
+    onClick: () => selected.value && removeTemplate(selected.value),
   },
   { icon: 'refresh', label: 'Atualizar', onClick: load },
 ])
@@ -338,4 +384,6 @@ function clearListFilters() {
   search.value = ''
   typeFilter.value = ''
 }
+
+useFeedback(() => unwrapNoticeValue(message), () => unwrapNoticeValue(messageError) ? 'error' : 'success')
 </script>

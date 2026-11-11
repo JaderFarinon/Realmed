@@ -5,6 +5,12 @@ export interface StenciOperation {
   search?: string
   limit?: number
   offset?: number
+  kind?: string
+  date?: string
+  scheduleId?: string
+  request?: any
+  scheduleIds?: string[]
+  id?: string
 }
 interface Pending {
   operation: StenciOperation

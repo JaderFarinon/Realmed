@@ -5,8 +5,10 @@ export interface AuthUser {
   id: number
   username: string
   role: string
+  authProvider?: 'STENCI' | 'LOCAL'
   name?: string | null
   email?: string | null
+  phone?: string | null
   permissionsEnabled?: boolean
   permissions?: Array<{
     moduleKey: string
@@ -46,6 +48,9 @@ export function useAuthUser() {
   const clearUser = () => {
     user.value = null
   }
+  const updateProfile = (profile: Pick<AuthUser, 'name' | 'email' | 'phone'>) => {
+    if (user.value) user.value = { ...user.value, name: profile.name, email: profile.email, phone: profile.phone }
+  }
   const canOperational = (
     moduleKey: string,
     permission: 'canView' | 'canCreate' | 'canEdit' | 'canDelete' = 'canEdit',
@@ -66,6 +71,7 @@ export function useAuthUser() {
     role: computed(() => user.value?.role ?? null),
     loadUser,
     clearUser,
+    updateProfile,
     canOperational,
   }
 }

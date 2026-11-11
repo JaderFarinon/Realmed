@@ -1,0 +1,9 @@
+/* One typography rule for navigation links, group headings and subitems. */
+.realmed-sidebar nav :is(.menu-link, .menu-group-toggle) {
+  font-family: var(--font-outfit);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+}

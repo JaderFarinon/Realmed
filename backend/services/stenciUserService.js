@@ -45,7 +45,8 @@ async function selectUser(connection, sql, value) {
 async function selectPerson(connection, column, value) {
   if (!value) return null
   const [rows] = await connection.query(
-    `SELECT p.*, u.id AS linked_user_id, u.stenci_user_id AS linked_stenci_user_id
+    `SELECT p.*, u.id AS linked_user_id, u.stenci_user_id AS linked_stenci_user_id,
+            u.auth_provider AS linked_auth_provider
        FROM people p LEFT JOIN users u ON u.person_id = p.id
       WHERE p.${column} = ? FOR UPDATE`,
     [value],
@@ -58,6 +59,9 @@ async function selectPerson(connection, column, value) {
 }
 
 function assertCompatible(candidate, identity) {
+  if (candidate?.auth_provider === 'LOCAL' || candidate?.linked_auth_provider === 'LOCAL') {
+    throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
+  }
   if (candidate?.stenci_user_id != null && String(candidate.stenci_user_id) !== identity.stenci_user_id) {
     throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
   }
@@ -90,6 +94,11 @@ async function reconcile(connection, identity, logger) {
   if (compatibleIds.size > 1) throw new UserSyncError('USER_IDENTITY_CONFLICT', 409)
 
   const user = byStenci || byEmail || byUsername || byIdentity
+  if (user && user.status !== 'active') {
+    const error = new UserSyncError('USER_ACCESS_DISABLED', 403)
+    error.message = 'Seu acesso ao Realmed está bloqueado ou inativo. Solicite liberação ao administrador.'
+    throw error
+  }
   const reconciledBy = byStenci ? 'stenci_user_id' : byEmail ? 'email' : byUsername ? 'username' : byIdentity ? 'cpf' : null
 
   // Lock and reconcile people independently of users. This catches legacy, unlinked
@@ -128,7 +137,7 @@ async function reconcile(connection, identity, logger) {
     const username = identity.stenci_username || user.username
     await connection.query(
       `UPDATE users SET stenci_user_id = ?, stenci_username = ?, username = ?, person_id = ?,
-              status = 'active', last_login = NOW(), updated_at = NOW() WHERE id = ?`,
+              last_login = NOW(), updated_at = NOW() WHERE id = ?`,
       [identity.stenci_user_id, identity.stenci_username, username, personId, user.id],
     )
   } else {
@@ -144,7 +153,7 @@ async function reconcile(connection, identity, logger) {
   logger.info(`[REALMED USER SYNC] reconciliado por: ${reconciledBy || (matchingPerson ? 'person' : 'novo usuário')}`)
   developmentLog(logger, `criado novo usuário: ${!user}`)
   const [synced] = await connection.query(
-    `SELECT u.id, u.username, u.role, u.status, u.person_id, u.stenci_user_id, u.stenci_username,
+    `SELECT u.id, u.username, u.role, u.status, u.person_id, u.stenci_user_id, u.stenci_username, u.auth_provider,
             p.full_name, p.email, p.avatar_url
        FROM users u LEFT JOIN people p ON p.id = u.person_id WHERE u.id = ? LIMIT 1`,
     [userId],

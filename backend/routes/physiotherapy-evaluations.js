@@ -1,39 +1,280 @@
-const express = require('express')
-const auth = require('../middleware/auth')
-const { modulePermission } = require('../middleware/permission')
-const { knex, history, handle, id } = require('./guide-center')
-
-const router = express.Router()
-const fields = ['chief_complaint','current_history','functional_limitations','physical_exam','pain_score','pain_classification','pain_location','severity','severity_justification','care_risk','individual_monitoring','precautions','specific_care_notes','therapeutic_goals','conducts','conduct_description','reevaluation_date','reevaluation_notes','regions','physiotherapist_id','evaluation_date']
-const jsonFields = new Set(['precautions', 'conducts', 'regions'])
-const enums = { severity: ['MILD','MODERATE','SEVERE'], care_risk: ['LOW','MODERATE','HIGH'] }
-router.use(auth)
-
-const normalize = (body) => Object.fromEntries(fields.filter((key) => body[key] !== undefined).map((key) => {
-  let value = body[key]
-  if (jsonFields.has(key)) value = JSON.stringify(Array.isArray(value) ? value : [])
-  if (typeof value === 'string') value = value.trim() || null
-  return [key, value]
-}))
-const serialize = (row) => {
-  if (!row) return null
-  for (const key of jsonFields) if (typeof row[key] === 'string') { try { row[key] = JSON.parse(row[key]) } catch { row[key] = [] } }
-  return row
-}
-function validate(data, completing = false) {
-  if (data.pain_score != null && (!Number.isInteger(Number(data.pain_score)) || Number(data.pain_score) < 0 || Number(data.pain_score) > 10)) throw Object.assign(new Error('A dor EVA deve ser um número inteiro entre 0 e 10.'), { status: 422 })
-  for (const [key, values] of Object.entries(enums)) if (data[key] != null && !values.includes(data[key])) throw Object.assign(new Error(`Valor inválido para ${key}.`), { status: 422 })
-  if (completing) {
-    const labels = { chief_complaint:'queixa principal', physical_exam:'exame físico', severity:'gravidade', care_risk:'risco assistencial', therapeutic_goals:'objetivos terapêuticos', conducts:'conduta', physiotherapist_id:'fisioterapeuta', evaluation_date:'data da avaliação' }
-    const missing = Object.entries(labels).filter(([key]) => data[key] == null || data[key] === '' || (key === 'conducts' && (!Array.isArray(data[key]) || !data[key].length))).map(([,label]) => label)
-    if (missing.length) throw Object.assign(new Error(`Complete a avaliação antes de concluir: ${missing.join(', ')}.`), { status: 422, missing })
+const express = require("express"),
+  auth = require("../middleware/auth"),
+  { modulePermission } = require("../middleware/permission"),
+  { knex, history, handle, id } = require("./guide-center");
+const {
+  serialize,
+  normalize,
+  validate,
+} = require("../services/evaluationValidation");
+const router = express.Router();
+router.use(auth);
+const responseError = (res, e) =>
+  e.missing
+    ? res.status(e.status).json({ error: e.message, missing: e.missing })
+    : handle(res, e);
+router.get(
+  "/guide-processes/:id/evaluation/options",
+  modulePermission("guide_processes"),
+  async (req, res) => {
+    try {
+      const process = await knex("guide_processes")
+        .where({ id: id(req.params.id) })
+        .whereNull("deleted_at")
+        .first();
+      if (!process)
+        return res.status(404).json({ error: "Tratamento não encontrado." });
+      const professionals = await knex("professionals")
+        .whereRaw("UPPER(council) = ?", ["CREFITO"])
+        .select("id", "full_name", "council", "council_number", "state");
+      const patient = await knex("patients")
+        .where({ id: process.patient_id })
+        .select(
+          "full_name",
+          "cpf",
+          "birth_date",
+          "gender",
+          "cellphone",
+          "phone",
+        )
+        .first();
+      res.set("Cache-Control", "no-store").json({ professionals, patient });
+    } catch (e) {
+      handle(res, e);
+    }
+  },
+);
+router.get(
+  "/guide-processes/:id/evaluation",
+  modulePermission("guide_processes"),
+  async (req, res) => {
+    try {
+      const processId = id(req.params.id);
+      if (!(await knex("guide_processes").where({ id: processId }).whereNull("deleted_at").first()))
+        return res.status(404).json({ error: "Tratamento não encontrado." });
+      res.json(
+        serialize(
+          await knex("physiotherapy_evaluations")
+            .where({ guide_process_id: processId })
+            .first(),
+        ),
+      );
+    } catch (e) {
+      handle(res, e);
+    }
+  },
+);
+async function save(req, res) {
+  const trx = await knex.transaction();
+  try {
+    const processId = id(req.params.id),
+      process = await trx("guide_processes")
+        .where({ id: processId })
+        .forUpdate()
+        .first();
+    if (!process)
+      throw Object.assign(new Error("Tratamento não encontrado."), {
+        status: 404,
+      });
+    require("../services/treatmentStages").assertActive(process);
+    await require("../services/treatmentStages").assertStageUnlocked(trx, process, "evaluation");
+    require("../services/guideContinuity").assertOriginalEvaluation(process);
+    const old = await trx("physiotherapy_evaluations")
+      .where({ guide_process_id: processId })
+      .first();
+    if (old?.status === "COMPLETED")
+      throw Object.assign(
+        new Error("Reabra a avaliação concluída antes de editar."),
+        { status: 409 },
+      );
+    const data = normalize(req.body);
+    validate({ ...serialize(old), ...serialize(data) });
+    if (data.physiotherapist_id) {
+      const professional = await trx("professionals")
+        .where({ id: data.physiotherapist_id })
+        .first();
+      if (
+        !professional ||
+        String(professional.council).toUpperCase() !== "CREFITO"
+      )
+        throw Object.assign(
+          new Error("Selecione um fisioterapeuta com CREFITO."),
+          { status: 422 },
+        );
+    }
+    data.status = "IN_PROGRESS";
+    data.updated_by = req.user.id;
+    if (old)
+      await trx("physiotherapy_evaluations").where({ id: old.id }).update(data);
+    else
+      await trx("physiotherapy_evaluations").insert({
+        ...data,
+        guide_process_id: processId,
+        created_by: req.user.id,
+      });
+    let sync = {};
+    const rotation = await trx("physiotherapy_rotation_assignments")
+      .where({ guide_process_id: processId })
+      .first();
+    for (const key of [
+      "referral_date",
+      "medical_diagnosis",
+      "cid",
+      "requested_sessions",
+      "expected_start_date",
+      "treatment_days",
+      "physiotherapist_id",
+    ])
+      if (data[key] !== undefined) sync[key] = data[key];
+    // The clinical date belongs to the evaluation. Reception is already closed
+    // when this stage opens, and its scheduled date must remain unchanged.
+    if (data.evaluation_date !== undefined &&
+        !require("../services/treatmentStages").state(process).reception?.completed_at)
+      sync.assessment_date = data.evaluation_date;
+    if (rotation) sync.physiotherapist_id = rotation.professional_id;
+    else if (sync.physiotherapist_id == null) delete sync.physiotherapist_id;
+    sync = require("../services/treatmentStages").evaluationSync(process, sync, req.preserveEvaluationCentral);
+    require("../services/treatmentStages").assertFieldsOpen(process, sync);
+    if (Object.keys(sync).length)
+      await trx("guide_processes").where({ id: processId }).update(sync);
+    await history(
+      trx,
+      processId,
+      req.user.id,
+      "EVALUATION_DRAFT_SAVED",
+      null,
+      null,
+      "IN_PROGRESS",
+    );
+    await trx.commit();
+    res
+      .status(old ? 200 : 201)
+      .json(
+        serialize(
+          await knex("physiotherapy_evaluations")
+            .where({ guide_process_id: processId })
+            .first(),
+        ),
+      );
+  } catch (e) {
+    await trx.rollback();
+    responseError(res, e);
   }
 }
-async function processExists(processId) { return Boolean(await knex('guide_processes').where({ id: processId }).first()) }
-router.get('/guide-processes/:id/evaluation', modulePermission('guide_processes'), async (req,res) => { try { const processId=id(req.params.id); if(!await processExists(processId)) throw Object.assign(new Error('Tratamento não encontrado.'),{status:404}); res.json(serialize(await knex('physiotherapy_evaluations').where({guide_process_id:processId}).first())) } catch(e){handle(res,e)} })
-async function save(req,res) { const trx=await knex.transaction(); try { const processId=id(req.params.id); const process=await trx('guide_processes').where({id:processId}).first(); if(!process) throw Object.assign(new Error('Tratamento não encontrado.'),{status:404}); const old=await trx('physiotherapy_evaluations').where({guide_process_id:processId}).first(); if(old?.status==='COMPLETED') throw Object.assign(new Error('Reabra a avaliação concluída antes de editar.'),{status:409}); const data=normalize(req.body); validate({...old,...req.body,...data}); data.status='IN_PROGRESS'; data.updated_by=req.user.id; if(old) await trx('physiotherapy_evaluations').where({id:old.id}).update(data); else await trx('physiotherapy_evaluations').insert({...data,guide_process_id:processId,created_by:req.user.id}); if(req.body.sync_schedule===true && Array.isArray(req.body.treatment_days)) await trx('guide_processes').where({id:processId}).update({treatment_days:JSON.stringify(req.body.treatment_days)}); await history(trx,processId,req.user.id,'EVALUATION_DRAFT_SAVED',null,null,'IN_PROGRESS'); await trx.commit(); res.status(old?200:201).json(serialize(await knex('physiotherapy_evaluations').where({guide_process_id:processId}).first())) } catch(e){await trx.rollback();handle(res,e)} }
-router.post('/guide-processes/:id/evaluation', modulePermission('guide_processes','edit'), save)
-router.put('/guide-processes/:id/evaluation', modulePermission('guide_processes','edit'), save)
-router.post('/guide-processes/:id/evaluation/complete', modulePermission('guide_processes','edit'), async(req,res)=>{const trx=await knex.transaction();try{const processId=id(req.params.id),row=await trx('physiotherapy_evaluations').where({guide_process_id:processId}).first();if(!row)throw Object.assign(new Error('Salve um rascunho antes de concluir.'),{status:409});const parsed=serialize({...row});validate(parsed,true);await trx('physiotherapy_evaluations').where({id:row.id}).update({status:'COMPLETED',updated_by:req.user.id});await history(trx,processId,req.user.id,'EVALUATION_COMPLETED','status','IN_PROGRESS','COMPLETED');await trx.commit();res.json(serialize(await knex('physiotherapy_evaluations').where({id:row.id}).first()))}catch(e){await trx.rollback();if(e.missing)return res.status(e.status).json({error:e.message,missing:e.missing});handle(res,e)}})
-
-module.exports = router
+router.post(
+  "/guide-processes/:id/evaluation",
+  modulePermission("guide_processes", "edit"),
+  save,
+);
+router.put(
+  "/guide-processes/:id/evaluation",
+  modulePermission("guide_processes", "edit"),
+  save,
+);
+router.post(
+  "/guide-processes/:id/evaluation/complete",
+  modulePermission("guide_processes", "edit"),
+  async (req, res) => {
+    const trx = await knex.transaction();
+    try {
+      const processId = id(req.params.id);
+      const process = await trx("guide_processes")
+        .where({ id: processId })
+        .forUpdate()
+        .first();
+      if (!process)
+        throw Object.assign(new Error("Tratamento não encontrado."), { status: 404 });
+      require("../services/treatmentStages").assertActive(process);
+      await require("../services/treatmentStages").assertStageUnlocked(trx, process, "evaluation");
+      require("../services/guideContinuity").assertOriginalEvaluation(process);
+      const row = await trx("physiotherapy_evaluations")
+        .where({ guide_process_id: processId })
+        .first();
+      if (!row)
+        throw Object.assign(new Error("Salve um rascunho antes de concluir."), {
+          status: 409,
+        });
+      if (row.status === "COMPLETED") {
+        await trx.commit();
+        return res.json(serialize(row));
+      }
+      validate(serialize(row), true);
+      await trx("physiotherapy_evaluations").where({ id: row.id }).update({
+        status: "COMPLETED",
+        completed_at: knex.fn.now(),
+        updated_by: req.user.id,
+      });
+      await history(
+        trx,
+        processId,
+        req.user.id,
+        "EVALUATION_COMPLETED",
+        "status",
+        "IN_PROGRESS",
+        "COMPLETED",
+      );
+      await trx.commit();
+      res.json(
+        serialize(
+          await knex("physiotherapy_evaluations").where({ id: row.id }).first(),
+        ),
+      );
+    } catch (e) {
+      await trx.rollback();
+      responseError(res, e);
+    }
+  },
+);
+router.post(
+  "/guide-processes/:id/evaluation/reopen",
+  modulePermission("guide_processes", "edit"),
+  async (req, res) => {
+    const trx = await knex.transaction();
+    try {
+      const processId = id(req.params.id);
+      const process = await trx("guide_processes")
+        .where({ id: processId })
+        .forUpdate()
+        .first();
+      if (!process)
+        throw Object.assign(new Error("Tratamento não encontrado."), { status: 404 });
+      require("../services/treatmentStages").assertActive(process);
+      await require("../services/treatmentStages").assertStageUnlocked(trx, process, "evaluation");
+      require("../services/guideContinuity").assertOriginalEvaluation(process);
+      await require("../services/treatmentStages").assertCanReopenStage(trx, process, "evaluation");
+      const row = await trx("physiotherapy_evaluations")
+        .where({ guide_process_id: processId })
+        .first();
+      if (!row)
+        throw Object.assign(new Error("Avaliação não encontrada."), {
+          status: 404,
+        });
+      if (row.status === "COMPLETED") {
+        await trx("physiotherapy_evaluations").where({ id: row.id }).update({
+          status: "IN_PROGRESS",
+          completed_at: null,
+          updated_by: req.user.id,
+        });
+        await history(
+          trx,
+          processId,
+          req.user.id,
+          "EVALUATION_REOPENED",
+          "status",
+          "COMPLETED",
+          "IN_PROGRESS",
+        );
+      }
+      await trx.commit();
+      res.json(
+        serialize(
+          await knex("physiotherapy_evaluations").where({ id: row.id }).first(),
+        ),
+      );
+    } catch (e) {
+      await trx.rollback();
+      handle(res, e);
+    }
+  },
+);
+module.exports = router;

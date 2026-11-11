@@ -3,13 +3,7 @@
     :title="patient?.full_name || 'Detalhes do paciente'"
     subtitle="Identificação, convênios e histórico de tratamentos"
   >
-    <template #actions
-      ><TableActionToolbar
-        :actions="[
-          { icon: 'open', label: 'Voltar aos pacientes', onClick: () => router.push('/pacientes') },
-        ]"
-    /></template>
-    <p v-if="message" role="alert" class="text-error-700">{{ message }}</p>
+    
     <template v-if="patient"
       ><section class="panel">
         <h2 class="section-title">Identificação</h2>
@@ -43,12 +37,13 @@
   </PageShell>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
 import DataList from '@/components/DataList.vue'
-import TableActionToolbar from '@/components/TableActionToolbar.vue'
 import { treatmentStatusLabel } from '@/utils/treatmentStatus'
 const route = useRoute(),
   router = useRouter(),
@@ -90,4 +85,6 @@ onMounted(async () => {
     message.value = (e as any).response?.data?.error || 'Não foi possível carregar o paciente.'
   }
 })
+
+useFeedback(() => unwrapNoticeValue(message), () => 'error')
 </script>

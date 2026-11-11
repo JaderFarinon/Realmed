@@ -1,0 +1,453 @@
+.billing-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+}
+.billing-agenda-filters {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.billing-agenda-filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.billing-agenda-filters select {
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+}
+@media (max-width: 1100px) {
+  .billing-agenda-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .billing-agenda-filters {
+    grid-template-columns: 1fr;
+  }
+}
+.billing-featured-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.billing-featured-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px;
+}
+.billing-featured-card h3 {
+  font-size: var(--realmed-text-size);
+  color: #7a8d9e;
+  font-weight: var(--realmed-weight-medium);
+}
+.billing-featured-card b {
+  display: block;
+  color: #d98014;
+  margin: 10px 0 4px;
+}
+.billing-featured-card p {
+  color: #8b9bad;
+  font-size: var(--realmed-help-size);
+}
+.billing-additional-metrics {
+  color: #6d8195;
+  font-size: var(--realmed-help-size);
+}
+.billing-additional-metrics summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.billing-additional-metrics[open] .billing-metrics {
+  margin-top: 12px;
+}
+@media (max-width: 600px) {
+  .billing-featured-metrics {
+    grid-template-columns: 1fr;
+  }
+  .billing-featured-card {
+    padding: 16px;
+  }
+}
+@media (min-width: 1024px) and (max-height: 850px) {
+  .billing-dashboard .page-shell {
+    gap: 10px;
+  }
+  .billing-dashboard main {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+  .billing-dashboard .page-heading {
+    margin-bottom: 0;
+  }
+  .billing-dashboard .billing-period {
+    padding: 10px 16px;
+  }
+  .billing-dashboard .billing-tabs button {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  .billing-dashboard .billing-metric {
+    padding: 10px 14px;
+  }
+  .billing-dashboard .billing-chart .billing-cartesian {
+    height: 140px;
+  }
+  .billing-dashboard .billing-chart .billing-donut-layout {
+    min-height: 140px;
+  }
+  .billing-dashboard .billing-chart .billing-donut-layout svg {
+    width: 140px;
+  }
+}
+.billing-period-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.billing-period-fields label {
+  display: grid;
+  gap: 4px;
+}
+.billing-period-fields input,
+.billing-period-fields select {
+  min-height: 40px;
+  max-width: 100%;
+}
+.billing-coverage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #21846d;
+  font-size: var(--realmed-help-size);
+}
+.billing-coverage small {
+  display: block;
+  color: #8292a4;
+  font-size: inherit;
+}
+.billing-coverage--partial {
+  color: #b97a14;
+}
+.billing-live-dot {
+  background: currentColor;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.billing-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #dce5ed;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.billing-tabs button {
+  padding: 12px 18px;
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+  color: #738498;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.billing-tabs button[aria-selected='true'] {
+  border-color: #09aaba;
+  color: #078d9d;
+  font-weight: var(--realmed-weight-emphasis);
+}
+.billing-tabs button span {
+  font-size: var(--realmed-help-size);
+  border-radius: 6px;
+  background: #edf2f7;
+  padding: 1px 7px;
+}
+.billing-tabs button:focus-visible,
+.billing-chart-data:focus-visible {
+  outline: 2px solid #0bb2c4;
+  outline-offset: -2px;
+}
+.billing-tab-panel,
+.billing-agenda {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.billing-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.billing-metrics--guides {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.billing-metric {
+  padding: 16px 18px;
+  min-width: 0;
+  border: 1px solid #e1e9ef;
+  box-shadow: 0 1px 2px #12304705;
+}
+.billing-metric-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+}
+.billing-metric h3 {
+  font-size: var(--realmed-help-size);
+  font-weight: var(--realmed-weight-emphasis);
+  color: #52677a;
+}
+.billing-metric b {
+  display: block;
+  margin: 7px 0;
+  color: #d98216;
+}
+.billing-metric p {
+  font-size: var(--realmed-help-size);
+  color: #8a99ab;
+  line-height: 1.4;
+}
+.billing-metric-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: #fff4d7;
+  color: #e4a024;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.billing-metric--0 b {
+  color: #2c6fd3;
+}
+.billing-metric--0 .billing-metric-icon {
+  background: #e5efff;
+  color: #4386e5;
+}
+.billing-metric--1 b {
+  color: #0eaf85;
+}
+.billing-metric--1 .billing-metric-icon {
+  background: #ddf8ee;
+  color: #0eaf85;
+}
+.billing-metric--3 b {
+  color: #de5962;
+}
+.billing-metric--3 .billing-metric-icon {
+  background: #ffe8eb;
+  color: #de5962;
+}
+.billing-chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+.billing-status-summary {
+  padding: 16px 20px;
+  display: grid;
+  gap: 10px;
+}
+.billing-status-heading,
+.billing-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+.billing-status-heading h3 {
+  font-size: var(--realmed-text-size);
+}
+.billing-status-heading span,
+.billing-section-heading p,
+.billing-help {
+  color: #8091a3;
+  font-size: var(--realmed-help-size);
+}
+.billing-status-bar {
+  display: flex;
+  height: 26px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #eef3f7;
+}
+.billing-status-bar span {
+  flex-basis: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  color: #fff;
+  font-size: var(--realmed-help-size);
+  padding-top: 3px;
+}
+.billing-status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  list-style: none;
+  padding: 0;
+  font-size: var(--realmed-help-size);
+  color: #6d8195;
+}
+.billing-status-legend li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.billing-status-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.billing-section-heading h2 {
+  font-size: var(--realmed-section-size);
+}
+.billing-segmented {
+  display: flex;
+  padding: 3px;
+  background: #edf2f6;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.billing-segmented button {
+  padding: 7px 12px;
+  border-radius: 6px;
+  color: #72869b;
+  white-space: nowrap;
+}
+.billing-segmented button[aria-pressed='true'] {
+  background: #fff;
+  box-shadow: 0 1px 3px #17334e16;
+  color: #274359;
+}
+.billing-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #8a99aa;
+  font-size: var(--realmed-help-size);
+}
+@media (min-width: 1024px) and (max-height: 850px) {
+  .billing-tab-panel,
+  .billing-agenda {
+    gap: 12px;
+  }
+  .billing-metric {
+    padding: 12px 14px;
+  }
+  .billing-metric p {
+    line-height: 1.25;
+  }
+  .billing-metric b {
+    margin: 3px 0;
+  }
+  .billing-metric-icon {
+    height: 24px;
+    width: 24px;
+  }
+  .billing-tab-panel .billing-cartesian {
+    height: 180px;
+  }
+  .billing-tab-panel .billing-donut-layout {
+    min-height: 180px;
+  }
+  .billing-tab-panel .billing-donut-layout svg {
+    width: 174px;
+  }
+  .billing-tab-panel .billing-chart {
+    gap: 8px;
+    padding: 16px;
+  }
+  .billing-status-summary {
+    padding: 12px 16px;
+  }
+}
+@media (max-width: 1250px) {
+  .billing-metrics--guides {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .billing-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .billing-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .billing-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .billing-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .billing-tabs button {
+    padding: 11px 12px;
+  }
+  .billing-period {
+    align-items: flex-start;
+  }
+  .billing-footer {
+    line-height: 1.5;
+  }
+}
+@media (max-width: 480px) {
+  .billing-period {
+    padding: 14px;
+  }
+  .billing-period-fields {
+    gap: 8px;
+    width: 100%;
+  }
+  .billing-period-fields label {
+    min-width: 0;
+    flex: 1;
+  }
+  .billing-period-fields input {
+    width: 100%;
+    min-width: 0;
+  }
+  .billing-period-fields button {
+    width: 100%;
+  }
+  .billing-metrics {
+    gap: 8px;
+  }
+  .billing-metric {
+    padding: 12px;
+  }
+  .billing-metric-heading {
+    min-height: 36px;
+  }
+  .billing-metric-icon {
+    display: none;
+  }
+  .billing-status-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .billing-segmented {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .billing-tab-panel .list-filters .billing-period-fields {
+    display: grid;
+  }
+}

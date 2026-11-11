@@ -60,7 +60,10 @@ async function main() {
       "002_create_users.js",
       "20250520000031_create_user_permissions.js",
       "20260916000001_add_stenci_users.js",
+      "20261106000001_add_local_authentication.js",
       "20261014000001_create_inventory.js",
+      "20261019000002_legacy_inventory_import.js",
+      "20261019000005_consumption_and_purchase_orders.js",
     ])
       await require(path.join(root, "backend/migrations", migration)).up(db);
     const [personId] = await db("people").insert({
@@ -357,6 +360,294 @@ async function main() {
       Number((await db("permission_audit").count("* as total").first()).total),
       1,
     );
+    // New consumption/purchase split: only this disposable DB is touched.
+    await db("users").where({ id: userId }).update({ role: "user" });
+    await call("GET", "/inventory/consumptions", undefined, userToken, 403);
+    await db("user_permissions").insert({
+      user_id: userId,
+      module_key: "inventory_consumptions",
+      can_view: true,
+      can_create: true,
+    });
+    await call("POST", "/inventory/stock/adjust", {
+      product_id: product.id,
+      sector_id: sector,
+      quantity: 10,
+      notes: "Consumption test balance",
+    });
+    const addProduct = async (name, minimum = 0, active = true) =>
+      call(
+        "POST",
+        "/inventory/products",
+        {
+          name,
+          category_id: cat.id,
+          presentation_id: unit.id,
+          minimum_quantity: minimum,
+          active,
+        },
+        token,
+        201,
+      );
+    const equal = await addProduct("Equal minimum", 4),
+      zero = await addProduct("Zero minimum", 0),
+      above = await addProduct("Above minimum", 4),
+      inactive = await addProduct("Inactive purchase exclusion", 3, false);
+    await call("POST", "/inventory/stock/adjust", {
+      product_id: equal.id,
+      sector_id: sector,
+      quantity: 4,
+      notes: "Equal threshold",
+    });
+    await call("POST", "/inventory/stock/adjust", {
+      product_id: above.id,
+      sector_id: sector,
+      quantity: 8,
+      notes: "Above threshold",
+    });
+    const payload = {
+      request_key: crypto.randomUUID(),
+      sector_id: sector,
+      created_by: adminId,
+      items: [{ product_id: product.id, quantity: 3 }],
+    };
+    await call(
+      "POST",
+      "/inventory/consumptions",
+      { ...payload, sector_id: other.id },
+      userToken,
+      403,
+    );
+    const repeated = await Promise.all([
+      call("POST", "/inventory/consumptions", payload, userToken, 201),
+      call("POST", "/inventory/consumptions", payload, userToken, 201),
+    ]);
+    assert.equal(repeated[0].id, repeated[1].id);
+    assert.equal(repeated[0].created_by, userId);
+    const balanceOf = async (id) =>
+      Number(
+        (
+          await db("inventory_balances")
+            .where({ product_id: id, sector_id: sector })
+            .first()
+        )?.quantity || 0,
+      );
+    assert.equal(await balanceOf(product.id), 7);
+    await call(
+      "POST",
+      "/inventory/consumptions",
+      { ...payload, items: [{ product_id: product.id, quantity: 4 }] },
+      userToken,
+      409,
+    );
+    await call(
+      "POST",
+      "/inventory/consumptions",
+      {
+        ...payload,
+        request_key: crypto.randomUUID(),
+        items: [
+          { product_id: product.id, quantity: 2 },
+          { product_id: zero.id, quantity: 1 },
+        ],
+      },
+      userToken,
+      409,
+    );
+    assert.equal(
+      await balanceOf(product.id),
+      7,
+      "multi-item failure rolls back prior deduction",
+    );
+    await call(
+      "POST",
+      "/inventory/consumptions",
+      {
+        ...payload,
+        request_key: crypto.randomUUID(),
+        items: [{ product_id: inactive.id, quantity: 1 }],
+      },
+      userToken,
+      422,
+    );
+    await call(
+      "POST",
+      "/inventory/consumptions",
+      {
+        ...payload,
+        request_key: crypto.randomUUID(),
+        items: [{ product_id: product.id, quantity: -1 }],
+      },
+      userToken,
+      422,
+    );
+    const competing = await Promise.all(
+      [1, 2].map(async () => {
+        const result = await fetch(base + "/inventory/consumptions", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + userToken,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...payload,
+            request_key: crypto.randomUUID(),
+            items: [{ product_id: product.id, quantity: 5 }],
+          }),
+        });
+        return result.status;
+      }),
+    );
+    assert.deepEqual(competing.sort(), [201, 409]);
+    assert.equal(await balanceOf(product.id), 2);
+    const consumptionOptions = await call(
+      "GET",
+      "/inventory/consumptions-options",
+      undefined,
+      userToken,
+    );
+    assert.equal(consumptionOptions.sectors.length, 1);
+    assert.equal(
+      Number(
+        consumptionOptions.products.find((p) => p.id === product.id).balance,
+      ),
+      2,
+    );
+    const beforePurchase = await balanceOf(product.id);
+    const autoBody = {
+      request_key: crypto.randomUUID(),
+      sector_id: sector,
+      notes: "Review only",
+    };
+    const auto = await call(
+      "POST",
+      "/inventory/purchase-orders/automatic",
+      autoBody,
+      token,
+      201,
+    );
+    assert.equal(
+      (
+        await call(
+          "POST",
+          "/inventory/purchase-orders/automatic",
+          autoBody,
+          token,
+          201,
+        )
+      ).id,
+      auto.id,
+    );
+    let order = await call("GET", "/inventory/purchase-orders/" + auto.id);
+    assert.equal(order.status, "DRAFT");
+    assert.equal(
+      order.items.find((i) => i.product_id === product.id).quantity,
+      3,
+    );
+    assert.equal(
+      order.items.find((i) => i.product_id === equal.id).quantity,
+      1,
+    );
+    assert.equal(order.items.find((i) => i.product_id === zero.id).quantity, 1);
+    assert.ok(
+      !order.items.some((i) => [above.id, inactive.id].includes(i.product_id)),
+    );
+    assert.equal(await balanceOf(product.id), beforePurchase);
+    await call("PUT", "/inventory/purchase-orders/" + auto.id, {
+      revision: 0,
+      notes: "Buyer revised",
+      items: [
+        { product_id: product.id, quantity: 9 },
+        { product_id: above.id, quantity: 2 },
+      ],
+    });
+    order = await call("GET", "/inventory/purchase-orders/" + auto.id);
+    assert.equal(order.revision, 1);
+    assert.equal(order.items.length, 2);
+    assert.equal(
+      order.items.find((i) => i.product_id === product.id).quantity,
+      9,
+    );
+    assert.equal(
+      await balanceOf(product.id),
+      beforePurchase,
+      "purchase edits never change stock",
+    );
+    await call(
+      "PUT",
+      "/inventory/purchase-orders/" + auto.id,
+      { revision: 0, items: [{ product_id: product.id, quantity: 1 }] },
+      token,
+      409,
+    );
+    await call("GET", "/inventory/purchase-orders", undefined, userToken, 403);
+    await db("user_permissions").insert({
+      user_id: userId,
+      module_key: "inventory_purchase_orders",
+      can_view: true,
+      can_create: true,
+      can_edit: false,
+    });
+    await call(
+      "PUT",
+      "/inventory/purchase-orders/" + auto.id,
+      { revision: 1, items: [{ product_id: product.id, quantity: 1 }] },
+      userToken,
+      403,
+    );
+    await call(
+      "POST",
+      "/inventory/purchase-orders/automatic",
+      { request_key: crypto.randomUUID(), sector_id: other.id },
+      userToken,
+      403,
+    );
+    const ledger = await db("inventory_movements").where({
+      kind: "CONSUMPTION",
+    });
+    assert.equal(
+      ledger.reduce((sum, row) => sum + row.delta, 0),
+      -8,
+    );
+    assert.equal((await db("inventory_consumptions")).length, 2);
+    const manual = await call('POST','/inventory/purchase-orders',{request_key:crypto.randomUUID(),sector_id:sector,items:[{product_id:above.id,quantity:2}]},token,201);
+    assert.equal(manual.source,'MANUAL');assert.equal(await balanceOf(above.id),8);
+    await call('POST','/inventory/purchase-orders',{request_key:crypto.randomUUID(),sector_id:sector,items:[{product_id:product.id,quantity:1},{product_id:product.id,quantity:2}]},token,422);
+    const immutable=await fetch(base+'/inventory/consumptions/'+repeated[0].id,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'});
+    assert.equal(immutable.status,404);
+    const updatedDashboard = await call("GET", "/inventory/dashboard");
+    assert.equal(updatedDashboard.cards.purchaseDrafts, 2);
+    assert.equal(updatedDashboard.cards.consumptions, 2);
+    assert.equal(
+      Number(
+        updatedDashboard.topProducts.find((p) => p.name === product.name)
+          .quantity,
+      ),
+      23,
+    );
+    const inventoryPermissions=(await call('GET','/permissoes/catalog')).filter(p=>p.key.startsWith('inventory_')).map(p=>({moduleKey:p.key,canView:true,canCreate:true,canEdit:true,canDelete:false}));
+    await call('POST',`/permissoes/${userId}`,{permissions:inventoryPermissions,inventoryProfile:{profile:'USER',sector_id:null}},token,422);
+    const savedMatrix=await call('POST',`/permissoes/${userId}`,{permissions:inventoryPermissions,inventoryProfile:{profile:'USER',sector_id:sector}});
+    assert.ok(savedMatrix.permissions.every(p=>p.canView&&!p.canDelete));
+    await call('GET','/inventory/dashboard',undefined,userToken);
+    await call('GET','/inventory/options',undefined,userToken);
+    await call('GET','/inventory/stock',undefined,userToken);
+    await call('GET','/inventory/products',undefined,userToken);
+    const allowedCategory=await call('POST','/inventory/categories',{name:'Permission test category'},userToken,201);
+    await call('PUT',`/inventory/categories/${allowedCategory.id}`,{name:'Updated permission test category'},userToken);
+    await call('DELETE',`/inventory/categories/${allowedCategory.id}`,undefined,userToken,403);
+    await call('PATCH',`/inventory/categories/${allowedCategory.id}/active`,{active:false},userToken,403);
+    await call('GET','/guide-processes',undefined,userToken,403);
+    const me=(await call('GET','/auth/me',undefined,userToken)).user;
+    assert.ok(me.permissions.some(p=>p.moduleKey==='inventory_dashboard'&&p.canView));
+    assert.equal(me.permissions.some(p=>p.moduleKey==='guide_processes'&&p.canView),false);
+    await call('POST',`/permissoes/${userId}`,{permissions:inventoryPermissions.map(p=>p.moduleKey==='inventory_stock'?{...p,canView:false,canCreate:false,canEdit:false}:p),inventoryProfile:{profile:'USER',sector_id:sector}});
+    await call('GET','/inventory/stock',undefined,userToken,403);
+    await call('GET','/inventory/dashboard',undefined,userToken);
+    console.log('PASS stock-only account: permissions persisted, active sector enforced, view/create/edit allowed, delete/inactivate denied, unrelated treatment denied, auth/me consistent and revocation immediate.');
+    console.log(
+      "PASS consumption/purchases: permissions, actor/sector isolation, atomic rollback, retries/concurrent withdrawals, minimum/equal/zero/inactive products, editable draft, revision conflicts, dashboard and unchanged stock on purchases.",
+    );
     console.log(
       "Inventory integration verified: receipts, edits, insufficient stock, partial and concurrent fulfillment, invoice closure, requester scope, permissions and sector isolation.",
     );
@@ -388,7 +679,10 @@ async function main() {
 main().catch((error) => {
   console.error("Inventory integration verification failed:", {
     code: error.code || error.name,
-    message: error.code ? "Database operation failed" : error.message,
+    message: error.code?.startsWith("ER_")
+      ? "Database operation failed"
+      : error.message,
+    ...(error.code === "ERR_ASSERTION" ? { stack: error.stack } : {}),
   });
   process.exitCode = 1;
 });

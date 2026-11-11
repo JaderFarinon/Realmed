@@ -5,12 +5,14 @@
     @close="cancelStenciRefresh"
   >
     <p class="mb-4 text-sm text-gray-600">
-      Entre com sua conta Stenci para atualizar os dados. A sessão Stenci será encerrada após a
-      consulta; você continuará no Realmed.
+      Confirme sua conta Stenci para retomar as consultas automáticas. As credenciais ficam
+      criptografadas apenas durante sua sessão Realmed. O Stenci será desconectado após cada
+      consulta.
     </p>
     <form class="grid gap-4" @submit.prevent="submit">
       <label
-        >Usuário Stenci<input
+        ><FieldLabel :required="true">Usuário Stenci</FieldLabel
+        ><input
           v-model="username"
           class="input"
           autocomplete="username"
@@ -18,7 +20,8 @@
           :disabled="state.busy"
       /></label>
       <label
-        >Senha Stenci<input
+        ><FieldLabel :required="true">Senha Stenci</FieldLabel
+        ><input
           v-model="password"
           class="input"
           type="password"
@@ -26,7 +29,7 @@
           required
           :disabled="state.busy"
       /></label>
-      <p v-if="state.error" role="alert" class="text-error-700">{{ state.error }}</p>
+      
       <div class="flex justify-end gap-2">
         <button
           type="button"
@@ -44,6 +47,9 @@
   </ListDetailDialog>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
+import FieldLabel from '@/components/FieldLabel.vue'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import ListDetailDialog from '@/components/ListDetailDialog.vue'
 import {
@@ -87,4 +93,6 @@ async function submit() {
     state.busy = false
   }
 }
+
+useFeedback(() => unwrapNoticeValue(state).error, () => 'error')
 </script>

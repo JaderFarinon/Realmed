@@ -157,14 +157,14 @@ test('network and invalid responses become controlled errors', async () => {
   const invalid = new StenciClient({ config, fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('invalid') } }) }); await assert.rejects(invalid.authenticate('user', 'password', 'device'), { code: 'STENCI_AUTH_FAILED', status: 502, stage: 'auth' })
 })
 
-test('New Treatment uses the backend Stenci flow, preselects insurance and keeps manual fallback', () => {
+test('Reception uses backend Stenci patient data and assessment date without clinical preparation fields', () => {
   const source = fs.readFileSync(path.join(__dirname, '../../frontend/src/views/Guides/NewTreatment.vue'), 'utf8')
   assert.match(source, /\/integrations\/stenci\/patients\/search/)
-  assert.match(source, /\/integrations\/stenci\/patients\/\$\{encodeURIComponent\(patient\.external_id\)\}\/sync/)
-  assert.match(source, /selectedInsurance\.value\s*=\s*insurances\.value\.find/)
-  assert.match(source, /\/integrations\/stenci\/insurance-plans/)
-  assert.match(source, /hasCouncil\(p,\s*'CREFITO'\)/)
-  assert.match(source, /hasCouncil\(p,\s*'CRM'\)/)
+  assert.match(source, /encodeURIComponent\(patient\.external_id\)/)
+  assert.match(source, /selectedInsurance\.value\s*=\s*linked/)
+  assert.match(source, /Data da avaliação/)
+  assert.doesNotMatch(source, /\/integrations\/stenci\/(insurance-plans|professionals)/)
+  assert.doesNotMatch(source, /Data prevista de início|Quantidade de sessões|Dias e horários pretendidos|procedureSelection/)
   assert.match(source, /Não foi possível consultar o Stenci no momento\./)
   assert.match(source, /Cadastrar manualmente/)
   assert.equal(source.includes(env.STENCI_BRANCH_ID), false)

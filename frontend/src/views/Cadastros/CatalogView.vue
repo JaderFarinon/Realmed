@@ -1,6 +1,14 @@
 <template>
-  <PageShell :title="config.title" subtitle="Cadastros auxiliares da Central de Guias" list>
-    <p v-if="message" role="alert" class="text-error-700">{{ message }}</p>
+  <PageShell
+    :title="config.title"
+    :subtitle="
+      isInsurance
+        ? 'Convênios do Stenci, procedimentos e códigos substitutos para geração das guias'
+        : 'Cadastros auxiliares da Central de Guias'
+    "
+    list
+  >
+    
     <DataList
       v-model:selected="selected"
       :items="filteredItems"
@@ -38,14 +46,27 @@
     </DataList>
     <ListDetailDialog
       :open="formOpen"
-      :title="editing ? 'Editar ' + config.title.toLowerCase() : 'Novo cadastro'"
+      :title="formDialogTitle"
       wide
       @close="closeForm"
     >
-      <form class="grid gap-4 md:grid-cols-3" @submit.prevent="saveAndClose">
+      <nav v-if="isInsurance && editing" class="treatment-tabs mb-4" role="tablist" aria-label="Seções do convênio">
+        <button
+          v-for="tab in editTabs"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="treatment-tab"
+          :class="{ 'is-active': editTab === tab.id }"
+          :aria-selected="editTab === tab.id"
+          :disabled="tab.disabled"
+          @click="editTab = tab.id"
+        >{{ tab.label }}</button>
+      </nav>
+      <form v-if="!isInsurance || !editing || editTab === 'data'" class="grid gap-4 md:grid-cols-3" @submit.prevent="saveAndClose">
         <label v-for="field in config.fields" :key="field.key"
-          >{{ field.label }}
-          <select
+          ><FieldLabel :required="field.required">{{ field.label }}</FieldLabel
+          ><select
             v-if="field.options"
             v-model="form[field.key]"
             class="input"
@@ -96,13 +117,83 @@
           </div>
         </section>
 
-        <p v-if="message" class="text-sm text-red-600 md:col-span-3" role="alert">{{ message }}</p>
+        
         <button class="btn" :disabled="saving">
           {{ saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Adicionar' }}
         </button>
         <button v-if="editing" type="button" class="input" @click="closeForm">Cancelar</button>
-      </form></ListDetailDialog
+      </form>
+      <section v-if="isInsurance && editing" v-show="editTab === 'signer'">
+        <InsuranceSigner
+          :open="formOpen"
+          :embedded="true"
+          :provider="editingProvider"
+          @saved="message = ''"
+          @busy-change="signerSaving = $event"
+        />
+      </section>
+      <section v-if="isInsurance && editing" v-show="editTab === 'procedures'">
+        <InsuranceProcedures
+          v-if="canEditProcedures"
+          :open="formOpen"
+          :embedded="true"
+          :provider="editingProvider"
+          @busy-change="proceduresSaving = $event"
+        />
+        <p v-else class="text-sm text-gray-600">Seu usuário não tem acesso aos procedimentos deste convênio.</p>
+      </section>
+    </ListDetailDialog>
+    <ListDetailDialog
+      :open="replicationOpen"
+      title="Replicar entre convênios"
+      wide
+      @close="closeReplication"
     >
+      <nav class="treatment-tabs mb-4" role="tablist" aria-label="Tipo de replicação">
+        <button
+          v-for="tab in replicationTabs"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="treatment-tab"
+          :class="{ 'is-active': replicationTab === tab.id }"
+          :aria-selected="replicationTab === tab.id"
+          :disabled="tab.disabled"
+          @click="replicationTab = tab.id"
+        >{{ tab.label }}</button>
+      </nav>
+      <section v-show="replicationTab === 'procedures'">
+        <ReplicateInsuranceProcedures
+          v-if="canReplicateProcedures"
+          :open="replicationOpen"
+          :embedded="true"
+          :providers="items"
+          :initial-source="replicationTab === 'procedures' ? selected : null"
+          :ensure-local="ensureLocal"
+          @busy-change="proceduresReplicating = $event"
+        />
+        <p v-else class="text-sm text-gray-600">Seu usuário não tem permissão para replicar procedimentos.</p>
+      </section>
+      <section v-show="replicationTab === 'signer'">
+        <ReplicateInsuranceSigner
+          v-if="canReplicateSigner"
+          :open="replicationOpen"
+          :embedded="true"
+          :providers="items"
+          :initial-source="replicationTab === 'signer' ? selected : null"
+          :ensure-local="ensureLocal"
+          @busy-change="signerReplicating = $event"
+        />
+        <p v-else class="text-sm text-gray-600">Seu usuário não tem permissão para replicar assinaturas.</p>
+      </section>
+    </ListDetailDialog>
+    <div v-if="isInsurance" class="flex flex-wrap gap-4 text-sm">
+      <RouterLink to="/cadastros/convenios/regras" class="link"
+        >Regras avançadas e gerais</RouterLink
+      ><RouterLink to="/cadastros/convenios/procedimentos-gerais" class="link"
+        >Procedimentos gerais anteriores</RouterLink
+      >
+    </div>
     <input
       ref="assetInput"
       type="file"
@@ -114,10 +205,17 @@
 </template>
 
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
+import FieldLabel from '@/components/FieldLabel.vue'
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import ReplicateInsuranceSigner from '@/components/ReplicateInsuranceSigner.vue'
+import InsuranceSigner from '@/components/InsuranceSigner.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/plugins/axios'
+import InsuranceProcedures from '@/components/InsuranceProcedures.vue'
+import ReplicateInsuranceProcedures from '@/components/ReplicateInsuranceProcedures.vue'
 import PageShell from '@/components/PageShell.vue'
 import DataList from '@/components/DataList.vue'
 import ListDetailDialog from '@/components/ListDetailDialog.vue'
@@ -130,7 +228,14 @@ import {
 
 type Item = Record<string, any>
 const route = useRoute(),
-  { authUser, canOperational } = useAuthUser()
+  { canOperational } = useAuthUser()
+const replicationOpen = ref(false)
+const editTab = ref('data'),
+  replicationTab = ref('procedures'),
+  signerSaving = ref(false),
+  proceduresSaving = ref(false),
+  signerReplicating = ref(false),
+  proceduresReplicating = ref(false)
 const items = ref<Item[]>([]),
   editing = ref<number | null>(null),
   form = reactive<Item>({})
@@ -211,9 +316,42 @@ async function fetchLogo(id: number) {
   return URL.createObjectURL(response.data)
 }
 async function load() {
+  message.value = ''
   Object.values(logoUrls).forEach(revoke)
   Object.keys(logoUrls).forEach((key) => delete logoUrls[Number(key)])
   items.value = (await api.get(`/${config.value.endpoint}`)).data
+  if (isInsurance.value) {
+    try {
+      const source = (await api.get('/integrations/stenci/insurances')).data.items || []
+      const locals = items.value
+      const ids = new Set(source.map((item: any) => String(item.externalId)))
+      items.value = [
+        ...source.map((item: any) => {
+          const local = locals.find(
+            (row) =>
+              row.external_source === 'STENCI' &&
+              String(row.external_id) === String(item.externalId),
+          )
+          return {
+            ...local,
+            id: local?.id || `stenci:${item.externalId}`,
+            external_id: item.externalId,
+            external_source: 'STENCI',
+            name: item.name,
+            active: local?.active ?? true,
+            authorization_type: local?.authorization_type || 'PRE_AUTHORIZATION',
+          }
+        }),
+        ...locals.filter(
+          (row) => row.external_source !== 'STENCI' || !ids.has(String(row.external_id)),
+        ),
+      ]
+    } catch (e: any) {
+      message.value =
+        e.response?.data?.error ||
+        'Não foi possível atualizar o Stenci. Exibindo os convênios já configurados.'
+    }
+  }
   if (isInsurance.value)
     await Promise.all(
       items.value
@@ -235,7 +373,11 @@ async function save() {
   message.value = ''
   try {
     let id = editing.value
-    if (id) await api.put(`/${config.value.endpoint}/${id}`, form)
+    if (id) {
+      const data = { ...form }
+      delete data.active
+      await api.put(`/${config.value.endpoint}/${id}`, data)
+    }
     else id = (await api.post(`/${config.value.endpoint}`, form)).data.id
     if (selectedLogo.value && id) await sendAsset(selectedLogo.value, id)
     reset()
@@ -247,15 +389,32 @@ async function save() {
   }
 }
 async function edit(item: Item) {
+  item = await ensureLocal(item)
   reset()
   editing.value = item.id
+  editTab.value = 'data'
   Object.assign(form, item)
   if (isInsurance.value && item.has_logo) {
     currentLogoUrl.value = await fetchLogo(item.id)
     previewUrl.value = currentLogoUrl.value
   }
+  formOpen.value = true
+}
+async function ensureLocal(item: Item) {
+  if (isInsurance.value && String(item.id).startsWith('stenci:')) {
+    const local = (
+      await api.post('/insurance-providers/from-stenci', { external_id: item.external_id })
+    ).data
+    items.value = items.value.map((row) =>
+      row.id === item.id ? { ...local, has_logo: item.has_logo } : row,
+    )
+    selected.value = items.value.find((row) => row.id === local.id) || local
+    return selected.value!
+  }
+  return item
 }
 async function toggle(item: Item) {
+  item = await ensureLocal(item)
   await api.patch(`/${config.value.endpoint}/${item.id}/active`, { active: !item.active })
   await load()
 }
@@ -328,53 +487,114 @@ const filteredItems = computed(() =>
   ),
 )
 const moduleKey = computed(() => config.value.endpoint.replaceAll('-', '_'))
-const toolbarActions = computed(() => [
-  {
-    icon: 'add',
-    label: 'Adicionar',
-    variant: 'primary' as const,
-    disabled: !canOperational(moduleKey.value, 'canCreate'),
-    onClick: () => {
-      reset()
-      formOpen.value = true
-    },
-  },
-  {
-    icon: 'edit',
-    label: 'Editar selecionado',
-    disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
-    onClick: async () => {
-      if (selected.value) {
-        await edit(selected.value)
-        formOpen.value = true
-      }
-    },
-  },
-  {
-    icon: 'toggle',
-    label: selected.value?.active ? 'Inativar selecionado' : 'Ativar selecionado',
-    disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
-    onClick: () => selected.value && toggle(selected.value),
-  },
-  { icon: 'refresh', label: 'Atualizar', onClick: load },
-  ...(config.value.asset && !isInsurance.value
-    ? [
-        {
-          icon: 'upload',
-          label: config.value.asset.label || 'Enviar imagem',
-          disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
-          onClick: () => assetInput.value?.click(),
-        },
-        {
-          icon: 'photo',
-          label: 'Visualizar imagem',
-          disabled: !selected.value,
-          onClick: () => selected.value && viewAsset(selected.value.id),
-        },
-      ]
-    : []),
+const editingProvider = computed(
+  () => items.value.find((item) => Number(item.id) === Number(editing.value)) || null,
+)
+const canEditProcedures = computed(() => canOperational('procedures', 'canView'))
+const canReplicateProcedures = computed(
+  () => canOperational('procedures', 'canView') && canOperational('procedures', 'canCreate'),
+)
+const canReplicateSigner = computed(() => canOperational('insurance_providers', 'canEdit'))
+const formBusy = computed(() => saving.value || signerSaving.value || proceduresSaving.value)
+const replicationBusy = computed(() => signerReplicating.value || proceduresReplicating.value)
+async function openReplication() {
+  replicationTab.value = canReplicateProcedures.value ? 'procedures' : 'signer'
+  replicationOpen.value = true
+}
+const formDialogTitle = computed(() =>
+  isInsurance.value
+    ? editing.value
+      ? 'Editar convênio'
+      : 'Novo convênio'
+    : editing.value
+      ? 'Editar ' + config.value.title.toLowerCase()
+      : 'Novo cadastro',
+)
+const editTabs = computed(() => [
+  { id: 'data', label: 'Dados do convênio', disabled: false },
+  { id: 'signer', label: 'Médico assinante', disabled: false },
+  { id: 'procedures', label: 'Procedimentos', disabled: !canEditProcedures.value },
 ])
+const replicationTabs = computed(() => [
+  { id: 'procedures', label: 'Procedimentos', disabled: !canReplicateProcedures.value },
+  { id: 'signer', label: 'Assinatura médica', disabled: !canReplicateSigner.value },
+])
+const toolbarActions = computed(() => {
+  const actions: any[] = [
+    {
+      icon: 'add',
+      label: isInsurance.value ? 'Adicionar convênio' : 'Adicionar',
+      variant: 'primary' as const,
+      disabled: !canOperational(moduleKey.value, 'canCreate'),
+      onClick: () => {
+        reset()
+        editTab.value = 'data'
+        formOpen.value = true
+      },
+    },
+  ]
+  if (isInsurance.value) {
+    actions.push({
+      icon: 'edit',
+      label: 'Editar convênio selecionado',
+        disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
+      onClick: async () => {
+        if (!selected.value) return
+        try {
+          await edit(selected.value)
+        } catch (error: any) {
+          message.value = error.response?.data?.error || 'Não foi possível abrir o convênio.'
+        }
+      },
+    })
+    actions.push({
+      icon: 'copy',
+      label: 'Replicar entre convênios',
+      disabled: !canReplicateProcedures.value && !canReplicateSigner.value,
+      onClick: openReplication,
+    })
+  } else {
+    actions.push({
+      icon: 'edit',
+      label: 'Editar selecionado',
+        disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
+      onClick: async () => {
+        if (selected.value) await edit(selected.value)
+      },
+    })
+  }
+  actions.push(
+    {
+      icon: 'toggle',
+      label: selected.value?.active ? 'Inativar selecionado' : 'Ativar selecionado',
+      disabled: !selected.value || !canOperational(moduleKey.value, 'canDelete'),
+      onClick: () => selected.value && toggle(selected.value),
+    },
+  )
+  if (config.value.asset && !isInsurance.value) {
+    actions.push(
+      {
+        icon: 'upload',
+        label: config.value.asset.label || 'Enviar imagem',
+        disabled: !selected.value || !canOperational(moduleKey.value, 'canEdit'),
+        onClick: () => assetInput.value?.click(),
+      },
+      {
+        icon: 'photo',
+        label: 'Visualizar imagem',
+        disabled: !selected.value,
+        onClick: () => selected.value && viewAsset(selected.value.id),
+      },
+    )
+  }
+  actions.push({ icon: 'refresh', label: 'Atualizar', onClick: load })
+  return actions
+})
+function closeReplication() {
+  if (!replicationBusy.value) replicationOpen.value = false
+}
 function closeForm() {
+  if (formBusy.value) return
   formOpen.value = false
   reset()
 }
@@ -398,6 +618,8 @@ function clearListFilters() {
   search.value = ''
   activeFilter.value = ''
 }
+
+useFeedback(() => unwrapNoticeValue(message), () => 'error')
 </script>
 
 <style scoped>
@@ -422,7 +644,7 @@ function clearListFilters() {
   border-radius: 0.5rem;
   background: white;
   color: #6b7280;
-  font-size: 0.75rem;
+
   text-align: center;
   padding: 0.5rem;
 }

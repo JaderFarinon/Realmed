@@ -11,7 +11,17 @@ ln -s "$root/shared/backend.env" "$target/backend/.env"
 ln -s "$root/shared/storage" "$target/storage"
 chmod -R a+rX "$target/frontend/dist"
 cd "$target/backend"
-npm ci --omit=dev --no-audit --no-fund
+dependency_release=$(readlink -f "$root/current")
+dependency_path=$(readlink -f "$dependency_release/backend/node_modules" || true)
+if [ -n "$dependency_path" ] && [ -d "$dependency_path" ] &&
+   cmp -s package.json "$dependency_release/backend/package.json" &&
+   cmp -s package-lock.json "$dependency_release/backend/package-lock.json"; then
+    ln -s "$dependency_path" "$target/backend/node_modules"
+    printf '%s\n' "$dependency_path" > "$target/dependency-source.txt"
+    echo 'Reusing installed dependencies with identical manifests; preserve the recorded dependency source.'
+else
+    npm ci --omit=dev --no-audit --no-fund
+fi
 npm test
 node ../deploy/migrate.cjs
 cp "$root/shared/backend.env" "$root/shared/backend.env.before-$release"

@@ -3,6 +3,8 @@ layer(base);
 
 @import 'tailwindcss';
 @import './list-workspace.css';
+@import './menu-navigation.css';
+@import './typography.css';
 
 @custom-variant dark (&:is(.dark *));
 

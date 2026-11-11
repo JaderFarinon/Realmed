@@ -13,16 +13,24 @@ async function prepare(page,user={id:999,role:'admin',username:'teste-visual',na
     const url=new URL(route.request().url()),p=url.pathname
     let data=records
     if(p==='/api/auth/me')data={user}
+    else if(p==='/api/guide-processes/queue-counts')data=Object.fromEntries(Object.keys(require('../../backend/services/treatmentQueues').queues).map(key=>[key,records.length]))
     else if(p==='/api/guide-processes'){const size=Number(url.searchParams.get('pageSize')||20),pageNum=Number(url.searchParams.get('page')||1);data={data:records.slice((pageNum-1)*size,pageNum*size),pagination:{page:pageNum,pageSize:size,total:records.length,pages:Math.ceil(records.length/size)}}}
     else if(p==='/api/guide-processes/1')data=treatment
     else if(p.endsWith('/evaluation'))data=null
+    else if(/^\/api\/insurance-providers\/\d+\/signer$/.test(p))data=null
+    else if(/^\/api\/insurance-providers\/\d+\/procedures$/.test(p))data=records.map(r=>({...r,procedure_id:r.id,type:'PHYSIOTHERAPY',replaces:[]}))
     else if(p==='/api/patients/1')data={...records[0],insurances:records.map(r=>({...r,card_number:'FICTICIA',plan:'Plano fictício'})),processes:records}
     else if(p==='/api/inventory/options')data={products:records,sectors:records,categories:records,presentations:records,suppliers:records,users:records,profile:{sector_id:1,profile:'USER'},canFilterSectors:true}
+    else if(p==='/api/inventory/consumptions'||p==='/api/inventory/purchase-orders')data=records.map(r=>({...r,source:'MINIMUM',status:'DRAFT',revision:0}))
+    else if(p.endsWith('/consumptions-options')||p.endsWith('/purchase-orders-options'))data={sectors:[records[0]],sector_id:1,products:records.map(r=>({...r,balance:10}))}
+    else if(/^\/api\/inventory\/(consumptions|purchase-orders)\/\d+$/.test(p))data={...records[0],sector_id:1,source:'MINIMUM',status:'DRAFT',revision:0,items:records.map(r=>({...r,quantity:2}))}
     else if(p==='/api/inventory/requests')data=records.map(r=>({...r,status:'PENDENTE'}))
     else if(p==='/api/inventory/requests/1')data={...records[0],status:'PENDENTE',items:records.map(r=>({...r,status:'PENDENTE'}))}
     else if(p==='/api/inventory/invoices/1')data={...records[0],items:records,total:1425}
     else if(p==='/api/inventory/dashboard')data={cards:{products:57,zero:2,belowMinimum:4,pending:5,waiting:1,purchaseValue:300},alerts:records.slice(0,10),topProducts:records.slice(0,10),monthlyPurchases:[{month:'2026-10',total:300}]}
-    else if(p==='/api/dashboard')data={preparation:3,ready:2,authorized:1}
+    else if(p==='/api/dashboard')data={stages:require('../../backend/services/guideDashboard').stages.map((stage,i)=>({...stage,value:i<3?i+1:0})),total:6}
+    else if(p==='/api/procedure-code-rules/lookups')data={procedures:records,insurers:records}
+    else if(p==='/api/procedure-code-rules')data=records.map(r=>({...r,source_code:r.code,target_code:'22222222',target_description:r.description,target_procedure_id:1,priority:1}))
     else if(p==='/api/permissoes/catalog')data=[{key:'guide_processes',label:'Tratamentos'},{key:'inventory_stock',label:'Estoque'}]
     else if(p==='/api/permissoes/users')data={users:records,sectors:records}
     else if(/^\/api\/permissoes\/\d+$/.test(p))data={userId:1,permissions:[]}
@@ -32,17 +40,21 @@ async function prepare(page,user={id:999,role:'admin',username:'teste-visual',na
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)})
   })
 }
-const listPages=['/pacientes','/central-de-guias/tratamentos','/cadastros/convenios','/cadastros/profissionais','/cadastros/procedimentos','/cadastros/modelos-documentos','/usuarios','/configuracoes/permissoes',...['saldos','produtos','fornecedores','setores','categorias','apresentacoes','notas-fiscais','pedidos','relatorios'].map(p=>'/estoque/'+p)]
+const listPages=['/pacientes','/central-de-guias/tratamentos','/cadastros/convenios','/cadastros/profissionais','/cadastros/procedimentos','/cadastros/codigos','/cadastros/modelos-documentos','/usuarios','/configuracoes/permissoes','/estoque/requisicoes','/estoque/pedidos',...['saldos','produtos','fornecedores','setores','categorias','apresentacoes','notas-fiscais','pedidos','relatorios'].map(p=>'/estoque/'+p)]
 async function run(){
-  const browser=await chromium.launch({headless:true}),errors=[]
+  const browser=await chromium.launch({headless:true,...(process.env.REALMED_BROWSER_EXECUTABLE?{executablePath:process.env.REALMED_BROWSER_EXECUTABLE}:{})}),errors=[]
   const page=await browser.newPage()
-  page.on('pageerror',error=>errors.push(error.message));await prepare(page)
+  page.on('pageerror',error=>{errors.push(error.message);console.error('Browser error at '+page.url(),error.stack)});await prepare(page)
   try{
     for(const viewport of [{width:1366,height:768},{width:1920,height:1080},{width:1024,height:650},{width:390,height:844}]){
       await page.setViewportSize(viewport)
       for(const route of listPages){
         await page.goto(origin+route);await page.locator('.list-table tbody tr[aria-selected]').first().waitFor();await page.waitForTimeout(180)
-        const metrics=await page.evaluate(()=>({height:innerHeight,width:innerWidth,documentWidth:document.documentElement.scrollWidth,documentHeight:document.documentElement.scrollHeight,pagination:document.querySelector('.list-pagination')?.getBoundingClientRect().bottom,table:document.querySelector('.list-table-viewport')?.getBoundingClientRect().toJSON(),rows:Array.from(document.querySelectorAll('.list-table tbody tr[aria-selected]')).map(el=>el.getBoundingClientRect().toJSON())}))
+        await page.evaluate(()=>document.fonts.ready.then(()=>undefined))
+        // Row measurement can trigger a server-page reload after font/layout changes.
+        // Wait for that resize cycle, while still failing persistent clipping.
+        const metricsHandle=await page.waitForFunction(()=>{const rows=Array.from(document.querySelectorAll('.list-table tbody tr[aria-selected]')),table=document.querySelector('.list-table-viewport')?.getBoundingClientRect();if(!rows.length||!table||(innerWidth>=1024&&rows.at(-1).getBoundingClientRect().bottom>table.bottom+2))return false;return{height:innerHeight,width:innerWidth,documentWidth:document.documentElement.scrollWidth,documentHeight:document.documentElement.scrollHeight,pagination:document.querySelector('.list-pagination')?.getBoundingClientRect().bottom,table:table.toJSON(),rows:rows.map(el=>el.getBoundingClientRect().toJSON())}},null,{timeout:5000})
+        const metrics=await metricsHandle.jsonValue();await metricsHandle.dispose()
         assert.ok(metrics.documentWidth<=viewport.width+2,`${route}: horizontal page overflow at ${viewport.width}`)
         if(viewport.width>=1024){assert.ok(metrics.documentHeight<=viewport.height+3,`${route}: desktop page scroll (${metrics.documentHeight}) at ${viewport.width}x${viewport.height}`);assert.ok(metrics.pagination<=viewport.height,`${route}: pagination below viewport`);assert.ok(metrics.rows.at(-1).bottom<=metrics.table.bottom+2,`${route}: clipped last row`)}
         const edit=page.locator('.list-actions button[aria-label^="Editar"],.list-actions button[aria-label^="Configurar"],.list-actions button[aria-label^="Ajustar"] ').first()
@@ -57,13 +69,13 @@ async function run(){
       }
     }
     await page.setViewportSize({width:1366,height:768})
-    for(const route of ['/pacientes','/cadastros/convenios','/cadastros/profissionais','/cadastros/procedimentos','/cadastros/modelos-documentos','/usuarios','/configuracoes/permissoes','/estoque/produtos','/estoque/pedidos','/estoque/notas-fiscais']){
+    for(const route of ['/pacientes','/cadastros/convenios','/cadastros/profissionais','/cadastros/procedimentos','/cadastros/modelos-documentos','/usuarios','/configuracoes/permissoes','/estoque/produtos','/estoque/requisicoes-anteriores','/estoque/notas-fiscais']){
       await page.goto(origin+route);await page.locator('.list-table tbody tr[aria-selected]').first().waitFor();await page.waitForTimeout(150);await page.locator('.list-table tbody tr[aria-selected]').first().click()
       const action=page.locator('.list-actions button[aria-label^="Editar"],.list-actions button[aria-label^="Configurar"]').first();await action.click();await page.getByRole('dialog').waitFor();await page.getByRole('dialog').locator('input,select,textarea').first().waitFor();assert.ok(await page.getByRole('dialog').locator('input,select,textarea').count(),route+' form must preserve fields');await page.screenshot({path:path.join(output,'dialog-'+route.split('/').filter(Boolean).join('-')+'.png')});await page.getByRole('dialog').getByRole('button',{name:'Fechar',exact:true}).click();assert.equal(await page.getByRole('dialog').count(),0)
     }
-    await page.goto(origin+'/estoque/pedidos');await page.locator('.list-table tbody tr').first().click();await page.getByRole('button',{name:'Abrir selecionado',exact:true}).click();await page.getByRole('dialog').waitFor();const dialog=page.getByRole('dialog');assert.equal(await dialog.getByRole('button',{name:'Editar item selecionado',exact:true}).isDisabled(),true);await dialog.locator('tbody tr[aria-selected]').first().click();await dialog.getByRole('button',{name:'Editar item selecionado',exact:true}).click();await page.waitForTimeout(100);assert.equal(await page.getByRole('dialog').count(),2,'item editor must open above request details');await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),1);await page.keyboard.press('Escape')
-    for(const route of ['/dashboard','/estoque/resumo','/pacientes/1','/central-de-guias/novo','/central-de-guias/tratamentos/1','/integracoes/stenci','/sem-permissao']){await page.goto(origin+route);await page.waitForTimeout(180);assert.equal(await page.locator('.page-heading h1').count(),1,route+' shared heading')}
-    const denied=await browser.newPage();await prepare(denied,{id:2,role:'user',username:'sem-acesso',name:'Teste sem permissão',permissionsEnabled:true,permissions:[]});await denied.goto(origin+'/estoque/produtos');await denied.waitForURL('**/sem-permissao');assert.equal(await denied.evaluate(()=>Boolean(localStorage.getItem('token'))),true);assert.ok(await denied.getByRole('link',{name:'Produtos',exact:true}).count(),'menu must remain visible');await denied.close()
+    await page.goto(origin+'/estoque/requisicoes-anteriores');await page.locator('.list-table tbody tr').first().click();await page.getByRole('button',{name:'Abrir selecionado',exact:true}).click();await page.getByRole('dialog').waitFor();const dialog=page.getByRole('dialog');assert.equal(await dialog.getByRole('button',{name:'Editar item selecionado',exact:true}).isDisabled(),true);await dialog.locator('tbody tr[aria-selected]').first().click();await dialog.getByRole('button',{name:'Editar item selecionado',exact:true}).click();await page.waitForTimeout(100);assert.equal(await page.getByRole('dialog').count(),2,'item editor must open above request details');await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),1);await page.keyboard.press('Escape')
+    for(const route of ['/dashboard','/estoque/resumo','/pacientes/1','/central-de-guias/novo','/central-de-guias/tratamentos/1','/integracoes/stenci','/sem-permissao']){await page.goto(origin+route);await page.locator('.page-heading h1').waitFor();assert.equal(await page.locator('.page-heading h1').count(),1,route+' shared heading')}
+    const denied=await browser.newPage();await prepare(denied,{id:2,role:'user',username:'sem-acesso',name:'Teste sem permissão',permissionsEnabled:true,permissions:[]});await denied.goto(origin+'/estoque/produtos');await denied.waitForURL('**/sem-permissao');assert.equal(await denied.evaluate(()=>Boolean(localStorage.getItem('token'))),true);assert.ok(await denied.getByRole('button',{name:'Estoque',exact:true}).count(),'parent menu must remain visible');await denied.getByRole('button',{name:'Estoque',exact:true}).click();assert.ok(await denied.getByRole('link',{name:'Produtos',exact:true}).count(),'submenu must remain available after expanding');await denied.close()
     assert.deepEqual(errors,[],'Browser runtime errors')
     console.log('PASS: shared screen pattern, responsive capacity, selection, server pagination, dialogs, preserved forms and permission page. Screenshots: '+output)
   }finally{await browser.close()}

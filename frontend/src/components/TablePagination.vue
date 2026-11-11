@@ -33,13 +33,31 @@
         ›
       </button>
     </div>
+    <label v-if="pageSizeOptions?.length">
+      Registros por página
+      <select
+        class="input"
+        aria-label="Registros por página"
+        :value="pageSize"
+        :disabled="loading"
+        @change="emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))"
+      >
+        <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+      </select>
+    </label>
     <span>Página {{ page }} de {{ pages }}</span>
   </nav>
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-const props = defineProps<{ page: number; pageSize: number; total: number; loading?: boolean }>()
-const emit = defineEmits<{ 'update:page': [page: number] }>()
+const props = defineProps<{
+  page: number
+  pageSize: number
+  total: number
+  loading?: boolean
+  pageSizeOptions?: number[]
+}>()
+const emit = defineEmits<{ 'update:page': [page: number]; 'update:pageSize': [size: number] }>()
 const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
 const visible = computed(() => {
   const start = Math.max(1, Math.min(props.page - 2, pages.value - 4))

@@ -1,0 +1,29 @@
+{
+  "id": "/modo-fisio/entrar",
+  "name": "REALMED Fisioterapia",
+  "short_name": "Realmed",
+  "description": "Acesso à agenda e aos atendimentos de fisioterapia da Realmed.",
+  "lang": "pt-BR",
+  "start_url": "/modo-fisio/entrar",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#0c1422",
+  "background_color": "#0c1422",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    { "src": "/icons/realmed-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/realmed-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/realmed-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/realmed-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Entrar na fisioterapia",
+      "short_name": "Entrar",
+      "url": "/modo-fisio/entrar",
+      "icons": [{ "src": "/icons/realmed-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

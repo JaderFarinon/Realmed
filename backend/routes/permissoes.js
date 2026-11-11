@@ -43,6 +43,9 @@ const findUserById = async (userId) => {
 };
 
 const ensureCanManageUser = (currentUser, targetUser) => {
+  if (!currentUser || currentUser.status !== "active") {
+    throw new HttpError(403, "Usuário sem permissão a essa função");
+  }
   if (!targetUser) {
     throw new HttpError(404, "Usuário não encontrado.");
   }
@@ -269,10 +272,12 @@ router
         throw new HttpError(400, "Identificador de usuário inválido.");
       }
 
-      const [currentUser, targetUser] = await Promise.all([
-        findUserById(req.user.id),
-        findUserById(userId),
-      ]);
+      const locked = await trx("users")
+        .whereIn("id", [req.user.id, userId])
+        .orderBy("id")
+        .forUpdate();
+      const currentUser = locked.find((u) => u.id === Number(req.user.id));
+      const targetUser = locked.find((u) => u.id === userId);
 
       if (!currentUser) {
         throw new HttpError(403, "Usuário autenticado não encontrado.");
@@ -333,6 +338,12 @@ router
           .where({ id: userId })
           .update({ role: req.body.role });
       }
+
+      const inventoryProfile = req.body.inventoryProfile || previousProfile;
+      const needsSector = normalizedPermissions.some(p => p.can_create && ['inventory_consumptions', 'inventory_requests'].includes(p.module_key));
+      if (!['admin', 'masteradmin'].includes(req.body.role || targetUser.role) && needsSector &&
+          (!inventoryProfile?.sector_id || !(await trx('inventory_sectors').where({id: inventoryProfile.sector_id, active: true}).first())))
+        throw new HttpError(422, 'Selecione um setor ativo para permitir requisições e retiradas de estoque.');
 
       await trx("user_permissions").where("user_id", userId).del();
 

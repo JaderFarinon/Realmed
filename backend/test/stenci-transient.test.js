@@ -22,6 +22,35 @@ async function serverWith(routers, run) {
 }
 test.after(async () => { await knex.destroy() })
 
+test('login encrypts credentials and HTTP treatment lookups reuse them without a password prompt or an open external session',async()=>{
+  const store=new StenciSessionStore();let logins=0,logouts=0,active=0
+  const serviceFactory=()=>({authenticateUser:async(username,password)=>{assert.equal(username,'user');assert.equal(password,'private');logins++;active++;assert.equal(active,1,'external sessions must remain serialized');return{stenci_user_id:'same',stenci_username:'user'}},getSession:()=>({}),logout:async()=>{active--;logouts++},listInsurances:async()=>({items:[],hasMore:false}),listInsurancePlans:async()=>({items:[],hasMore:false}),listProfessionals:async()=>({items:[],hasMore:false}),searchPatients:async search=>({items:[{id:'p1',name:search,patient:{}}],hasMore:false})})
+  const auth=createAuthRouter({db:{query:async()=>[[]]},configFactory:()=>config,sessionStore:store,logger:silent,jwtSecret:process.env.JWT_SECRET,serviceFactory,syncUser:async()=>({id:1,role:'admin',status:'active'})})
+  const integrations=createStenciRouter({db:()=>({insert:async()=>{}}),configFactory:()=>config,sessionStore:store,serviceFactory})
+  try{await serverWith([['/auth',auth],['/stenci',integrations]],async base=>{
+    const login=await fetch(base+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'user',password:'private'})});assert.equal(login.status,200)
+    const data=await login.json(),claims=jwt.verify(data.token,process.env.JWT_SECRET),headers={Authorization:'Bearer '+data.token}
+    assert.equal(store.hasCredentials(claims.sid),true);assert.equal(active,0);assert.equal(JSON.stringify(data).includes('private'),false)
+    assert.equal(JSON.stringify(store.sessions.get(claims.sid).credentials).includes('private'),false)
+    const results=await Promise.all(['insurances','insurance-plans','professionals'].map(endpoint=>fetch(base+'/stenci/'+endpoint,{headers})))
+    assert.ok(results.every(response=>response.status===200))
+    await Promise.all(results.map(response=>response.json()))
+    // HTTP arrivals may cross the 20ms batching window under load. Exact same-turn
+    // grouping is covered directly in stenci-auto-refresh; here verify HTTP safety/cache.
+    assert.ok(logins>=2 && logins<=4);assert.equal(logouts,logins);assert.equal(active,0)
+    const lookupLogins=logins
+    for(const endpoint of ['insurances','insurance-plans','professionals']){
+      const cached=await fetch(base+'/stenci/'+endpoint,{headers});assert.equal(cached.status,200);await cached.json()
+    }
+    assert.equal(logins,lookupLogins,'cached HTTP lookups must not authenticate again')
+    assert.equal(logouts,lookupLogins);assert.equal(active,0)
+    for(const name of ['Maria','Outro']){const response=await fetch(base+'/stenci/patients/search?search='+name,{headers});assert.equal(response.status,200);assert.equal((await response.json()).items[0].full_name,name);assert.equal(active,0)}
+    assert.equal(logins,lookupLogins+2);assert.equal(logouts,lookupLogins+2)
+    await fetch(base+'/auth/logout',{method:'POST',headers});assert.equal(store.getCredentials(claims.sid),null)
+    const ended=await fetch(base+'/stenci/insurances',{headers});assert.equal(ended.status,401)
+  })}finally{store.clear()}
+})
+
 test('HAR logout is an authenticated bodyless POST and accepts 204 without JSON', async () => {
   const calls = []
   const client = new StenciClient({ config, logger: silent, fetchImpl: async (url, options) => {
@@ -62,7 +91,7 @@ test('partial authentication, failed consultation and DB failures still release 
 test('unconfirmed logout retries and never reports successful login', async () => {
   let attempts = 0
   const store = new StenciSessionStore()
-  const router = createAuthRouter({ configFactory: () => config, sessionStore: store, logger: silent, jwtSecret: process.env.JWT_SECRET,
+  const router = createAuthRouter({ db:{query:async()=>[[]]}, configFactory: () => config, sessionStore: store, logger: silent, jwtSecret: process.env.JWT_SECRET,
     serviceFactory: () => ({ authenticateUser: async () => ({ stenci_user_id: '1' }), getSession: () => ({}), logout: async () => { attempts++; throw new Error('offline') } }),
     syncUser: async () => ({ id: 1, role: 'admin', status: 'active' }) })
   await serverWith([['/auth', router]], async base => {

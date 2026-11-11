@@ -16,7 +16,11 @@ test('health endpoint starts without exposing storage', async () => {
     const base = `http://127.0.0.1:${server.address().port}`
     const health = await fetch(`${base}/api/health`)
     assert.equal(health.status, 200)
+    assert.match(health.headers.get('access-control-expose-headers'), /Retry-After/)
     assert.deepEqual(await health.json(), { status: 'ok' })
+    assert.equal((await fetch(`${base}/api/treatment-updates`)).status, 401)
+    assert.equal((await fetch(`${base}/api/guide-processes/queue-counts`)).status, 401)
+    assert.equal((await fetch(`${base}/api/guide-processes/1/edit-lock/reception`)).status, 401)
     assert.equal((await fetch(`${base}/storage/documents/example.pdf`)).status, 404)
   } finally { server.close() }
 })

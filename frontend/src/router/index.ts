@@ -1,10 +1,28 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthUser } from '@/composables/useAuthUser'
+import { userHome } from '@/utils/userHome'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', redirect: '/dashboard' },
+    { path: '/', redirect: '/inicio' },
+    { path: '/inicio', component: () => import('@/views/Configuracoes/MyProfileView.vue'), meta: { title: 'Realmed' } },
+    { path: '/meu-perfil', component: () => import('@/views/Configuracoes/MyProfileView.vue'), meta: { title: 'Meu Perfil' } },
+    { path: '/configuracoes', component: () => import('@/views/Configuracoes/SettingsView.vue'), meta: { title: 'Configurações', admin: true } },
+    {
+      path: '/faturamento',
+      redirect: (to) => ({ path: '/faturamento/dashboard', query: to.query, hash: to.hash }),
+    },
+    {
+      path: '/faturamento/dashboard',
+      component: () => import('@/views/BillingDashboard.vue'),
+      meta: { title: 'Dashboard de Faturamento', module: 'billing_dashboard' },
+    },
+    {
+      path: '/faturamento/relatorios',
+      component: () => import('@/views/BillingReports.vue'),
+      meta: { title: 'Relatórios de Faturamento', module: 'billing_reports' },
+    },
     {
       path: '/sem-permissao',
       component: () => import('@/views/PermissionDenied.vue'),
@@ -29,12 +47,20 @@ const router = createRouter({
       ['categorias', 'Categorias', 'inventory_categories'],
       ['apresentacoes', 'Apresentações', 'inventory_presentations'],
       ['notas-fiscais', 'Notas fiscais', 'inventory_invoices'],
-      ['pedidos', 'Pedidos', 'inventory_requests'],
+      ['requisicoes-anteriores', 'Requisições anteriores', 'inventory_requests'],
       ['relatorios', 'Relatórios de estoque', 'inventory_reports'],
     ].map(([slug, title, module]) => ({
       path: `/estoque/${slug}`,
       component: () => import('@/views/Inventory/InventoryView.vue'),
-      meta: { title, module, inventory: slug },
+      meta: { title, module, inventory: slug === 'requisicoes-anteriores' ? 'pedidos' : slug },
+    })),
+    ...[
+      ['requisicoes', 'Requisições para Consumo', 'inventory_consumptions'],
+      ['pedidos', 'Pedidos de Compra', 'inventory_purchase_orders'],
+    ].map(([slug, title, module]) => ({
+      path: `/estoque/${slug}`,
+      component: () => import('@/views/Inventory/StockOperations.vue'),
+      meta: { title, module },
     })),
     {
       path: '/login',
@@ -42,9 +68,23 @@ const router = createRouter({
       meta: { public: true, title: 'Login' },
     },
     {
+      path: '/modo-fisio/entrar',
+      component: () => import('@/views/Physio/PhysioFaceLogin.vue'),
+      meta: { public: true, title: 'Entrar no modo fisioterapeuta' },
+    },
+    {
+      path: '/modo-fisio',
+      component: () => import('@/views/Physio/PhysioMode.vue'),
+      meta: { title: 'Modo Fisioterapeuta' },
+    },
+    {
       path: '/dashboard',
+      redirect: (to) => ({ path: '/central-de-guias/dashboard', query: to.query, hash: to.hash }),
+    },
+    {
+      path: '/central-de-guias/dashboard',
       component: () => import('@/views/Dashboard.vue'),
-      meta: { title: 'Dashboard' },
+      meta: { title: 'Dashboard da Central de Guias', module: 'guide_processes' },
     },
     {
       path: '/usuarios',
@@ -102,9 +142,20 @@ const router = createRouter({
       meta: { title: 'Modelos de Documentos' },
     },
     {
-      path: '/cadastros/procedimentos',
+      path: '/cadastros/convenios/regras',
+      alias: '/cadastros/codigos',
+      component: () => import('@/views/Cadastros/ProcedureCodesView.vue'),
+      meta: { title: 'Códigos e de/para', module: 'procedures' },
+    },
+    {
+      path: '/cadastros/convenios/procedimentos-gerais',
+      alias: '/cadastros/procedimentos',
       component: () => import('@/views/Cadastros/CatalogView.vue'),
-      meta: { title: 'Procedimentos', catalog: 'procedures' },
+      meta: {
+        title: 'Procedimentos gerais anteriores',
+        catalog: 'procedures',
+        module: 'procedures',
+      },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -116,11 +167,12 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   document.title = `${String(to.meta.title || 'Realmed')} | Realmed`
   const token = localStorage.getItem('token')
-  if (to.meta.public) return to.path === '/login' && token ? '/dashboard' : true
+  if (to.meta.public) return to.path === '/login' && token ? '/inicio' : true
   if (!token) return { path: '/login', query: { redirect: to.fullPath } }
   try {
     const user = await useAuthUser().loadUser()
     if (!user) return '/login'
+    if (to.path === '/inicio') return userHome(user)
     if (to.meta.admin && !['masteradmin', 'admin'].includes(user.role)) return '/sem-permissao'
     const module = String(
       to.meta.module ||
@@ -154,6 +206,25 @@ router.beforeEach(async (to) => {
   } catch {
     localStorage.removeItem('token')
     return '/login'
+  }
+})
+// A tab kept open across a publication can reference a removed lazy-loaded chunk.
+// Refresh at most once per minute instead of leaving the destination blank.
+router.onError((error, to) => {
+  if (
+    !/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Failed to load module script/i.test(
+      error.message,
+    )
+  )
+    return
+  const key = 'realmed-module-reload-at'
+  try {
+    const last = Number(sessionStorage.getItem(key) || 0)
+    if (Date.now() - last < 60000) return
+    sessionStorage.setItem(key, String(Date.now()))
+    window.location.replace(to.fullPath)
+  } catch {
+    // Storage may be unavailable. Do not risk a reload loop.
   }
 })
 export default router

@@ -1,13 +1,6 @@
 <template>
   <PageShell :title="String(route.meta.title)" :subtitle="subtitle" list>
-    <p
-      v-if="message"
-      role="status"
-      class="rounded-lg p-3"
-      :class="error ? 'bg-error-50 text-error-700' : 'bg-success-50 text-success-700'"
-    >
-      {{ message }}
-    </p>
+    
     <DataList
       v-model:selected="selected"
       :items="filteredRows"
@@ -120,6 +113,14 @@
       wide
       @close="detail = null"
       ><div v-if="detail" class="space-y-4">
+        <p
+          v-if="detail.legacy_incomplete"
+          role="alert"
+          class="rounded border border-amber-300 bg-amber-50 p-3 text-sm"
+        >
+          Pedido recuperado sem cabeçalho no sistema anterior. Edite o pedido e confirme solicitante
+          e data para liberar as operações dos itens.
+        </p>
         <p v-if="detail.notes" class="text-sm">{{ detail.notes }}</p>
 
         <DataList
@@ -163,23 +164,27 @@
       @close="editing = false"
     >
       <form class="space-y-4" @submit.prevent="save">
-        <p v-if="formError" role="alert" class="text-error-700">{{ formError }}</p>
+        
         <div class="grid gap-4 md:grid-cols-2">
           <template v-if="catalog"
             ><label class="md:col-span-2"
-              >{{ mode === 'fornecedores' ? 'Razão social' : 'Nome'
-              }}<input v-model="form.name" class="input" maxlength="150" required
+              ><FieldLabel :required="true">{{
+                mode === 'fornecedores' ? 'Razão social' : 'Nome'
+              }}</FieldLabel
+              ><input v-model="form.name" class="input" maxlength="150" required
             /></label>
             <template v-if="mode === 'produtos'"
               ><label
-                >Código<input
+                ><FieldLabel :required="Boolean(form.id)">Código</FieldLabel
+                ><input
                   v-model="form.code"
                   class="input"
                   maxlength="40"
                   placeholder="Gerado automaticamente"
                   :required="Boolean(form.id)" /></label
               ><label
-                >Quantidade mínima<input
+                ><FieldLabel :required="true">Quantidade mínima</FieldLabel
+                ><input
                   v-model.number="form.minimum_quantity"
                   class="input"
                   type="number"
@@ -187,14 +192,16 @@
                   step="1"
                   required /></label
               ><label
-                >Categoria<select v-model="form.category_id" class="input" required>
+                ><FieldLabel :required="true">Categoria</FieldLabel
+                ><select v-model="form.category_id" class="input" required>
                   <option value="">Selecione</option>
                   <option v-for="c in options.categories" :key="c.id" :value="c.id">
                     {{ c.name }}
                   </option>
                 </select></label
               ><label
-                >Apresentação<select v-model="form.presentation_id" class="input" required>
+                ><FieldLabel :required="true">Apresentação</FieldLabel
+                ><select v-model="form.presentation_id" class="input" required>
                   <option value="">Selecione</option>
                   <option v-for="a in options.presentations" :key="a.id" :value="a.id">
                     {{ a.name }}
@@ -231,45 +238,48 @@
             <label v-else class="md:col-span-2"
               >Descrição<textarea v-model="form.description" class="input" />
             </label>
-            <label><input v-model="form.active" type="checkbox" /> Ativo</label>
+            <label v-if="!form.id"><input v-model="form.active" type="checkbox" /> Ativo</label>
           </template>
           <template v-else-if="mode === 'saldos'"
             ><label
-              >Produto<select v-model="form.product_id" class="input" required>
+              ><FieldLabel :required="true">Produto</FieldLabel
+              ><select v-model="form.product_id" class="input" required>
                 <option value="">Selecione</option>
                 <option v-for="p in options.products" :key="p.id" :value="p.id">
                   {{ p.name }}
                 </option>
               </select></label
             ><label
-              >Setor<select v-model="form.sector_id" class="input" required>
+              ><FieldLabel :required="true">Setor</FieldLabel
+              ><select v-model="form.sector_id" class="input" required>
                 <option value="">Selecione</option>
                 <option v-for="s in options.sectors" :key="s.id" :value="s.id">{{ s.name }}</option>
               </select></label
             ><label
-              >Saldo correto<input
+              ><FieldLabel :required="true">Saldo correto</FieldLabel
+              ><input
                 v-model.number="form.quantity"
                 class="input"
                 type="number"
                 min="0"
                 step="1"
                 required /></label
-            ><label>Motivo do ajuste<input v-model="form.notes" class="input" required /></label
+            ><label
+              ><FieldLabel :required="true">Motivo do ajuste</FieldLabel
+              ><input v-model="form.notes" class="input" required /></label
           ></template>
           <template v-else-if="mode === 'pedidos'"
             ><label
-              >Solicitante<select v-model="form.requester_id" class="input" required>
+              ><FieldLabel :required="true">Solicitante</FieldLabel
+              ><select v-model="form.requester_id" class="input" required>
                 <option value="">Selecione</option>
                 <option v-for="u in options.users" :key="u.id" :value="u.id">
                   {{ u.name || u.username }}
                 </option>
               </select></label
             ><label
-              >Data do pedido<input
-                v-model="form.request_date"
-                class="input"
-                type="date"
-                required /></label
+              ><FieldLabel :required="true">Data do pedido</FieldLabel
+              ><input v-model="form.request_date" class="input" type="date" required /></label
             ><label class="md:col-span-2"
               >Observações<textarea v-model="form.notes" class="input" />
             </label>
@@ -279,22 +289,22 @@
           >
           <template v-else-if="mode === 'notas-fiscais'"
             ><label
-              >Número<input v-model="form.number" class="input" maxlength="80" required /></label
+              ><FieldLabel :required="true">Número</FieldLabel
+              ><input v-model="form.number" class="input" maxlength="80" required /></label
             ><label
-              >Data da nota<input
-                v-model="form.invoice_date"
-                class="input"
-                type="date"
-                required /></label
+              ><FieldLabel :required="true">Data da nota</FieldLabel
+              ><input v-model="form.invoice_date" class="input" type="date" required /></label
             ><label
-              >Fornecedor<select v-model="form.supplier_id" class="input" required>
+              ><FieldLabel :required="true">Fornecedor</FieldLabel
+              ><select v-model="form.supplier_id" class="input" required>
                 <option value="">Selecione</option>
                 <option v-for="s in options.suppliers" :key="s.id" :value="s.id">
                   {{ s.name }}
                 </option>
               </select></label
             ><label
-              >Setor de recebimento<select v-model="form.sector_id" class="input" required>
+              ><FieldLabel :required="true">Setor de recebimento</FieldLabel
+              ><select v-model="form.sector_id" class="input" required>
                 <option value="">Selecione</option>
                 <option v-for="s in options.sectors" :key="s.id" :value="s.id">{{ s.name }}</option>
               </select></label
@@ -322,7 +332,8 @@
     >
       <form class="grid gap-4 md:grid-cols-2" @submit.prevent="saveItem">
         <label class="md:col-span-2"
-          >Produto<select v-model="itemForm.product_id" class="input" required>
+          ><FieldLabel :required="true">Produto</FieldLabel
+          ><select v-model="itemForm.product_id" class="input" required>
             <option value="">Selecione</option>
             <option v-for="p in options.products" :key="p.id" :value="p.id">
               {{ p.code }} — {{ p.name }}
@@ -330,7 +341,8 @@
           </select></label
         >
         <label
-          >Quantidade<input
+          ><FieldLabel :required="true">Quantidade</FieldLabel
+          ><input
             v-model.number="itemForm.quantity"
             class="input"
             type="number"
@@ -339,7 +351,8 @@
             required
         /></label>
         <label v-if="mode === 'notas-fiscais'"
-          >Valor unitário (R$)<input
+          ><FieldLabel :required="true">Valor unitário (R$)</FieldLabel
+          ><input
             v-model="itemForm.unit_price"
             class="input"
             type="number"
@@ -360,6 +373,9 @@
   </PageShell>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
+import FieldLabel from '@/components/FieldLabel.vue'
 import { computed, onMounted, onBeforeUnmount, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
@@ -440,16 +456,19 @@ const itemForm = reactive<any>({
   notes: '',
 })
 const statusLabels: Record<string, string> = {
+  LEGADO_INCOMPLETO: 'Revisar importação',
   PENDENTE: 'Pendente',
   PARCIALMENTE_ATENDIDO: 'Parcialmente atendido',
   AGUARDANDO_COMPRA: 'Aguardando compra',
   ATENDIDO: 'Atendido',
 }
 const movementLabels: Record<string, string> = {
+  LEGACY_OPENING: 'Saldo inicial importado',
   RECEIPT: 'Entrada por nota fiscal',
   INVOICE_EDIT: 'Alteração de nota fiscal',
   INVOICE_REMOVAL: 'Remoção de item da nota',
   FULFILLMENT: 'Atendimento de pedido',
+  CONSUMPTION: 'Requisição para consumo',
   ADJUSTMENT: 'Ajuste de saldo',
 }
 const columnSets: Record<string, Array<[string, string]>> = {
@@ -603,6 +622,8 @@ function edit(row?: any) {
     },
     row || {},
   )
+  // MySQL returns TINYINT as 0/1; checkbox v-model must receive a boolean.
+  form.active = form.active === true || form.active === 1 || form.active === '1'
   if (row && mode.value === 'saldos') {
     delete form.id
     form.product_id = row.id
@@ -619,13 +640,15 @@ async function save() {
   busy.value = true
   formError.value = ''
   try {
+    const payload = { ...form }
+    if (payload.id) delete payload.active
     const saved =
       mode.value === 'saldos'
         ? (await api.post('/inventory/stock/adjust', form)).data
         : (
             await api[form.id ? 'put' : 'post'](
               form.id ? `${endpoint.value}/${form.id}` : endpoint.value,
-              form,
+                payload,
             )
           ).data
     if (mode.value === 'produtos' && (photo.value || photoUrl.value)) {
@@ -677,6 +700,15 @@ async function remove(row: any) {
     return
   try {
     await api.delete(`${endpoint.value}/${row.id}`)
+    await loadOptions()
+    await load()
+  } catch (e) {
+    reportError(e)
+  }
+}
+async function toggleActive(row: any) {
+  try {
+    await api.patch(`${endpoint.value}/${row.id}/active`, { active: !row.active })
     await loadOptions()
     await load()
   } catch (e) {
@@ -862,14 +894,16 @@ const toolbarActions = computed(() => [
   ...(catalog.value || mode.value === 'pedidos'
     ? [
         {
-          icon: 'delete',
-          label: catalog.value ? 'Inativar selecionado' : 'Excluir selecionado',
+          icon: catalog.value ? 'toggle' : 'delete',
+          label: catalog.value
+            ? selected.value?.active ? 'Inativar selecionado' : 'Ativar selecionado'
+            : 'Excluir selecionado',
           variant: 'danger' as const,
           disabled:
             !selected.value ||
             !can('canDelete') ||
-            (catalog.value ? !selected.value.active : selected.value.status !== 'PENDENTE'),
-          onClick: () => selected.value && remove(selected.value),
+            (!catalog.value && selected.value.status !== 'PENDENTE'),
+          onClick: () => selected.value && (catalog.value ? toggleActive(selected.value) : remove(selected.value)),
         },
       ]
     : []),
@@ -915,6 +949,7 @@ const itemActions = computed(() => [
     label: 'Adicionar item',
     variant: 'primary' as const,
     disabled:
+      Boolean(detail.value?.legacy_incomplete) ||
       !detail.value ||
       detail.value.closed ||
       detail.value.status === 'ATENDIDO' ||
@@ -928,6 +963,7 @@ const itemActions = computed(() => [
     icon: 'edit',
     label: 'Editar item selecionado',
     disabled:
+      Boolean(detail.value?.legacy_incomplete) ||
       !selectedItem.value ||
       Boolean(selectedItem.value.fulfilled_quantity) ||
       detail.value?.closed ||
@@ -946,6 +982,7 @@ const itemActions = computed(() => [
           icon: 'check',
           label: 'Atender item selecionado',
           disabled:
+            Boolean(detail.value?.legacy_incomplete) ||
             !selectedItem.value ||
             selectedItem.value.status === 'ATENDIDO' ||
             !canOperational('inventory_fulfillment', 'canEdit'),
@@ -955,6 +992,7 @@ const itemActions = computed(() => [
           icon: 'clock',
           label: 'Marcar item como aguardando compra',
           disabled:
+            Boolean(detail.value?.legacy_incomplete) ||
             !selectedItem.value ||
             selectedItem.value.status === 'ATENDIDO' ||
             !canOperational('inventory_fulfillment', 'canEdit'),
@@ -967,6 +1005,7 @@ const itemActions = computed(() => [
     label: 'Excluir item selecionado',
     variant: 'danger' as const,
     disabled:
+      Boolean(detail.value?.legacy_incomplete) ||
       !selectedItem.value ||
       Boolean(selectedItem.value.fulfilled_quantity) ||
       detail.value?.closed ||
@@ -1074,12 +1113,15 @@ onMounted(async () => {
     reportError(e)
   }
 })
+
+useFeedback(() => unwrapNoticeValue(message), () => unwrapNoticeValue(error) ? 'error' : 'success')
+useFeedback(() => unwrapNoticeValue(formError), () => 'error')
 </script>
 <style scoped>
 label {
   display: block;
   min-width: 0;
-  font-size: 0.875rem;
+
   color: #475467;
 }
 .input {
@@ -1090,7 +1132,6 @@ label {
 }
 th {
   background: #f9fafb;
-  font-weight: 600;
 }
 button:disabled {
   opacity: 0.5;

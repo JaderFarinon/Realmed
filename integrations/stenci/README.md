@@ -43,4 +43,8 @@ Os únicos endpoints internos de paciente desta integração são:
 - `GET /api/integrations/stenci/patients/search`;
 - `POST /api/integrations/stenci/patients/:externalId/sync`.
 
-Ambos exigem autenticação e permissão de criação em `guide_processes`, sem conceder acesso à tela administrativa de Integrações. Avaliações, agenda, sessões, tratamentos concluídos, relatórios e escrita no Stenci permanecem fora do escopo.
+Ambos exigem autenticação e permissão de criação em `guide_processes`, sem conceder acesso à tela administrativa de Integrações. A escrita e a leitura de evoluções, finalização de atendimento e mudança de status no Stenci permanecem fora do escopo até receber os contratos do usuário.
+
+## Modo Fisioterapeuta — exceção autorizada
+
+O modo descrito em `docs/MODO_FISIOTERAPEUTA.md` usa as credenciais compartilhadas `STENCI_FISIO_USERNAME` e `STENCI_FISIO_PASSWORD` como secrets do backend. Essa exceção substitui a afirmação acima sobre inexistência de credenciais Stenci fixas somente para a tela de fisioterapia. O reconhecimento do fisioterapeuta continua individual no Realmed; a conta Stenci compartilhada nunca vai para o navegador, banco ou logs e seu envelope permanece criptografado em memória durante a sessão Realmed. Agenda e busca de pacientes usam operações de leitura já conhecidas.

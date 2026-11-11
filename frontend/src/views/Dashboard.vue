@@ -1,61 +1,77 @@
 <template>
-  <PageShell title="Visão geral" subtitle="Indicadores operacionais da Central de Guias"
-    ><template #actions
+  <PageShell title="Visão geral" subtitle="Indicadores operacionais da Central de Guias">
+    <template #actions
       ><TableActionToolbar
-        :actions="[{ icon: 'refresh', label: 'Atualizar indicadores', onClick: loadDashboard }]"
+        :actions="[
+          {
+            icon: 'refresh',
+            label: 'Atualizar indicadores',
+            disabled: loading,
+            onClick: loadDashboard,
+          },
+        ]"
     /></template>
-    <p v-if="loadError" class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
-      {{ loadError }}
+    
+    <p v-if="loading && !loaded" class="mt-4 text-gray-500" role="status">
+      Carregando indicadores…
     </p>
-    <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <RouterLink
-        v-for="card in cards"
-        :key="card.key"
-        :to="{ path: '/central-de-guias', query: card.query }"
-        class="rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
-        ><p class="text-sm text-gray-500">{{ card.label }}</p>
-        <strong class="mt-2 block text-3xl text-gray-900">{{ metrics[card.key] ?? 0 }}</strong
-        ><span class="mt-3 block text-xs font-semibold text-brand-600">Ver fila →</span></RouterLink
-      >
-    </div></PageShell
-  >
+    <div v-if="loaded" class="mt-6 space-y-4">
+      <GuideProcessStageChart :stages="stages" :total-unique="totalUnique" />
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <RouterLink
+          v-for="stage in stages"
+          :key="stage.key"
+          :data-stage-card="stage.key"
+          :to="{
+            path: '/central-de-guias/tratamentos',
+            query: { queue: 'ALL', process_stage: stage.key },
+          }"
+          class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+        >
+          <p class="text-sm text-gray-500">{{ stage.label }}</p>
+          <strong class="typography-metric mt-2 block text-gray-900">{{
+            stage.value.toLocaleString('pt-BR')
+          }}</strong>
+          <span class="mt-2 block text-xs font-semibold text-brand-600">Ver fila →</span>
+        </RouterLink>
+      </div>
+    </div>
+  </PageShell>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
 defineOptions({ name: 'DashboardView' })
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import PageShell from '@/components/PageShell.vue'
 import TableActionToolbar from '@/components/TableActionToolbar.vue'
+import GuideProcessStageChart, { type ProcessStage } from '@/components/GuideProcessStageChart.vue'
 import api from '@/plugins/axios'
-const metrics = reactive<Record<string, number>>({}),
-  loadError = ref('')
-const cards = [
-  { key: 'preparation', label: 'Em preparação', query: { queue: 'NOT_READY' } },
-  { key: 'ready', label: 'Pendentes de liberação', query: { queue: 'READY' } },
-  { key: 'authorizing', label: 'Em liberação', query: { queue: 'IN_PROGRESS' } },
-  { key: 'pending', label: 'Pendências do convênio', query: { queue: 'PENDING' } },
-  {
-    key: 'authorized',
-    label: 'Liberados',
-    query: { queue: 'AUTHORIZED,SESSION_TOKEN,NOT_REQUIRED' },
-  },
-  {
-    key: 'treatment',
-    label: 'Em tratamento',
-    query: { queue: 'ALL', treatment_status: 'IN_PROGRESS' },
-  },
-  {
-    key: 'billing',
-    label: 'Concluídos aguardando faturamento',
-    query: { queue: 'ALL', treatment_status: 'COMPLETED', billing_status: 'READY' },
-  },
-]
+const totalUnique = ref<number | undefined>()
+const stages = ref<ProcessStage[]>([]),
+  loadError = ref(''),
+  loading = ref(false),
+  loaded = ref(false)
 async function loadDashboard() {
+  if (loading.value) return
+  loading.value = true
   try {
-    Object.assign(metrics, (await api.get('/dashboard')).data)
+    const response = (await api.get('/dashboard')).data
+    if (!Array.isArray(response.stages)) throw new Error('Indicadores inválidos')
+    stages.value = response.stages.map((stage: ProcessStage) => ({
+      ...stage,
+      value: Number(stage.value) || 0,
+    }))
+    totalUnique.value = response.total === undefined ? undefined : Number(response.total)
+    loaded.value = true
     loadError.value = ''
   } catch {
-    loadError.value = 'Não foi possível carregar os indicadores.'
+    loadError.value = 'Não foi possível carregar os indicadores. Tente atualizar novamente.'
+  } finally {
+    loading.value = false
   }
 }
 onMounted(loadDashboard)
+
+useFeedback(() => unwrapNoticeValue(loadError), () => 'error')
 </script>

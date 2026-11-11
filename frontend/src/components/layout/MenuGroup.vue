@@ -29,25 +29,20 @@
 </template>
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 const props = defineProps<{ id: string; label: string; active?: boolean }>()
 const panelId = `realmed-menu-group-${props.id}`
-const storageKey = `realmed_menu_group_${props.id}`
-const collapsed = ref(localStorage.getItem(storageKey) === 'true')
-function persist() {
-  localStorage.setItem(storageKey, String(collapsed.value))
-}
+const route = useRoute()
+const collapsed = ref(!props.active)
 function toggle() {
   collapsed.value = !collapsed.value
-  persist()
 }
 watch(
-  () => props.active,
-  (active) => {
-    if (active) {
-      collapsed.value = false
-      persist()
-    }
+  () => [props.active, route.path],
+  () => {
+    collapsed.value = !props.active
   },
+  { immediate: true, flush: 'post' },
 )
 </script>
 <style scoped>
@@ -61,10 +56,6 @@ watch(
   padding: 0.6rem 1rem;
   border-radius: 0.5rem;
   color: #667085;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
   text-align: left;
 }
 .menu-group-toggle:hover,

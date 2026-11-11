@@ -12,15 +12,15 @@
   flex: none;
 }
 .page-heading h1 {
-  font-size: 1.5rem;
+  font-size: var(--realmed-title-size);
   line-height: 2rem;
-  font-weight: 700;
+  font-weight: var(--realmed-weight-emphasis);
   color: #101828;
   margin: 0;
 }
 .page-heading p {
   margin-top: 0.25rem;
-  font-size: 0.875rem;
+  font-size: var(--realmed-text-size);
   color: #667085;
 }
 .page-heading-actions {
@@ -40,6 +40,25 @@
   flex: none;
   padding: 1rem !important;
 }
+.list-filter-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 28px;
+  list-style: none;
+  color: #475467;
+}
+.list-filter-disclosure > summary::-webkit-details-marker { display: none; }
+.list-filter-disclosure > summary svg { width: 18px; height: 18px; transition: transform 150ms ease; }
+.list-filter-disclosure[open] > summary svg { transform: rotate(180deg); }
+.list-filter-disclosure > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 3px; border-radius: 4px; }
+.list-filter-fields { padding-top: 0.75rem; }
+.list-tabs + .list-filter-disclosure { margin-top: 0.25rem; }
+.page-shell--list .page-heading h1 { font-size: 1.125rem; line-height: 1.5rem; }
+.page-shell--list .page-heading p { font-size: 0.75rem; line-height: 1.125rem; }
+.page-shell--list:has(.list-filter-disclosure[open]) { height: auto; min-height: calc(100dvh - 112px); }
+.is-bounded:has(.list-filter-disclosure[open]) .list-table-viewport { flex: initial; min-height: 0; overflow: auto; }
 .list-filters form,
 .list-filter-grid {
   display: flex;
@@ -49,7 +68,7 @@
 }
 .list-filters label {
   display: block;
-  font-size: 0.8125rem;
+  font-size: var(--realmed-text-size);
   color: #475467;
   min-width: 0;
 }
@@ -69,8 +88,8 @@
 .list-filters summary {
   cursor: pointer;
   color: #3641f5;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: var(--realmed-text-size);
+  font-weight: var(--realmed-weight-emphasis);
 }
 .list-results {
   display: flex;
@@ -122,7 +141,7 @@
 .list-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.875rem;
+  font-size: var(--realmed-text-size);
 }
 .list-table th,
 .list-table td {
@@ -134,8 +153,8 @@
 .list-table th {
   background: #f3f4f6;
   color: #475467;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: var(--realmed-text-size);
+  font-weight: var(--realmed-weight-emphasis);
   height: 48px;
 }
 .list-table tbody tr[aria-selected] {
@@ -145,8 +164,8 @@
   background: #f9fafb;
 }
 .list-table tbody tr[aria-selected='true'] {
-  background: #dbeafe !important;
-  outline: 1px solid #93c5fd;
+  background: #bfdbfe !important;
+  outline: 1px solid #60a5fa;
   outline-offset: -1px;
 }
 .list-table tbody tr:focus-visible {
@@ -205,7 +224,7 @@
   background: #3641f5;
 }
 .table-selection-label {
-  font-size: 0.75rem;
+  font-size: var(--realmed-help-size);
   color: #667085;
   margin-left: 0.25rem;
   white-space: nowrap;
@@ -222,7 +241,7 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   color: #667085;
-  font-size: 0.75rem;
+  font-size: var(--realmed-help-size);
 }
 .table-pagination-buttons {
   display: flex;
@@ -277,8 +296,8 @@
   flex: none;
 }
 .list-detail-dialog h2 {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: var(--realmed-dialog-title-size);
+  font-weight: var(--realmed-weight-emphasis);
 }
 .list-dialog-content {
   padding: 1.25rem;
@@ -299,17 +318,17 @@
   min-width: 0;
 }
 .list-detail-dialog label {
-  font-size: 0.875rem;
+  font-size: var(--realmed-text-size);
   display: block;
 }
-@media (min-width: 1024px) and (min-height: 650px) {
+@media (min-width: 768px) and (min-height: 480px) {
   .page-shell--list {
     height: calc(100dvh - 112px);
     min-height: 0;
   }
   .is-bounded .list-table-viewport {
     flex: 1;
-    min-height: 96px;
+    min-height: var(--table-minimum-height, 96px);
     overflow-x: auto;
     overflow-y: hidden;
   }
@@ -335,7 +354,20 @@
     text-overflow: ellipsis;
   }
 }
-@media (max-width: 1023px), (max-height: 649px) {
+@media (min-width: 768px) and (min-height: 480px) and (max-height: 760px) {
+  .page-shell--list,
+  .is-bounded.list-workspace {
+    gap: 0.5rem;
+  }
+  .is-bounded > .list-filters,
+  .is-bounded > .list-results {
+    padding: 0.625rem !important;
+  }
+  .page-shell--list .page-heading p { display: none; }
+  .is-bounded .list-results { gap: 0.5rem; }
+  .is-bounded .list-table th { height: 40px; }
+}
+@media (max-width: 767px), (max-height: 479px) {
   .is-bounded .list-table-viewport {
     max-height: none;
   }
@@ -378,4 +410,53 @@
   .page-shell {
     gap: 0.5rem;
   }
+}
+
+/* Etapas concluídas continuam consultáveis, com edição somente após reabrir. */
+.panel.treatment-stage-complete {
+  border: 1px solid #75e0a7;
+  background: #ecfdf3;
+  box-shadow: inset 4px 0 0 #17b26a;
+}
+
+.treatment-card-header { display:flex; align-items:flex-start; gap:1rem; }
+.treatment-card-heading { flex:1; min-width:0; }
+.treatment-card-toggle { display:inline-flex; align-items:center; justify-content:center; width:48px; min-height:48px; padding:0; flex-shrink:0; margin-left:auto; }
+.treatment-stage-status { color:#067647; font-weight:600; margin-top:0.5rem; }
+.treatment-stage-footer { display:flex; justify-content:flex-end; border-top:1px solid #d0d5dd; padding-top:1rem; margin-top:1.25rem; }
+.treatment-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 0.25rem 0.125rem 0.5rem;
+  border-bottom: 1px solid #e4e7ec;
+}
+.treatment-tab {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 0.625rem;
+  background: #fff;
+  color: #475467;
+}
+.treatment-tab.is-active {
+  border-color: #465fff;
+  background: #eef4ff;
+  color: #3538cd;
+  box-shadow: inset 0 -3px #465fff;
+}
+.treatment-tab.is-complete {
+  border-color: #75e0a7;
+  background: #ecfdf3;
+  color: #05603a;
+}
+.treatment-tab.is-complete.is-active {
+  border-color: #039855;
+  box-shadow: inset 0 -3px #039855;
+}
+.treatment-tab:focus-visible {
+  outline: 2px solid #465fff;
+  outline-offset: 2px;
 }

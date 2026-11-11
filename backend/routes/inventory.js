@@ -33,18 +33,16 @@ const wrap = (handler) => async (req, res) => {
           : 500);
     if (status === 500)
       console.error("[Estoque]", { code: error.code || error.name });
-    res
-      .status(status)
-      .json({
-        error: error.status
-          ? error.message
-          : status === 409
-            ? "Registro já cadastrado."
-            : status === 422
-              ? "Referência inválida."
-              : "Não foi possível concluir a operação de estoque.",
-        ...(status === 403 ? { code: "PERMISSION_DENIED" } : {}),
-      });
+    res.status(status).json({
+      error: error.status
+        ? error.message
+        : status === 409
+          ? "Registro já cadastrado."
+          : status === 422
+            ? "Referência inválida."
+            : "Não foi possível concluir a operação de estoque.",
+      ...(status === 403 ? { code: "PERMISSION_DENIED" } : {}),
+    });
   }
 };
 const text = (value) => String(value ?? "").trim() || null;
@@ -79,12 +77,23 @@ async function sectorAccess(user, sectorId, db = knex) {
 }
 const scope = (q, user, column) =>
   !isAdmin(user) ? q.where(column, user.sector_id || -1) : q;
-async function requestAccess(db, user, requestId, edit = false) {
+async function requestAccess(
+  db,
+  user,
+  requestId,
+  edit = false,
+  allowLegacyRepair = false,
+) {
   const q = db("inventory_requests").where({
     id: integer(requestId, "Pedido"),
   });
   const request = await (edit ? q.forUpdate() : q).first();
   if (!request) fail("Pedido não encontrado.", 404);
+  if (edit && request.legacy_incomplete && !allowLegacyRepair)
+    fail(
+      "Pedido recuperado do legado sem cabeçalho completo. Edite o pedido e confirme solicitante e data antes de operar os itens.",
+      409,
+    );
   if (!isAdmin(user) && Number(request.sector_id) !== Number(user.sector_id))
     fail("Usuário sem permissão a essa função", 403);
   if (
@@ -254,11 +263,10 @@ router.get(
     const consumed = knex("inventory_request_items as i")
       .join("inventory_requests as r", "r.id", "i.request_id")
       .join("inventory_products as p", "p.id", "i.product_id")
-      .select("p.name")
+      .select("p.id as product_id", "p.name")
       .sum("i.fulfilled_quantity as quantity")
       .groupBy("p.id", "p.name")
-      .orderBy("quantity", "desc")
-      .limit(10);
+      .orderBy("quantity", "desc");
     const purchases = knex("inventory_invoice_items as i")
       .join("inventory_invoices as n", "n.id", "i.invoice_id")
       .select(knex.raw("DATE_FORMAT(n.invoice_date,'%Y-%m') as month"))
@@ -282,12 +290,45 @@ router.get(
           .count("* as total")
           .first(),
       ]);
+    const withdrawals = knex("inventory_consumption_items as i")
+      .join("inventory_consumptions as h", "h.id", "i.consumption_id")
+      .join("inventory_products as p", "p.id", "i.product_id")
+      .select("p.id as product_id", "p.name")
+      .sum("i.quantity as quantity")
+      .groupBy("p.id", "p.name");
+    const drafts = knex("inventory_purchase_orders")
+      .where({ status: "DRAFT" })
+      .count("* as total")
+      .first();
+    const consumptionCount = knex("inventory_consumptions")
+      .count("* as total")
+      .first();
+    if (!isAdmin(req.user)) {
+      withdrawals.where("h.sector_id", req.user.sector_id || -1);
+      drafts.where("sector_id", req.user.sector_id || -1);
+      consumptionCount.where("sector_id", req.user.sector_id || -1);
+    }
+    const [newConsumed, purchaseDrafts, consumptions] = await Promise.all([
+      withdrawals,
+      drafts,
+      consumptionCount,
+    ]);
+    const combined = new Map();
+    for (const row of [...topProducts, ...newConsumed]) {
+      const old = combined.get(row.product_id);
+      combined.set(row.product_id, {
+        name: row.name,
+        quantity: Number(row.quantity) + (old?.quantity || 0),
+      });
+    }
     res.json({
       cards: {
+        purchaseDrafts: Number(purchaseDrafts.total),
+        consumptions: Number(consumptions.total),
         products: Number(products.total),
         zero: stock.filter((s) => Number(s.quantity) === 0).length,
         belowMinimum: stock.filter(
-          (s) => Number(s.quantity) < Number(s.minimum_quantity),
+          (s) => Number(s.quantity) <= Number(s.minimum_quantity),
         ).length,
         pending: Number(
           orders.find((r) => r.status === "PENDENTE")?.total || 0,
@@ -303,7 +344,9 @@ router.get(
       alerts: stock
         .filter((s) => Number(s.quantity) <= Number(s.minimum_quantity))
         .slice(0, 10),
-      topProducts,
+      topProducts: [...combined.values()]
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 10),
       monthlyPurchases,
     });
   }),
@@ -334,6 +377,8 @@ for (const [catalog, [table, fields]] of Object.entries(catalogs)) {
   );
   const save = (create) =>
     wrap(async (req, res) => {
+      if (!create && req.body.active !== undefined)
+        fail("Altere a situação pela ação Ativar/Inativar, que exige permissão de exclusão.");
       const row = await knex.transaction(async (db) => {
         const old = create
           ? null
@@ -344,7 +389,7 @@ for (const [catalog, [table, fields]] of Object.entries(catalogs)) {
         if (!create && !old) fail("Cadastro não encontrado.", 404);
         const data = Object.fromEntries(
           fields
-            .filter((f) => req.body[f] !== undefined)
+            .filter((f) => req.body[f] !== undefined && (create || f !== "active"))
             .map((f) => [
               f,
               f === "active" ? req.body[f] === true : text(req.body[f]),
@@ -405,6 +450,19 @@ for (const [catalog, [table, fields]] of Object.entries(catalogs)) {
     `/${catalog}/:id`,
     modulePermission(permission, "edit"),
     save(false),
+  );
+  router.patch(
+    `/${catalog}/:id/active`,
+    modulePermission(permission, "delete"),
+    wrap(async (req, res) => {
+      if (typeof req.body.active !== "boolean")
+        fail("Informe o estado ativo do cadastro.");
+      const changed = await knex(table)
+        .where({ id: integer(req.params.id) })
+        .update({ active: req.body.active, updated_at: knex.fn.now() });
+      if (!changed) fail("Cadastro não encontrado.", 404);
+      res.json(await knex(table).where({ id: integer(req.params.id) }).first());
+    }),
   );
   router.delete(
     `/${catalog}/:id`,
@@ -486,7 +544,7 @@ async function stockList(user, filters) {
   const q = productQuery()
     .leftJoin(sums.as("b"), "b.product_id", "p.id")
     .select(knex.raw("COALESCE(b.quantity, 0) as quantity"))
-    .where("p.active", true);
+    .whereRaw("(p.active = 1 OR COALESCE(b.quantity,0) <> 0)");
   if (sectorId === -1) q.whereRaw("1=0");
   if (filters.category_id)
     q.where("p.category_id", integer(filters.category_id));
@@ -538,17 +596,31 @@ router.post(
 );
 
 router.get(
+  "/imports/latest",
+  wrap(async (req, res) => {
+    if (!isAdmin(req.user)) fail("Usuário sem permissão a essa função", 403);
+    const run = await knex("inventory_import_runs")
+      .orderBy("id", "desc")
+      .first();
+    if (run && typeof run.summary === "string")
+      run.summary = JSON.parse(run.summary);
+    res.json({ run: run || null });
+  }),
+);
+router.get(
   "/requests",
   modulePermission("inventory_requests"),
   wrap(async (req, res) => {
     const q = knex("inventory_requests as r")
-      .join("users as u", "u.id", "r.requester_id")
+      .leftJoin("users as u", "u.id", "r.requester_id")
       .leftJoin("people as p", "p.id", "u.person_id")
       .join("inventory_sectors as s", "s.id", "r.sector_id")
       .select(
         "r.*",
         "u.username",
-        "p.full_name as requester_name",
+        knex.raw(
+          "COALESCE(p.full_name,u.username,r.legacy_requester_name,'Solicitante não identificado') as requester_name",
+        ),
         "s.name as sector_name",
       );
     const totals = knex("inventory_request_items")
@@ -625,7 +697,13 @@ router.put(
   wrap(async (req, res) => {
     res.json(
       await knex.transaction(async (db) => {
-        const old = await requestAccess(db, req.user, req.params.id, true);
+        const old = await requestAccess(
+          db,
+          req.user,
+          req.params.id,
+          true,
+          true,
+        );
         if (old.status === "ATENDIDO")
           fail("Pedido atendido não pode ser alterado.", 409);
         const target = await requester(
@@ -652,8 +730,10 @@ router.put(
             sector_id: target.sector_id,
             request_date: date(req.body.request_date),
             notes: text(req.body.notes),
+            legacy_incomplete: false,
             updated_at: db.fn.now(),
           });
+        await updateRequestStatus(db, old.id);
         return db("inventory_requests").where({ id: old.id }).first();
       }),
     );
@@ -758,6 +838,7 @@ router.post(
         .first();
       if (!item) fail("Item não encontrado.", 404);
       await ensureActive(db, "inventory_sectors", request.sector_id);
+      await ensureActive(db, "inventory_products", item.product_id);
       const key = { product_id: item.product_id, sector_id: request.sector_id };
       await db("inventory_balances")
         .insert({ ...key, quantity: 0 })
@@ -778,13 +859,11 @@ router.post(
           "FULFILLMENT",
           { request_id: request.id },
         );
-      await db("inventory_request_items")
-        .where({ id: item.id })
-        .update({
-          status: outcome.status,
-          fulfilled_quantity: outcome.fulfilled_quantity,
-          updated_at: db.fn.now(),
-        });
+      await db("inventory_request_items").where({ id: item.id }).update({
+        status: outcome.status,
+        fulfilled_quantity: outcome.fulfilled_quantity,
+        updated_at: db.fn.now(),
+      });
       return {
         ...outcome,
         request_status: await updateRequestStatus(db, request.id),
@@ -1055,4 +1134,5 @@ router.get(
     res.json(await q.orderBy("m.id", "desc"));
   }),
 );
+router.use(require("./inventory-operations")({ db: knex, wrap }));
 module.exports = router;

@@ -2,11 +2,12 @@ const StenciError = require('./StenciError')
 const StenciSession = require('./StenciSession')
 
 class StenciClient {
-  constructor({ config, session = null, fetchImpl = global.fetch, logger = console } = {}) {
+  constructor({ config, session = null, fetchImpl = global.fetch, logger = console, deadlineAt = Infinity } = {}) {
     this.config = config
     this.fetch = fetchImpl
     this.session = session
     this.logger = logger
+    this.deadlineAt = deadlineAt
     this.authState = session ? { cookie: session.cookie, token: session.token } : {}
   }
 
@@ -25,7 +26,9 @@ class StenciClient {
     this.assertConfigured()
     const url = new URL(path, base === 'apiX' ? this.config.apiXBaseUrl : this.config.apiBaseUrl)
     Object.entries(query).forEach(([key, value]) => value != null && value !== '' && url.searchParams.set(key, String(value)))
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), this.config.timeoutMs)
+    const timeout = stage === 'logout' ? this.config.timeoutMs : Math.min(this.config.timeoutMs, this.deadlineAt - Date.now())
+    if(timeout<=0) throw new StenciError('Tempo limite da consulta temporária excedido.',{code:'STENCI_QUERY_TIMEOUT',status:504,stage})
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout)
     const options = { method, signal: controller.signal, headers: {
       Accept: 'application/json, text/plain, */*',
       Origin: this.config.origin,

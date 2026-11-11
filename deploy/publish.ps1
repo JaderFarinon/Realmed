@@ -1,4 +1,4 @@
-param([string]$PuttyDirectory = 'C:\Users\jader\AppData\Local\Microsoft\WinGet\Packages\PuTTY.PuTTY_Microsoft.Winget.Source_8wekyb3d8bbwe')
+param([string]$PuttyDirectory = 'C:\Users\jader\AppData\Local\Microsoft\WinGet\Packages\PuTTY.PuTTY_Microsoft.Winget.Source_8wekyb3d8bbwe', [string]$SshHostKey = 'SHA256:cX4W3ro5nnL/w9uJxO9T955XO3fufWFsGmBcgn0MXfQ')
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $taskRelease = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -18,9 +18,19 @@ try {
     tar -czf $taskArchive --exclude=node_modules --exclude='.env*' --exclude='*.tsbuildinfo' backend frontend integrations deploy docs AGENTS.md
     if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
 } finally { Pop-Location }
-& $taskPscp -batch -agent -P 3022 $taskArchive '225881-2628@gate.paas.saveincloud.net.br:/qyvia/realmed/shared/'
+& $taskPscp -batch -agent -hostkey $SshHostKey -P 3022 $taskArchive '225881-2628@gate.paas.saveincloud.net.br:/qyvia/realmed/shared/'
 if ($LASTEXITCODE -ne 0) { throw 'Upload failed; ensure the SSH key is unlocked in Pageant' }
 $taskCommand = Join-Path $taskWork 'publish-command.txt'
-[IO.File]::WriteAllText($taskCommand, "set -e`nmkdir -p /qyvia/realmed/shared/deploy-staging`ntar -xzf /qyvia/realmed/shared/$taskRelease.tar.gz -C /qyvia/realmed/shared/deploy-staging deploy/release.sh`nsh /qyvia/realmed/shared/deploy-staging/deploy/release.sh $taskRelease`n")
-& $taskPlink -batch -agent -ssh -P 3022 -m $taskCommand '225881-2628@gate.paas.saveincloud.net.br'
+$taskRemoteCommand = @'
+set -e
+mkdir -p /qyvia/realmed/shared/deploy-staging
+tar -xzf /qyvia/realmed/shared/__RELEASE__.tar.gz -C /qyvia/realmed/shared/deploy-staging deploy/release.sh
+: > /qyvia/realmed/shared/publication-__RELEASE__.log
+nohup sh -c 'sh /qyvia/realmed/shared/deploy-staging/deploy/release.sh __RELEASE__; result=$?; printf "%s\n" "$result" > /qyvia/realmed/shared/publication-__RELEASE__.status; exit "$result"' > /qyvia/realmed/shared/publication-__RELEASE__.log 2>&1 < /dev/null &
+publication_pid=$!
+tail --pid="$publication_pid" -n +1 -f /qyvia/realmed/shared/publication-__RELEASE__.log
+exit "$(cat /qyvia/realmed/shared/publication-__RELEASE__.status)"
+'@
+[IO.File]::WriteAllText($taskCommand, $taskRemoteCommand.Replace('__RELEASE__', $taskRelease).Replace("`r`n", "`n"))
+& $taskPlink -batch -agent -ssh -hostkey $SshHostKey -P 3022 -m $taskCommand '225881-2628@gate.paas.saveincloud.net.br'
 if ($LASTEXITCODE -ne 0) { throw 'Publication failed; review Realmed logs and previous release' }

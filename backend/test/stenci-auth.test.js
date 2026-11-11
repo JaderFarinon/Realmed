@@ -70,7 +70,7 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
     }
   }
   const sessionStore = new StenciSessionStore({ ttlMs: 60_000 })
-  const router = createAuthRouter({ configFactory: () => config, serviceFactory, syncUser, jwtSecret: process.env.JWT_SECRET, sessionStore })
+  const router = createAuthRouter({ db: { query: async () => [[]] }, configFactory: () => config, serviceFactory, syncUser, jwtSecret: process.env.JWT_SECRET, sessionStore })
   await withServer(router, async (base) => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'joao', password: 'never-persist-this' }) })
@@ -84,6 +84,7 @@ test('valid logins create isolated device contexts, issue safe JWTs and logout c
       assert.equal(session.mode, 'detached')
       assert.equal(session.token, undefined)
       assert.equal(session.password, undefined)
+      assert.ok(sessionStore.sessions.get(claims.sid).expiresAt<=claims.exp*1000)
       assert.equal(JSON.stringify(result).includes('never-persist-this'), false)
       assert.equal(JSON.stringify(result).includes('server-only-stenci-token'), false)
       assert.equal(result.user.permissions, undefined)
@@ -118,12 +119,36 @@ test('current user exposes the backend permission mode to operational clients', 
   }
 })
 
+test('blocked Realmed account logs out Stenci and receives no local session', async () => {
+  let loggedOut = 0
+  const sessionStore = new StenciSessionStore({ttlMs: 60_000})
+  const router = createAuthRouter({
+    db: { query: async () => [[]] },
+    configFactory: () => config, jwtSecret: process.env.JWT_SECRET, sessionStore,
+    serviceFactory: () => ({
+      authenticateUser: async () => ({stenci_user_id: 'blocked-account', stenci_username: 'blocked'}),
+      getSession: () => new StenciSession({deviceId: 'test', branchId: 'realmed-branch', token: 'external-token'}),
+      logout: async () => { loggedOut++ },
+    }),
+    syncUser: async () => { throw new UserSyncError('USER_ACCESS_DISABLED', 403) },
+  })
+  await withServer(router, async base => {
+    const res = await fetch(`${base}/api/auth/login`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:'blocked', password:'test-only'})})
+    assert.equal(res.status, 403)
+    const body = await res.json()
+    assert.equal(body.code, 'USER_ACCESS_DISABLED')
+    assert.equal(body.token, undefined)
+    assert.equal(sessionStore.sessions.size, 0)
+  })
+  assert.equal(loggedOut, 1)
+})
+
 test('invalid credentials and unavailable Stenci return controlled messages', async () => {
   for (const scenario of [
     { error: Object.assign(new Error('remote body'), { code: 'STENCI_INVALID_CREDENTIALS', stage: 'auth', upstreamStatus: 401 }), status: 401, message: 'Usuário ou senha inválidos.' },
     { error: Object.assign(new Error('socket and headers'), { code: 'STENCI_CONNECTION_ERROR', stage: 'auth' }), status: 503, message: 'Não foi possível validar seu acesso no momento. Tente novamente.' },
   ]) {
-    const router = createAuthRouter({ configFactory: () => config, serviceFactory: () => ({ authenticateUser: async () => { throw scenario.error }, logout: async () => {} }), jwtSecret: process.env.JWT_SECRET })
+    const router = createAuthRouter({ db: { query: async () => [[]] }, configFactory: () => config, serviceFactory: () => ({ authenticateUser: async () => { throw scenario.error }, logout: async () => {} }), jwtSecret: process.env.JWT_SECRET })
     await withServer(router, async (base) => {
       const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'x', password: 'sensitive' }) })
       assert.equal(response.status, scenario.status)
@@ -152,6 +177,7 @@ test('user sync failures log only sanitized MySQL diagnostics before returning 5
     }
   }
   const router = createAuthRouter({
+    db: { query: async () => [[]] },
     serviceFactory, logger, jwtSecret: process.env.JWT_SECRET,
     syncUser: async () => { throw new UserSyncError('REALMED_USER_SYNC_FAILED', 500, mysqlError) },
   })

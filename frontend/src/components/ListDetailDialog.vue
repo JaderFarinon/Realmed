@@ -1,5 +1,6 @@
 <template>
-  <Teleport to="body"
+  <div v-if="open && embedded" class="list-dialog-embedded"><slot /></div>
+  <Teleport v-else-if="!embedded" to="body"
     ><div
       v-if="open"
       class="list-dialog-backdrop"
@@ -34,13 +35,13 @@
 </template>
 <script setup lang="ts">
 import { ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
-const props = defineProps<{ open: boolean; title: string; wide?: boolean }>(),
+const props = defineProps<{ open: boolean; title: string; wide?: boolean; embedded?: boolean }>(),
   emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLElement | null>(null),
   titleId = useId()
 let previous: HTMLElement | null = null
 function trapFocus(event: KeyboardEvent) {
-  if (!props.open || event.key !== 'Tab') return
+  if (props.embedded || !props.open || event.key !== 'Tab') return
   const dialogs = document.querySelectorAll('.list-detail-dialog')
   if (dialogs[dialogs.length - 1] !== dialog.value) return
   const elements = Array.from(
@@ -72,6 +73,7 @@ function trapFocus(event: KeyboardEvent) {
 watch(
   () => props.open,
   async (open) => {
+    if (props.embedded) return
     if (open) {
       previous = document.activeElement as HTMLElement
       document.addEventListener('keydown', trapFocus)

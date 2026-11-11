@@ -1,6 +1,6 @@
 <template>
   <PageShell title="Pacientes" subtitle="Dados administrativos e convênios" list>
-    <p v-if="message" class="text-error-700" role="alert">{{ message }}</p>
+    
     <DataList
       v-model:selected="selected"
       :items="filtered"
@@ -19,13 +19,7 @@
               class="input"
               placeholder="Nome, CPF, telefone ou e-mail" /></label
           ><button class="btn-primary" type="submit">Buscar</button
-          ><button
-            class="btn-secondary"
-            type="button"
-            @click="clearListFilters"
-          >
-            Limpar
-          </button>
+          ><button class="btn-secondary" type="button" @click="clearListFilters">Limpar</button>
         </form></template
       >
     </DataList>
@@ -36,7 +30,8 @@
     >
       <form id="patient-form" class="grid gap-4 md:grid-cols-2" @submit.prevent="save">
         <label class="md:col-span-2"
-          >Nome completo<input v-model="form.full_name" class="input" required /></label
+          ><FieldLabel :required="true">Nome completo</FieldLabel
+          ><input v-model="form.full_name" class="input" required /></label
         ><label>CPF<input v-model="form.cpf" class="input" /></label
         ><label>Nascimento<input v-model="form.birth_date" class="input" type="date" /></label
         ><label>Telefone<input v-model="form.phone" class="input" /></label
@@ -52,6 +47,9 @@
   </PageShell>
 </template>
 <script setup lang="ts">
+import { unref as unwrapNoticeValue } from 'vue'
+import { useFeedback } from '@/composables/useNotifications'
+import FieldLabel from '@/components/FieldLabel.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/plugins/axios'
@@ -151,5 +149,10 @@ async function save() {
   }
 }
 onMounted(load)
-function clearListFilters(){search.value='';load()}
+function clearListFilters() {
+  search.value = ''
+  load()
+}
+
+useFeedback(() => unwrapNoticeValue(message), () => 'error')
 </script>

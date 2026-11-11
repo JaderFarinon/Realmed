@@ -1,0 +1,27 @@
+// Explicit allowlist: never read legacy passwords, hashes or authentication secrets.
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto')
+const mysql=require(path.join(process.cwd(),'node_modules/mysql2/promise'))
+const env=require(path.join(process.cwd(),'node_modules/dotenv')).parse(fs.readFileSync('/qyvia/realmed/shared/backend.env'))
+const schema='estoque_realmed'
+const tables={apresentacao:['id_apresentacao','nome_apresentacao','ativo'],categoria:['id_categoria','nome_categoria','ativo'],setor:['id_setor','nome_setor','descricao','ativo','created_at','updated_at'],fornecedor:['id_fornecedor','cnpj','razao_social','telefone','ativo','email','nome_contato'],produto:['id_produto','codigo','nome_produto','qtd_minima','unidade','categoria','foto'],estoque:['id_estoque','quantidade','produto','setor_id'],nota:['cod_nota','numero_nota','id_fornecedor','data_nota','fechado'],item:['id_item','valor_item','quantidade','cod_nota','cod_produto'],pedido:['cod_pedido','quantidade_pedida','id_usuario','cod_produto','data_pedido','obs','flag_baixa','status_pedido'],item_pedido:['id_item_pedido','quantidade','cod_pedido','cod_produto','flag_baixa','obs','quantidade_solicitada','quantidade_atendida','status_item'],usuario:['id_usuario','login','perfil','setor','ativo','setor_id'],perfil:['id_perfil','nome_perfil','nivel']}
+;(async()=>{
+ const db=await mysql.createConnection({host:env.DB_HOST,port:Number(env.DB_PORT),user:env.DB_USER,password:env.DB_PASS,multipleStatements:false,dateStrings:true})
+ try {
+  await db.query('SET SESSION TRANSACTION READ ONLY')
+  // The source mixes MyISAM and InnoDB: one brief shared read lock gives a consistent snapshot.
+  await db.query('LOCK TABLES '+Object.keys(tables).map(table=>db.escapeId(schema)+'.'+db.escapeId(table)+' READ').join(', '))
+  const data={}
+  try {for(const [table,columns] of Object.entries(tables)){const [rows]=await db.query('SELECT '+columns.map(column=>db.escapeId(column)).join(',')+' FROM '+db.escapeId(schema)+'.'+db.escapeId(table)+' ORDER BY '+db.escapeId(columns[0]));data[table]=rows}}finally{await db.query('UNLOCK TABLES')}
+  const hash=crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex')
+  const snapshot={schema,capturedAt:new Date().toISOString(),fingerprint:hash,data}
+  const root='/qyvia/realmed/shared/backups/legacy-inventory';fs.mkdirSync(root,{recursive:true,mode:0o700})
+  const output=path.join(root,'estoque_realmed-'+hash.slice(0,16)+'.json');fs.writeFileSync(output,JSON.stringify(snapshot,null,2),{mode:0o600})
+  const [targetUsers]=await db.query('SELECT u.id,u.username,u.stenci_username,u.status,p.email FROM realmed.users u LEFT JOIN realmed.people p ON p.id=u.person_id')
+  const report={snapshot:output,fingerprint:hash,counts:Object.fromEntries(Object.entries(data).map(([key,rows])=>[key,rows.length])),sectors:data.setor.map(s=>({id:s.id_setor,name:s.nome_setor})),profiles:data.perfil,quality:{},targetUsers:targetUsers.map(u=>({id:u.id,status:u.status,matchedLegacyIds:data.usuario.filter(old=>[u.username,u.stenci_username,u.email].filter(Boolean).map(x=>x.toLowerCase()).includes(old.login.toLowerCase())).map(old=>old.id_usuario)}))}
+  const ids=key=>new Set(data[key].map(row=>row[tables[key][0]]))
+  const missing=(rows,column,key)=>rows.filter(row=>!ids(key).has(row[column])).map(row=>row[tables[Object.keys(data).find(k=>data[k]===rows)][0]])
+  report.quality={negativeBalances:data.estoque.filter(r=>r.quantidade<0),zeroBalances:data.estoque.filter(r=>r.quantidade===0).length,totalBalance:data.estoque.reduce((sum,r)=>sum+r.quantidade,0),badProductReferences:missing(data.estoque,'produto','produto'),badBalanceSectors:missing(data.estoque,'setor_id','setor'),missingProductNames:data.produto.filter(r=>!r.nome_produto?.trim()).map(r=>r.id_produto),missingCategories:missing(data.produto,'categoria','categoria'),missingPresentations:missing(data.produto,'unidade','apresentacao'),blankCodes:data.produto.filter(r=>!r.codigo?.trim()).map(r=>r.id_produto),negativeMinimums:data.produto.filter(r=>r.qtd_minima<0).map(r=>r.id_produto),photos:data.produto.filter(r=>r.foto).length,badInvoiceProducts:missing(data.item,'cod_produto','produto'),badInvoiceParents:missing(data.item,'cod_nota','nota'),badInvoiceSuppliers:missing(data.nota,'id_fornecedor','fornecedor'),badRequestProducts:missing(data.item_pedido,'cod_produto','produto'),badRequestParents:missing(data.item_pedido,'cod_pedido','pedido'),badRequestUsers:missing(data.pedido,'id_usuario','usuario'),invoiceDates:data.nota.map(r=>({id:r.cod_nota,date:r.data_nota,closed:r.fechado})),requestDates:data.pedido.map(r=>({id:r.cod_pedido,date:r.data_pedido})),requestItems:data.item_pedido.map(r=>({id:r.id_item_pedido,q:r.quantidade,requested:r.quantidade_solicitada,fulfilled:r.quantidade_atendida,status:r.status_item,flag:r.flag_baixa})),userSectors:data.usuario.map(r=>({id:r.id_usuario,sector:r.setor,sectorId:r.setor_id})),duplicateCodes:Object.entries(data.produto.reduce((m,r)=>{const key=r.codigo.trim().toUpperCase().replace(/^0+(?=\d)/,'');(m[key]||=[]).push(r.id_produto);return m},{})).filter(([,rows])=>rows.length>1)}
+  const [triggers]=await db.query('SELECT TRIGGER_NAME,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=?',[schema]);report.triggers=triggers
+  console.log(JSON.stringify(report,null,2))
+ }finally{await db.end()}
+})().catch(error=>{console.error('Legacy export failed:',error.code||error.name);process.exitCode=1})

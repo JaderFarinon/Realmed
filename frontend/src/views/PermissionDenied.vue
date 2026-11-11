@@ -1,10 +1,10 @@
 <template>
-  <PageShell title="Usuário sem permissão a essa função">
+  <PageShell title="Sem Permissão">
     <div class="panel max-w-2xl">
-      <p class="text-gray-600">Solicite a um administrador do Realmed a liberação desta função.</p>
-      <RouterLink to="/dashboard" class="btn-secondary mt-5 inline-flex"
-        >Voltar ao Dashboard</RouterLink
-      >
+      <p class="text-gray-600">
+        Usuário sem permissão a essa função. Solicite a um administrador do Realmed a liberação ou
+        escolha outra função no menu.
+      </p>
     </div>
   </PageShell>
 </template>
