@@ -27,9 +27,11 @@ async function withServer(router, callback) {
   }
 }
 
-function localDb(user) {
+function localDb(user,professional=null,notifications=[]) {
   return {
-    query: async (sql) => {
+    query: async (sql,args) => {
+      if (sql.includes('FROM physiotherapist_user_links')) return [professional?[professional]:[]]
+      if (sql.includes('INSERT INTO system_notifications')) { notifications.push(args);return [{insertId:1}] }
       if (sql.includes("u.auth_provider = 'LOCAL'")) return [[user]]
       if (sql.includes('UPDATE users SET last_login')) return [{ affectedRows: 1 }]
       if (sql.includes('FROM users u LEFT JOIN people')) return [[user]]
@@ -84,6 +86,19 @@ test('local accounts authenticate in Realmed without creating a Stenci session',
     assert.equal((await me.json()).user.authProvider, 'LOCAL')
   })
   assert.equal(stenciCalls, 0)
+})
+
+test('physiotherapist local password login exposes only its link and records an admin notification on success',async()=>{
+  const user={id:71,username:'physio-local',role:'user',status:'active',auth_provider:'LOCAL',password_hash:await bcrypt.hash('physio-local-test-password',4),full_name:'Fisio fictício'};
+  const notifications=[],router=createAuthRouter({db:localDb(user,{professional_id:8,professional_name:'Profissional fictício'},notifications),jwtSecret:process.env.JWT_SECRET,configFactory:()=>{throw new Error('Local password must not be sent to Stenci')}});
+  await withServer(router,async base=>{
+    const login=password=>fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user.username,password})});
+    assert.equal((await login('wrong')).status,401);assert.equal(notifications.length,0);
+    const response=await login('physio-local-test-password');assert.equal(response.status,200);
+    const data=await response.json();assert.equal(data.user.physiotherapistId,8);assert.equal(jwt.decode(data.token).sid,undefined);
+    assert.equal(notifications.length,1);assert.equal(notifications[0][0],'PHYSIO_PASSWORD_LOGIN');assert.equal(notifications[0][4],71);
+    assert.ok(!JSON.stringify(notifications).includes('physio-local-test-password'));
+  });
 })
 
 test('local account rejects incorrect password and disabled users without Stenci fallback', async () => {

@@ -5,6 +5,9 @@ import { userHome } from '@/utils/userHome'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/eventos', redirect: '/eventos/confraternizacao-2026' },
+    { path: '/eventos/confraternizacao-2026', component: () => import('@/views/Events/EventConfirmations.vue'), meta: { title: 'Confraternização 2026', module: 'events' } },
+    { path: '/confraternizacao', component: () => import('@/views/Public/YearEndEvent.vue'), meta: { public: true, title: 'Confraternização de fim de ano' } },
     { path: '/', redirect: '/inicio' },
     { path: '/inicio', component: () => import('@/views/Configuracoes/MyProfileView.vue'), meta: { title: 'Realmed' } },
     { path: '/meu-perfil', component: () => import('@/views/Configuracoes/MyProfileView.vue'), meta: { title: 'Meu Perfil' } },
@@ -76,6 +79,11 @@ const router = createRouter({
       path: '/modo-fisio',
       component: () => import('@/views/Physio/PhysioMode.vue'),
       meta: { title: 'Modo Fisioterapeuta' },
+    },
+    {
+      path: '/modo-fisio/atendimentos/:id',
+      component: () => import('@/views/Physio/PhysioAppointment.vue'),
+      meta: { title: 'Atendimento do paciente' },
     },
     {
       path: '/dashboard',

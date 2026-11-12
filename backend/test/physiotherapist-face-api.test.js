@@ -12,6 +12,7 @@ async function setup() {
     const builder = {
       join: () => builder,
       where: conditions => { state.filters.push(conditions); return builder },
+      whereRaw: () => builder,
       select: async () => [{ user_id: 41 }],
       first: async () => state.user,
       update: async () => { state.writes++ },
@@ -23,6 +24,8 @@ async function setup() {
   const filename = path.resolve(__dirname, '../routes/physiotherapist-mode.js')
   const originalRequire = createRequire(filename)
   const dependencies = {
+    '../services/physioStenciSession': {createPhysioSession:async()=>({sid:'test-sid',developmentMode:true}),serializePhysioStenci:task=>task()},
+    '../services/facialLoginAttempts': { createFacialLoginAttempts: () => require('../services/facialLoginAttempts').createFacialLoginAttempts({now:()=>Date.now()+state.clock}) },
     './guide-center': { knex },
     './auth': { publicUser: user => ({ id: user.id, username: user.username, role: user.role }) },
     '../middleware/auth': (_req, res) => res.sendStatus(401),
@@ -31,6 +34,7 @@ async function setup() {
       authenticateFrames: async (_images, options) => {
         state.options.push(options)
         if (state.fail === 'motion') throw Object.assign(new Error('Extra check'), { status: 401, code: 'FACE_MOTION_REQUIRED' })
+        if (state.fail === 'busy') throw Object.assign(new Error('Server busy'), { status: 503, code: 'FACE_BUSY' })
         if (state.fail) throw Object.assign(new Error('Face rejected'), { status: 401 })
         const queries = [Array(1024).fill(1), Array(1024).fill(1)]
         state.descriptors.push(...queries)
@@ -89,7 +93,7 @@ test('only the server chooses the extra gesture, with a fresh single-use challen
   } finally { await close() }
 })
 
-test('shared tablet successes do not consume failed-login quota; failures still rate-limit with Retry-After', async () => {
+test('shared tablet successes and extra gesture do not consume failed-login quota', async () => {
   const { state, call, close } = await setup()
   try {
     for (let i = 0; i < 11; i++) {
@@ -103,10 +107,39 @@ test('shared tablet successes do not consume failed-login quota; failures still 
       } else assert.equal(response.status, 200)
     }
     state.fail = true
-    for (let i = 0; i < 8; i++) assert.equal((await call('face', { challenge: (await call('challenge')).body.id })).status, 401)
+    for (let i = 0; i < 9; i++) assert.equal((await call('face', { challenge: (await call('challenge')).body.id })).status, 401)
     const blocked = await call('face', { challenge: (await call('challenge')).body.id })
     assert.equal(blocked.status, 429)
-    assert.ok(Number(blocked.retry) > 0)
+    assert.equal(Number(blocked.retry), 60)
     assert.equal(state.writes, 11)
+  } finally { await close() }
+})
+
+test('facial API restores ten attempts after a fixed minute and blocks both public endpoints meanwhile', async () => {
+  const { state, call, close } = await setup()
+  try {
+    state.fail = 'busy'
+    for(let i=0;i<11;i++)assert.equal((await call('face',{challenge:(await call('challenge')).body.id})).status,503)
+    state.fail = true
+    for(let i=0;i<9;i++)assert.equal((await call('face',{challenge:(await call('challenge')).body.id})).status,401)
+    const tenth=await call('face',{challenge:(await call('challenge')).body.id})
+    assert.equal(tenth.status,429);assert.equal(tenth.retry,'60');assert.equal(tenth.body.code,'FACE_ATTEMPTS_LIMIT')
+    state.clock+=30000
+    for(const endpoint of ['challenge','face']){const blocked=await call(endpoint);assert.equal(blocked.status,429);assert.ok(Number(blocked.retry)<=30)}
+    state.clock+=30000
+    assert.equal((await call('challenge')).status,200)
+    for(let i=0;i<9;i++)assert.equal((await call('face',{challenge:'invalid'})).status,401)
+    assert.equal((await call('face',{challenge:'invalid'})).retry,'60')
+    state.clock+=60000
+    state.fail=false
+    assert.equal((await call('face',{challenge:(await call('challenge')).body.id})).status,200)
+  } finally { await close() }
+})
+
+test('challenge flood has a separate wait of at most one minute', async () => {
+  const { call, close } = await setup()
+  try {
+    for(let i=0;i<30;i++)assert.equal((await call('challenge')).status,200)
+    const response=await call('challenge');assert.equal(response.status,429);assert.ok(Number(response.retry)>0&&Number(response.retry)<=60)
   } finally { await close() }
 })

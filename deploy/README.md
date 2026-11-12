@@ -1,5 +1,25 @@
 # Implantação Realmed
 
+Eventos → Confraternização 2026 publicado na release `20261112-104853`, asset `index-DM0B8JOH.js`. Build/TypeScript, 197 testes backend, integração MySQL temporária e padrão de telas aprovados; backup antes da migration `20261112000002_events`. Interface publicada validada com APIs sintéticas, catálogo/contagens existentes conferidos somente por leitura, API saudável e lista privada retornando 401 sem login. Permissão independente `events/view`, sem concessões automáticas; revisão geral de permissões adiada por solicitação do usuário. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md`.
+
+Máximo de um acompanhante e aviso de custos junto à seleção publicados na release `20261112-103448`, asset `index-Cx8d45RS.js`. Build/TypeScript e 197 testes aprovados, sem migrations pendentes. API pública rejeita dois acompanhantes; layout/fluxo público e saúde confirmados, sem confirmações fictícias em produção. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md`.
+
+Aviso sobre custos dos acompanhantes publicado na release `20261112-102730`, em `/confraternizacao`. Build/TypeScript e 197 testes aprovados, sem migrations pendentes, texto público e saúde confirmados. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md`.
+
+Confirmação pública da confraternização publicada na release `20261112-090800`, rota `/confraternizacao`, asset `index-rPpnNtGZ.js`. Build/TypeScript e 197 testes aprovados; backup automático antes de aplicar `20261112000001_event_confirmations`. API saudável e interface/API sem login conferidas. Dependências seguem vinculadas a `20261109-153438/backend/node_modules`; preservar o destino. Detalhes em `docs/ALTERACOES_2026-11-12.md`.
+
+Horários recolhidos da agenda publicados na release `20261111-182721`: build/TypeScript e 195 testes aprovados, nenhuma migration pendente, asset `index-CCu7dMaa.js` e API saudável. Expansão por toque/teclado, responsividade e bloqueio por horário conferidos na interface pública com dados fictícios. Dependências continuam em `20261109-153438/backend/node_modules`; preservar o destino. Registro em `docs/ALTERACOES_2026-11-11.md`.
+
+Atendimento restrito à sessão atual publicado na release `20261111-181708`: 195 testes aprovados, nenhuma migration pendente, asset `index-qHFO5M3K.js` e API saudável. Interface pública conferida com relógio controlado/APIs sintéticas; autorização por horário validada também em MySQL/API temporários. Dependências continuam em `20261109-153438/backend/node_modules`; preservar esse destino. Registro funcional em `docs/ALTERACOES_2026-11-11.md`.
+
+Densidade compacta do fisio publicada na release `20261111-180308`: build/TypeScript e 193 testes aprovados, sem migrations pendentes. Asset público `index-V-wcU6oi.js`, saúde da API, medidas responsivas e formulário/modal conferidos. Somente ajuste visual; dependências seguem em `20261109-153438/backend/node_modules`, que deve ser preservado. Registro em `docs/ALTERACOES_2026-11-11.md`.
+
+Configurações do fisioterapeuta publicadas na release `20261111-175243`, com 193 testes aprovados, nenhuma migration pendente, asset `index-DqwTtLGA.js` e saúde confirmada. Tela pública validada com APIs sintéticas; envio de ajustes de agenda aguarda HAR, sem novas gravações Stenci. Dependências continuam vinculadas a `20261109-153438/backend/node_modules`; preservar esse destino. Detalhes em `docs/ALTERACOES_2026-11-11.md`.
+
+Preservação de secrets — 11/11/2026: `enable-permissions.cjs` altera exclusivamente a linha PERMISSIONS_ENABLED e verifica que os demais valores dotenv continuam idênticos. Não reserializar o ambiente inteiro com JSON.stringify: as aspas escapadas por JSON mudam senhas quando interpretadas pelo dotenv. Preservar comentários/aspas/valores originais, gravar atomicamente com modo 600. Regressão coberta em `backend/test/deploy-env-preservation.test.js`.
+
+Fisio local e notificações publicados na release `20261111-155354`, com 190 testes aprovados e migration de notificações aplicada após backup. Dependências resolvidas em `20261109-153438/backend/node_modules`, preservar esse destino. Asset `index-BiZSj6qx.js`, saúde e conexão compartilhada Stenci com consulta/logoff confirmados na versão ativa. Secrets privados configurados, bypass desativado. Log funcional em `docs/ALTERACOES_2026-11-11.md`.
+
 Publicações seguintes: release.sh reutiliza por link a instalação resolvida de node_modules da versão ativa somente quando package.json e package-lock.json forem idênticos. Registra o destino em dependency-source.txt; preservar esse destino na limpeza. Se mudar qualquer manifesto, instalar normalmente. Testes completos, migrations, saúde e rollback continuam obrigatórios. publish.ps1 grava o log/status no servidor e acompanha a execução pela mesma sessão; a publicação continua caso a conexão caia, permitindo retomar a consulta ao log sem refazer a instalação.
 
 ## Limitação de disco na publicação — 09/11/2026

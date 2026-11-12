@@ -122,6 +122,11 @@ function createStenciRouter({
           code: "STENCI_NOT_AVAILABLE_FOR_LOCAL_ACCOUNT",
         });
       const session = sessionStore.get(req.user.sid);
+      if (session?.mode === 'physio-shared' || session?.mode === 'physio-development')
+        return res.status(403).json({
+          error: 'Esta conexão está disponível somente na área do fisioterapeuta.',
+          code: 'PHYSIO_SCOPE_REQUIRED',
+        });
       if (!session || session.mode !== "detached")
         return res.status(401).json({
           error: "Entre novamente no Realmed.",

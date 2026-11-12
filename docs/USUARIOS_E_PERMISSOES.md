@@ -1,5 +1,15 @@
 # Usuários e permissões
 
+## Eventos — 12/11/2026
+
+Permissão independente `events` (Eventos — Confirmações), agrupada em Eventos na matriz. Visualizar permite abrir Eventos → Confraternização 2026 e consultar confirmações, acompanhantes e totais. API exige autenticação e `events/view`, revalidando perfil/status/permissão no banco. Administradores seguem o acesso integral existente; não conceder permissões automaticamente. Conta somente de Eventos pode iniciar nessa tela. Não há ações administrativas de criação/edição/exclusão de confirmações neste módulo. O formulário público continua sem login e sem exposição da lista. A revisão geral das permissões foi explicitamente adiada pelo usuário; a integração deste módulo é validada isoladamente.
+
+## Fisioterapeutas locais e sino administrativo — 11/11/2026
+
+Conta LOCAL pode receber vínculo de fisioterapeuta e cadastro facial. Exige usuário ativo, perfil User, profissional ativo PHYSIOTHERAPIST/CREFITO e unicidade do vínculo. Substitui a restrição histórica de contas locais no modo fisioterapeuta. Entrada facial ou por senha abre a área própria; consultas usam exclusivamente a conta compartilhada configurada no servidor, limitadas às agendas vinculadas. Outros módulos e integrações permanecem sujeitos à matriz individual; sem concessão automática. Tipo de autenticação continua imutável.
+
+Login por senha bem-sucedido de fisioterapeuta vinculado cria aviso persistente para admin/masteradmin, com nome do usuário, profissional e horário. Sino ao lado do menu do usuário mostra novas notificações, com leitura individual e paginação. API revalida perfil/status no banco; usuário comum não lê nem marca avisos administrativos. Facial, senha incorreta e renovação de conexão não geram aviso. Migration `20261111000001_system_notifications.js` preserva histórico no rollback. Testes em `deploy/test-physio-shared-access.cjs`.
+
 ## Acesso por módulo e edição da matriz — 09/11/2026
 
 A entrada pelo login, raiz ou logo escolhe a primeira tela com Visualizar concedido; contas somente de estoque não são encaminhadas ao dashboard de tratamentos. Sem módulos, abrir Meu Perfil. Links diretos sem autorização continuam exibindo Sem Permissão, preservando a sessão. Não conceder permissões automaticamente.
@@ -15,7 +25,7 @@ Qualquer conta ativa pode editar o próprio nome, e-mail e telefone em Meu Perfi
 
 ## Tipos de conta de autenticação — 06/11/2026
 
-No cadastro administrativo, escolha uma conta vinculada ao Stenci ou uma conta local do Realmed. A conta local recebe login e senha próprios, armazenados somente como hash bcrypt; a senha não é enviada ao Stenci, não é salva em texto puro e não pode ser recuperada. A senha local precisa ter pelo menos 12 caracteres e no máximo 72 bytes. Login local tem limite de tentativas e emite a sessão Realmed sem criar sessão Stenci. Contas locais não podem ser vinculadas a profissional nem usar integração Stenci, reconhecimento facial ou modo fisioterapeuta. O tipo de autenticação é imutável após a criação. Contas Stenci continuam usando a senha do próprio Stenci e o fluxo de integração já existente. Permissões seguem a matriz individual e nenhuma é concedida automaticamente a usuários novos.
+No cadastro administrativo, escolha uma conta vinculada ao Stenci ou uma conta local do Realmed. A conta local recebe login e senha próprios, armazenados somente como hash bcrypt; a senha não é enviada ao Stenci, não é salva em texto puro e não pode ser recuperada. A senha local precisa ter pelo menos 12 caracteres e no máximo 72 bytes. Login local tem limite de tentativas e emite a sessão Realmed sem criar sessão Stenci. Contas locais não usam integração Stenci genérica; a exceção é a área do fisioterapeuta com vínculo explícito e conexão compartilhada, descrita acima. O tipo de autenticação é imutável após a criação. Contas Stenci continuam usando a senha do próprio Stenci e o fluxo de integração já existente. Permissões seguem a matriz individual e nenhuma é concedida automaticamente a usuários novos.
 
 Revisão de 20/10/2026. Naquele momento, o login era exclusivamente pelo Stenci. Desde 06/11/2026, o administrador também pode escolher uma conta local independente, conforme a regra acima; contas do tipo Stenci continuam sem senha local.
 

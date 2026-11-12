@@ -81,6 +81,8 @@ async function execute(job, operations) {
                 ? await service.rotationRead(operation)
                 : operation.name === "billingRead"
                   ? await service.billingRead(operation)
+                  : operation.name === 'physioRead'
+                    ? await service.physioRead(operation)
                   : await service[operation.name]();
           results.push({
             key: operationKey(operation.name, operation),
@@ -120,8 +122,10 @@ async function execute(job, operations) {
 // One queue per Realmed session, shared by all routes and explicit refreshes.
 // Automatic requests arriving together share a single short-lived Stenci login.
 function refreshStenci(options) {
+  if (options.operations?.some(operation => operation.name === 'physioRead') && options.scope !== 'physio') return Promise.reject(Object.assign(new Error('Consulta restrita à área do fisioterapeuta.'), {status:403,code:'PHYSIO_SCOPE_REQUIRED'}));
   const session = options.sessionStore.get(options.sid);
   if (!session) return Promise.reject(expired());
+  if(session.mode==='physio-shared' && options.scope!=='physio')return Promise.reject(Object.assign(new Error('A conexão compartilhada está disponível somente na área do fisioterapeuta.'),{status:403,code:'PHYSIO_SCOPE_REQUIRED'}));
   let state = states.get(session);
   if (!state) {
     state = { pending: [], running: false };
@@ -173,6 +177,7 @@ async function drain(state) {
 }
 function automaticService(options) {
   const session = options.sessionStore.get(options.sid);
+  if(session?.mode==='physio-shared' && options.scope!=='physio')throw Object.assign(new Error('A conexão compartilhada está disponível somente na área do fisioterapeuta.'),{status:403,code:'PHYSIO_SCOPE_REQUIRED'});
   const cache = detachedService(session);
   const run = async (name, operation, args) => {
     try {

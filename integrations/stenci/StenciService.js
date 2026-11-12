@@ -45,6 +45,9 @@ class StenciService {
   async billingRead(options) {
     return require("./billingRead").billingRead(this.client, options);
   }
+  async physioRead(options) {
+    return require('./physioRead').physioRead(this.client, options);
+  }
   async listInsurancePlans() {
     return this.list("/v1/insurance-plans", {
       limit: 0,

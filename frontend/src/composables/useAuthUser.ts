@@ -6,6 +6,7 @@ export interface AuthUser {
   username: string
   role: string
   authProvider?: 'STENCI' | 'LOCAL'
+  physiotherapistId?: number | null
   name?: string | null
   email?: string | null
   phone?: string | null

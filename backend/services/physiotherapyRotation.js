@@ -216,4 +216,4 @@ function rank(request, agendas, snapshots, assignments = []) {
       i,
   );
 }
-module.exports = { normalize, matrixSchedules, blocks, rank, plain };
+module.exports = { normalize, matrixSchedules, blocks, rank, plain, localStart };

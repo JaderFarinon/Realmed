@@ -9,7 +9,10 @@ function createEditLocks(db, guardDb) {
   async function status(req, row) {
     if (!locks.active(row)) return {locked:false,owned:false};
     const person = await db('users as u').leftJoin('people as p','p.id','u.person_id').where('u.id',row.owner_id).select('p.full_name').first();
-    return {locked:true,owned:locks.owned(row,req.user.id,editor(req)),owner:person?.full_name || 'Outro usuário',expiresAt:Number(row.expires_at)};
+    const owned=locks.owned(row,req.user.id,editor(req));
+    const sameUser=Number(row.owner_id)===Number(req.user.id);
+    return {locked:true,owned,sameUser,owner:person?.full_name || 'Outro usuário',expiresAt:Number(row.expires_at),
+      ...(sameUser && !owned ? {recoverFrom:row.editor_id} : {})};
   }
   const path='/guide-processes/:id/edit-lock/:stage';
   router.all(path, auth, (req,res,next) => {
@@ -36,7 +39,7 @@ function createEditLocks(db, guardDb) {
       trx=await guardDb.transaction();
       const row=await locks.lockedRow(trx,id,stage);
       if (method==='post') {
-        locks.assertAvailable(row,req.user.id,editor(req));
+        locks.assertReservation(row,req.user.id,editor(req),{renew:req.body?.renew===true,recoverFrom:req.body?.recoverFrom});
         await trx('treatment_edit_locks').where({guide_process_id:id,stage}).update({owner_id:req.user.id,editor_id:editor(req),expires_at:Date.now()+locks.TTL});
       } else if (locks.owned(row,req.user.id,editor(req))) {
         await trx('treatment_edit_locks').where({guide_process_id:id,stage}).update({expires_at:0});

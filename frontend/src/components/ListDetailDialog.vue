@@ -14,7 +14,7 @@
         aria-modal="true"
         :aria-labelledby="titleId"
         class="list-detail-dialog"
-        :class="{ 'is-wide': wide }"
+        :class="[{ 'is-wide': wide }, dialogClass]"
       >
         <header>
           <h2 :id="titleId">{{ title }}</h2>
@@ -35,7 +35,7 @@
 </template>
 <script setup lang="ts">
 import { ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
-const props = defineProps<{ open: boolean; title: string; wide?: boolean; embedded?: boolean }>(),
+const props = defineProps<{ open: boolean; title: string; wide?: boolean; embedded?: boolean; dialogClass?: string }>(),
   emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLElement | null>(null),
   titleId = useId()

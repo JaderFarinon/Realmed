@@ -170,8 +170,6 @@ router.put('/:id/physiotherapist', async (req, res) => {
     await knex.transaction(async (trx) => {
       const { actor, target } = await lockedUsers(trx, req.user.id, id)
       if (target.role !== 'user') throw new HttpError(422, 'O modo fisioterapeuta aceita usuários com perfil User.')
-      if (target.auth_provider === 'LOCAL' && professionalId)
-        throw new HttpError(422, 'Contas locais do Realmed não usam o modo fisioterapeuta integrado ao Stenci.')
       if (professionalId) {
         if (target.status !== 'active') throw new HttpError(422, 'Ative o usuário antes de associar o fisioterapeuta.')
         const professional = await trx('professionals').where({ id: professionalId, active: 1, type: 'PHYSIOTHERAPIST' }).whereRaw('UPPER(council) = ?', ['CREFITO']).first()
@@ -201,7 +199,6 @@ router.post('/:id/face', async (req, res) => {
     const images = req.body?.images
     const user = await userQuery().where('u.id', id).first()
     if (!user) throw new HttpError(404, 'Usuário não encontrado.')
-    if (user.auth_provider === 'LOCAL') throw new HttpError(422, 'Contas locais do Realmed não usam o modo fisioterapeuta integrado ao Stenci.')
     if (user.status !== 'active' || user.role !== 'user' || !user.professional_id) throw new HttpError(422, 'Associe primeiro um fisioterapeuta ativo a um usuário com perfil User.')
     const templates = await faceRecognition.enrollmentTemplates(images)
     let encrypted
@@ -211,7 +208,9 @@ router.post('/:id/face', async (req, res) => {
       templates.forEach((template) => template.fill(0))
     }
     await knex.transaction(async (trx) => {
-      const { actor } = await lockedUsers(trx, req.user.id, id)
+      const { actor,target } = await lockedUsers(trx, req.user.id, id)
+      const current=await trx('physiotherapist_user_links as l').join('professionals as p','p.id','l.professional_id').where({'l.user_id':id,'p.active':1,'p.type':'PHYSIOTHERAPIST'}).whereRaw('UPPER(p.council) = ?', ['CREFITO']).first('p.id')
+      if(target.status!=='active'||target.role!=='user'||current?.id!==user.professional_id)throw new HttpError(409,'O vínculo do usuário mudou. Confira o cadastro antes de cadastrar o rosto novamente.')
       const existing = await trx('physiotherapist_face_biometrics').where({ user_id: id }).forUpdate().first()
       const values = { ...encrypted, algorithm_version: 'human-faceres-3.3.6', enrolled_by: actor.id, updated_at: trx.fn.now() }
       if (existing) await trx('physiotherapist_face_biometrics').where({ user_id: id }).update(values)

@@ -55,8 +55,7 @@
           no primeiro acesso. As consultas Stenci usam esse vínculo.
         </p>
         <p v-else class="sm:col-span-2 rounded-lg bg-blue-50 p-3 text-sm dark:bg-blue-950">
-          Esta conta entra apenas no Realmed. A senha é independente e não será enviada ao Stenci;
-          recursos que consultam o Stenci e o modo fisioterapeuta não ficam disponíveis para ela.
+          Esta conta usa usuário e senha do Realmed. Para fisioterapeutas, selecione o profissional abaixo e cadastre o rosto. A área do fisio consulta a agenda vinculada usando a conexão compartilhada da clínica.
         </p>
         
         <label v-for="field in fields" :key="field.key" class="text-sm dark:text-gray-200"
@@ -99,7 +98,7 @@
             <option value="blocked">Bloqueado</option>
           </select></label
         >
-        <label v-if="form.authProvider === 'STENCI'" class="text-sm dark:text-gray-200 sm:col-span-2">
+        <label v-if="form.role === 'user'" class="text-sm dark:text-gray-200 sm:col-span-2">
           <FieldLabel>Profissional vinculado</FieldLabel>
           <select v-model="form.professionalId" class="input mt-1 w-full">
             <option :value="null">Sem vínculo de fisioterapeuta</option>
@@ -110,7 +109,7 @@
           <small class="block pt-1 text-gray-500">A agenda será localizada pelo vínculo explícito com o profissional no Realmed.</small>
         </label>
         <PhysiotherapistFaceEnrollment
-          v-if="form.authProvider === 'STENCI' && form.id && form.professionalId"
+          v-if="form.role === 'user' && form.id && form.professionalId"
           class="sm:col-span-2"
           :user-id="form.id"
           :enrolled="Boolean(form.faceEnrolled)"
@@ -231,6 +230,10 @@ const save = async () => {
   try {
     const wasNew = !form.id
     const saved = form.id ? await atualizarUsuario(form.id, form) : await criarUsuario(form)
+    // Keep the created identity even if saving the professional link needs a retry.
+    form.id = saved.id
+    form.senha = ''
+    form.confirmarSenha = ''
     const linkedUser = saved.professionalId === (form.professionalId || null)
       ? saved
       : await associarFisioterapeuta(saved.id, form.professionalId || null)
@@ -238,10 +241,10 @@ const save = async () => {
     form.confirmarSenha = ''
     Object.assign(form, linkedUser, { id: saved.id, professionalId: linkedUser.professionalId || null })
     form.faceEnrolled = linkedUser.faceEnrolled
-    show.value = wasNew && form.authProvider === 'STENCI'
+    show.value = wasNew && Boolean(form.professionalId)
     await load()
-    if (wasNew && form.authProvider === 'STENCI') message.value = 'Usuário salvo. Cadastre a identificação facial abaixo para liberar o acesso pelo tablet.'
-    else if (wasNew) message.value = 'Conta local criada. Ela entra no Realmed sem autenticação ou consultas ao Stenci.'
+    if (wasNew && form.professionalId) message.value = 'Usuário salvo. Cadastre o rosto abaixo para o acesso facial. A entrada por senha já abre a área do fisioterapeuta e avisa os administradores.'
+    else if (wasNew) message.value = form.authProvider === 'LOCAL' ? 'Conta local criada. Ela entra no Realmed com usuário e senha próprios.' : 'Conta criada. O vínculo Stenci será confirmado no primeiro acesso.'
     if (wasNew) messageKind.value = 'success'
   } catch (error) {
     message.value = errorMessage(error, 'Erro ao salvar usuário.')
@@ -292,12 +295,12 @@ const columns = [
   {
     key: 'professionalName',
     label: 'Profissional',
-    format: (v: string | null, row: Usuario) => row.authProvider === 'LOCAL' ? 'Não se aplica' : v || 'Sem vínculo',
+    format: (v: string | null) => v || 'Sem vínculo',
   },
   {
     key: 'faceEnrolled',
     label: 'Face',
-    format: (v: boolean, row: Usuario) => row.authProvider === 'LOCAL' ? 'Não se aplica' : v ? 'Cadastrada' : 'Pendente',
+    format: (v: boolean, row: Usuario) => row.professionalId ? v ? 'Cadastrada' : 'Pendente' : 'Sem vínculo',
   },
   { key: 'role', label: 'Perfil', format: (v: string) => roleLabels[v] || v },
   { key: 'status', label: 'Status', format: (v: string) => statusLabels[v] || v },

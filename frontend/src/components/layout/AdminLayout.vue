@@ -16,6 +16,9 @@
         </RouterLink>
       </div>
       <nav class="space-y-2">
+        <MenuGroup id="events" label="Eventos" :active="route.path.startsWith('/eventos/')">
+          <RouterLink to="/eventos/confraternizacao-2026" class="menu-link sub">Confraternização 2026</RouterLink>
+        </MenuGroup>
         <MenuGroup id="catalog" label="Cadastros" :active="route.path.startsWith('/cadastros/')">
           <RouterLink to="/cadastros/convenios" class="menu-link sub">Convênios</RouterLink>
           <RouterLink to="/cadastros/profissionais" class="menu-link sub">Profissionais</RouterLink>
@@ -82,7 +85,9 @@
             <circle cx="12" cy="19" r="2" />
           </svg>
         </button>
-        <div ref="accountMenu" class="account-menu ml-auto" @keydown.esc.stop.prevent="closeAccountMenu(true)" @focusout="accountFocusOut">
+        <div class="ml-auto flex items-center gap-3">
+        <NotificationBell />
+        <div ref="accountMenu" class="account-menu" @keydown.esc.stop.prevent="closeAccountMenu(true)" @focusout="accountFocusOut">
           <button ref="accountTrigger" id="realmed-account-button" type="button" class="account-trigger" :aria-label="'Menu de ' + (authUser?.name || authUser?.username || 'usuário')" aria-haspopup="menu" aria-controls="realmed-account-menu" :aria-expanded="accountOpen" @click="accountOpen = !accountOpen" @keydown.down.prevent="openAccountMenu()" @keydown.up.prevent="openAccountMenu(true)">
             <span class="account-avatar" aria-hidden="true">{{ (authUser?.name || authUser?.username || 'U').slice(0, 1).toLocaleUpperCase('pt-BR') }}</span>
             <span class="account-name">{{ authUser?.name || authUser?.username || 'Minha conta' }}</span>
@@ -93,6 +98,7 @@
             <RouterLink to="/configuracoes" role="menuitem" class="account-item" @click="closeAccountMenu()">Configurações</RouterLink>
             <button type="button" role="menuitem" class="account-item account-logout" @click="closeAccountMenu(); logout()">Sair</button>
           </div>
+        </div>
         </div>
       </header>
       <main tabindex="-1" class="p-4 focus:outline-none sm:p-6"><slot /></main>
@@ -115,6 +121,7 @@ import api from '@/plugins/axios'
 import StenciRefreshDialog from '@/components/StenciRefreshDialog.vue'
 import MenuGroup from '@/components/layout/MenuGroup.vue'
 import BackToTop from '@/components/BackToTop.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 const accountOpen = ref(false), accountMenu = ref<HTMLElement>(), accountTrigger = ref<HTMLButtonElement>()
 function closeAccountMenu(restoreFocus = false) {
   accountOpen.value = false

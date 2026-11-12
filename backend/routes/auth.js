@@ -13,6 +13,7 @@ const StenciClient = require('../../integrations/stenci/StenciClient')
 const StenciService = require('../../integrations/stenci/StenciService')
 const { stenciSessionStore } = require('../services/StenciSessionStore')
 const { withTransientStenci } = require('../services/transientStenciService')
+const { withPhysiotherapist, notifyPhysioPasswordLogin } = require('../services/physioPasswordLogin')
 
 const publicUser = (user) => ({
   id: user.id,
@@ -25,6 +26,7 @@ const publicUser = (user) => ({
   email: user.email || null,
   phone: user.phone || null,
   avatarUrl: user.avatar_url || null,
+  physiotherapistId: user.professional_id || null,
 })
 
 function createAuthRouter({
@@ -74,7 +76,8 @@ function createAuthRouter({
         const valid = localUser.password_hash && await passwordHasher.compare(password, localUser.password_hash)
         if (!valid) return res.status(401).json({ error: 'Usuário ou senha inválidos.' })
         await db.query('UPDATE users SET last_login = NOW() WHERE id = ?', [localUser.id])
-        const user = { ...localUser, auth_provider: 'LOCAL' }
+        const user = await withPhysiotherapist(db,{ ...localUser, auth_provider: 'LOCAL' })
+        await notifyPhysioPasswordLogin(db,user)
         const token = jwt.sign(publicUser(user), jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
         logger.info('[REALMED AUTH] login local concluído')
         return res.json({ token, user: publicUser(user) })
@@ -85,11 +88,13 @@ function createAuthRouter({
         ? serviceFactory(config)
         : new StenciService(new StenciClient({ config }))
       const deviceId = deviceIdFactory()
-      const { user, identity } = await withTransientStenci(service, async () => {
+      const { user: syncedUser, identity } = await withTransientStenci(service, async () => {
         const identity = await service.authenticateUser(username, password, deviceId)
         if (!service.getSession()) throw Object.assign(new Error('Contexto de sessão Stenci ausente.'), { code: 'STENCI_SESSION_ERROR', stage: 'session' })
         return { identity, user: await syncUser(db, identity) }
       }, logger)
+      const user=await withPhysiotherapist(db,syncedUser)
+      await notifyPhysioPasswordLogin(db,user)
       sid = sessionStore.create({ mode: 'detached', deviceId, branchId: config.branchId, stenciUserId: identity.stenci_user_id, cache: new Map() })
       const payload = { ...publicUser(user), sid }
       const token = jwt.sign(payload, jwtSecret, { expiresIn: process.env.TOKEN_EXPIRES_IN || '2h' })
@@ -134,7 +139,7 @@ function createAuthRouter({
         [req.user.id],
       )
       return res.json({ user: {
-        ...publicUser(rows[0]),
+        ...publicUser(await withPhysiotherapist(db,rows[0])),
         permissionsEnabled: process.env.PERMISSIONS_ENABLED !== 'false',
         permissions: permissionRows.map((permission) => ({
           moduleKey: permission.module_key, canView: Boolean(permission.can_view),

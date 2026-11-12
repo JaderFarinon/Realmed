@@ -2,6 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
+const { isFacialLoginRequest } = require('./services/facialLoginAttempts')
 
 const db = require('./db')
 const authRoutes = require('./routes/auth')
@@ -26,12 +27,15 @@ function createApp() {
   app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 1000,
+    // Public facial endpoints have their own attempt/cooldown and challenge limits.
+    skip: isFacialLoginRequest,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     message: { error: 'Muitas requisições. Tente novamente mais tarde.' },
   }))
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+  app.use('/api/public/events', require('./routes/public-events').createPublicEventsRouter(require('./routes/guide-center').knex))
   const live = require('./services/treatmentLiveUpdates').createTreatmentLiveUpdates()
   app.use(live.observe)
   const config = require('./knexfile')[process.env.NODE_ENV || 'development'] || require('./knexfile').development
@@ -42,6 +46,8 @@ function createApp() {
   app.use('/api', editing.router)
   app.get('/api/treatment-updates', require('./middleware/auth'), require('./middleware/permission').modulePermission('guide_processes'), live.stream)
   app.use('/api/auth', authRoutes)
+  app.use('/api/notifications', require('./routes/notifications').createNotificationsRouter(require('./routes/guide-center').knex))
+  app.use('/api/events', require('./routes/events').createEventsRouter(require('./routes/guide-center').knex))
   app.use('/api/physio', require('./routes/physiotherapist-mode'))
   app.use('/api/usuarios', usuariosRoutes)
   app.use('/api/permissoes', permissoesRoutes)

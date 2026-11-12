@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { deferApiRequests } from '@/utils/apiCooldown'
+import { deferApiRequests, deferFacialLogin } from '@/utils/apiCooldown'
 import { requestStenciRefresh, type StenciOperation } from '@/composables/useStenciRefresh'
 
 const configuredUrl = import.meta.env.VITE_API_URL || 'http://localhost:3005'
@@ -11,6 +11,7 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  if (String(config.url).startsWith('/physio/')) config.timeout = 90000
   if (String(config.url).startsWith('/billing/stenci')) config.timeout = 90000
   if (
     /^\/integrations\/stenci\/(patients\/search|insurances|insurance-plans|professionals|test-connection)(?:\?|$)/.test(
@@ -28,7 +29,17 @@ api.interceptors.request.use((config) => {
   return config
 })
 api.interceptors.response.use(undefined, async (error) => {
-  if (error.response?.status === 429) deferApiRequests(error.response.headers?.['retry-after'])
+  const requestPath = String(error.config?.url || '').split('?')[0]
+  const publicPhysioFaceRequest =
+    requestPath === '/physio/auth/challenge' || requestPath === '/physio/auth/face'
+  if (error.response?.status === 429) {
+    const defer = publicPhysioFaceRequest ? deferFacialLogin : deferApiRequests
+    defer(error.response.headers?.['retry-after'])
+  }
+  if (requestPath.startsWith('/physio/') && requestPath !== '/physio/session' && error.response?.data?.code === 'PHYSIO_SESSION_REQUIRED' && !error.config?._physioRetried) {
+    await ensurePhysioSession()
+    return api.request({...error.config,_physioRetried:true})
+  }
   if (
     error.response?.status === 428 &&
     error.response?.data?.code === 'STENCI_REFRESH_REQUIRED' &&
@@ -72,9 +83,6 @@ api.interceptors.response.use(undefined, async (error) => {
       return api.request({ ...error.config, _stenciRetried: true })
     }
   }
-  const requestPath = String(error.config?.url || '').split('?')[0]
-  const publicPhysioFaceRequest =
-    requestPath === '/physio/auth/challenge' || requestPath === '/physio/auth/face'
   if (
     !publicPhysioFaceRequest &&
     (error.response?.status === 401 || error.response?.data?.code === 'STENCI_SESSION_EXPIRED')
@@ -96,3 +104,15 @@ api.interceptors.response.use(undefined, async (error) => {
   return Promise.reject(error)
 })
 export default api
+let physioSession: Promise<any> | null = null
+export function ensurePhysioSession(): Promise<any> {
+  if (!physioSession) {
+    const token = localStorage.getItem('token')
+    physioSession = api.post('/physio/session').then(({data}) => {
+      if (localStorage.getItem('token') !== token) throw new Error('A sessão mudou durante a conexão da agenda.')
+      if (data.token) localStorage.setItem('token',data.token)
+      return data.profile
+    }).finally(() => { physioSession = null })
+  }
+  return physioSession
+}

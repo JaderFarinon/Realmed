@@ -31,6 +31,7 @@ async function withTransientStenci(service, operation, logger = console) {
 
 const CACHE_TTL_MS = 10 * 60_000;
 function operationKey(name, options = {}) {
+  if (name === 'physioRead') return JSON.stringify([name, require('../../integrations/stenci/physioRead').physioOptions(options)]);
   if (name === "rotationRead")
     return JSON.stringify([
       name,

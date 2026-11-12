@@ -2,7 +2,7 @@
   <main class="physio-access">
     <header class="access-header">
       <div class="access-brand"><strong>REALMED</strong><span class="brand-divider" /><span class="access-label">Fisioterapeuta</span></div>
-      <RouterLink to="/login" class="system-login">Login do Realmed <span aria-hidden="true">↗</span></RouterLink>
+      <RouterLink to="/login?redirect=/modo-fisio" class="system-login">Entrar com senha <span aria-hidden="true">↗</span></RouterLink>
     </header>
     <section class="access-station" :class="{ 'is-live': cameraOpen, 'is-success': phase === 'success' }" aria-label="Acesso por reconhecimento facial">
       <div ref="cameraStage" class="camera-stage">
@@ -53,7 +53,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import { notify } from '@/composables/useNotifications'
-import { apiCooldownRemaining } from '@/utils/apiCooldown'
+import { facialCooldownRemaining } from '@/utils/apiCooldown'
 
 type Phase = 'idle' | 'opening' | 'positioning' | 'preparing' | 'capturing' | 'verifying' | 'success' | 'error'
 const phase = ref<Phase>('idle')
@@ -178,7 +178,9 @@ function pause(ms: number, signal: AbortSignal) {
 }
 function updateCooldown() {
   clearTimeout(cooldownTimer)
-  cooldownSeconds.value = Math.ceil(apiCooldownRemaining() / 1000)
+  const previous = cooldownSeconds.value
+  cooldownSeconds.value = Math.ceil(facialCooldownRemaining() / 1000)
+  if (previous && !cooldownSeconds.value && phase.value === 'error') problem.value = 'Você já pode tentar novamente.'
   if (cooldownSeconds.value && !disposed) cooldownTimer = setTimeout(updateCooldown, 1000)
 }
 async function recognize() {
@@ -237,7 +239,7 @@ async function recognize() {
     blinkChallenge.value = null
     updateCooldown()
     fail(error.response?.status === 429
-      ? 'Muitas tentativas. Aguarde o tempo indicado antes de tentar novamente.'
+      ? error.response?.data?.error || 'Muitas tentativas. Aguarde até 1 minuto antes de tentar novamente.'
       : error.response?.data?.error || 'Não foi possível confirmar seu acesso. Confira a iluminação, mantenha o rosto de frente e tente novamente.')
   } finally {
     images.fill('')

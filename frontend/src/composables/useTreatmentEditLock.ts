@@ -2,10 +2,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import api, { editorId } from '@/plugins/axios'
 
 export function useTreatmentEditLock(processId: () => number | undefined, stage: () => string) {
-  const lock = ref<{locked:boolean;owned:boolean;owner?:string;expiresAt?:number}>({locked:false,owned:false})
+  const lock = ref<{locked:boolean;owned:boolean;sameUser?:boolean;recoverFrom?:string;owner?:string;expiresAt?:number}>({locked:false,owned:false})
   const busy=ref(false), error=ref(''), lost=ref(false)
   const owned=computed(()=>lock.value.owned)
-  let current='', sequence=0, timer:ReturnType<typeof setInterval> | undefined
+  let current='', sequence=0, checkSequence=0, timer:ReturnType<typeof setInterval> | undefined
   let deadline:ReturnType<typeof setTimeout> | undefined
   function apply(value: typeof lock.value) {
     clearTimeout(deadline)
@@ -16,22 +16,25 @@ export function useTreatmentEditLock(processId: () => number | undefined, stage:
     },Math.max(0,Number(value.expiresAt)-Date.now()))
   }
   async function check() {
-    const path=current, version=sequence
+    const path=current, version=sequence, checkVersion=++checkSequence
     if(!path || busy.value) return
     try {
       const response=await api.get(path)
-      if(version!==sequence) return
-      if(lock.value.owned && !response.data.owned) lost.value=true
+      if(version!==sequence || checkVersion!==checkSequence) return
+      if(lock.value.owned && !response.data.owned) {
+        lost.value=true
+        error.value='Sua reserva de edição terminou ou foi recuperada em outra janela. Os dados não salvos continuam nesta tela.'
+      }
       apply(response.data)
     } catch { /* Keep the known owner warning while the connection is unavailable. */ }
   }
-  async function acquire(renew=false) {
+  async function acquire(renew=false,recoverFrom?:string) {
     const path=current
     if(!path || busy.value) return false
     const version=++sequence
     busy.value=true; error.value=''
     try {
-      const response=await api.post(path,{renew})
+      const response=await api.post(path,{renew,...(recoverFrom ? {recoverFrom} : {})})
       if(version!==sequence) { releasePath(path); return false }
       apply(response.data); lost.value=false
       return true
@@ -63,7 +66,14 @@ export function useTreatmentEditLock(processId: () => number | undefined, stage:
   onMounted(()=>{
     timer=setInterval(()=>{if(owned.value) void acquire(true);else void check()},15000)
     window.addEventListener('pagehide',release)
+    window.addEventListener('online',check)
+    window.addEventListener('focus',check)
   })
-  onBeforeUnmount(()=>{sequence++;release();clearInterval(timer);window.removeEventListener('pagehide',release)})
+  onBeforeUnmount(()=>{
+    sequence++;release();clearInterval(timer)
+    window.removeEventListener('pagehide',release)
+    window.removeEventListener('online',check)
+    window.removeEventListener('focus',check)
+  })
   return {lock,owned,busy,error,lost,check,acquire,release}
 }

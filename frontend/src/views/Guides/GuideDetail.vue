@@ -46,14 +46,15 @@
         </details>
     <div v-if="activeTreatmentTab !== 'history'" class="treatment-edit-notice rounded-xl border px-4 py-2" :class="editingLock.locked && !editingOwned ? 'border-warning-300 bg-warning-50' : 'border-blue-200 bg-blue-50'" role="status" aria-live="polite">
       <div>
-      <p v-if="editingLock.locked && !editingOwned" class="font-semibold">Em edição por {{ editingLock.owner || 'outro usuário' }} · Somente leitura</p>
+      <p v-if="editingLock.locked && !editingOwned" class="font-semibold">{{ editingLock.sameUser ? `Sua conta está editando esta aba em outra janela. ${mayEditActiveTab ? 'Você pode recuperar a edição aqui.' : 'Somente leitura.'}` : `Em edição por ${editingLock.owner || 'outro usuário'} · Somente leitura` }}</p>
       <p v-else-if="editingOwned">Você está editando a aba {{ activeTabLabel }}. Outros usuários só podem visualizar.</p>
       <p v-else>{{ activeTabLabel }}</p>
 
 
       <p class="sr-only">{{ liveConnected ? 'Atualização automática conectada.' : 'Reconectando atualização automática…' }}</p>
       </div>
-      <button v-if="mayEditActiveTab && !editingOwned && !editingLock.locked" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy" @click="beginEditing">Editar aba</button>
+      <button v-if="mayEditActiveTab && !editingOwned && editingLock.recoverFrom" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit" @click="recoverySource = editingLock.recoverFrom">Recuperar edição</button>
+      <button v-if="mayEditActiveTab && !editingOwned && !editingLock.locked" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit" @click="beginEditing()">Editar aba</button>
       <button v-if="editingOwned" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit || hasLocalDraft()" @click="finishEditing">Terminar edição</button>
     </div>
       </section>
@@ -362,6 +363,14 @@
         </section>
       </section>
     </div>
+    <ListDetailDialog :open="!!recoverySource" title="Recuperar edição nesta janela?" @close="closeRecovery">
+      <p>Sua conta tem uma reserva de edição da aba {{ activeTabLabel }} em outra janela ou conexão anterior.</p>
+      <p class="mt-3">Ao confirmar, esta janela carregará os dados salvos mais recentes e assumirá a edição. A janela anterior ficará em somente leitura. Alterações ainda não salvas nela não serão transferidas.</p>
+      <template #footer>
+        <button type="button" class="btn-secondary" :disabled="startingEdit" @click="closeRecovery">Cancelar</button>
+        <button type="button" class="btn-primary" :disabled="startingEdit || editLockBusy" @click="confirmRecovery">{{ startingEdit ? 'Recuperando…' : 'Confirmar recuperação' }}</button>
+      </template>
+    </ListDetailDialog>
   </PageShell>
 </template>
 
@@ -389,6 +398,7 @@ watch(contextCard, (element, _previous, cleanup) => {
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
 import PageShell from '@/components/PageShell.vue'
+import ListDetailDialog from '@/components/ListDetailDialog.vue'
 import GuideCodeReviewDialog from '@/components/GuideCodeReviewDialog.vue'
 import TableActionToolbar from '@/components/TableActionToolbar.vue'
 import { notify } from '@/composables/useNotifications'
@@ -527,16 +537,26 @@ const mayEditActiveTab = computed(() => !(activeTreatmentTab.value === 'evaluati
   (['central','documents'].includes(activeTreatmentTab.value) && canOperational('guide_processes','canDelete')) ||
   (activeTreatmentTab.value==='central' && canOperational('guide_processes','canCreate'))))
 function hasLocalDraft() { return Boolean(preparationCard.value?.hasDraft() || evaluationCard.value?.hasDraft()) }
-async function beginEditing() {
+const recoverySource = ref('')
+function closeRecovery() { if (!startingEdit.value) recoverySource.value='' }
+watch([() => process.value?.id, activeTreatmentTab], () => { recoverySource.value='' })
+async function confirmRecovery() {
+  if (!recoverySource.value || startingEdit.value || editLockBusy.value) return
+  const recovered = await beginEditing(recoverySource.value)
+  recoverySource.value=''
+  if (recovered) notify('Edição recuperada nesta janela. Os dados salvos foram atualizados.','success')
+}
+async function beginEditing(recoverFrom?:string) {
   if (hasLocalDraft() && !window.confirm('Há um rascunho local. Para iniciar uma nova edição, descartá-lo e carregar os dados atuais?')) return
   startingEdit.value=true
   try {
-  if (await editLease.acquire()) {
+  if (await editLease.acquire(false,recoverFrom)) {
     try {
       await load()
       preparationCard.value?.discardDraft()
       evaluationCard.value?.discardDraft()
       liveDraftNotice.value=''
+      return true
     } catch { editLease.release(); editLockError.value='Não foi possível carregar os dados atuais. Tente novamente.' }
   }
   } finally { startingEdit.value=false }
@@ -585,7 +605,9 @@ function explainReadonly() {
       ? 'Esta avaliação pertence ao tratamento original e está disponível apenas para consulta.'
       : `A etapa ${activeTabLabel.value} já foi finalizada. Para alterar os campos, reabra a etapa primeiro. Se necessário, clique em Editar aba e depois em ${activeTreatmentTab.value === 'evaluation' ? 'Reabrir avaliação' : 'Reabrir etapa'}.`, editable: !process.value?.continuation_of_id || activeTreatmentTab.value !== 'evaluation' }
   } else if (editingLock.value.locked && !editingOwned.value) {
-    stageNotice.value = {title:'Aba em edição por outra pessoa',message:`${editingLock.value.owner || 'Outro usuário'} está editando a aba ${activeTabLabel.value}. Você pode consultar os dados, mas precisa aguardar a liberação para alterar.`}
+    stageNotice.value = editingLock.value.sameUser
+      ? {title:'Edição em outra janela',message:`Sua conta já está editando esta aba em outra janela ou conexão anterior. ${mayEditActiveTab.value ? 'Clique em Recuperar edição para continuar aqui.' : 'Esta aba está disponível apenas para consulta.'}`}
+      : {title:'Aba em edição por outra pessoa',message:`${editingLock.value.owner || 'Outro usuário'} está editando a aba ${activeTabLabel.value}. Você pode consultar os dados, mas precisa aguardar a liberação para alterar.`}
   } else if (!editingOwned.value) {
     stageNotice.value = {title:'Aba em somente leitura',message:`Para preencher ou alterar a aba ${activeTabLabel.value}, clique em Editar aba.`,editable:true}
   }

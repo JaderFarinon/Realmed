@@ -245,7 +245,7 @@ async function save() {
 const functionSearch = ref(''), selectedModule = ref('')
 const matrixReadOnly = computed(() => ['admin','masteradmin'].includes(role.value))
 const sectorRequired = computed(() => !matrixReadOnly.value && matrix.value.some(p => p.canCreate && ['inventory_consumptions','inventory_requests'].includes(p.moduleKey)))
-const moduleName = (key: string) => key.startsWith('inventory_') ? 'Estoque' : key.startsWith('billing_') ? 'Faturamento' : ['guide_processes','guide_billing','authorizations'].includes(key) ? 'Tratamentos' : key === 'patients' ? 'Pacientes' : key === 'integrations' ? 'Integrações' : 'Cadastros'
+const moduleName = (key: string) => key === 'events' ? 'Eventos' : key.startsWith('inventory_') ? 'Estoque' : key.startsWith('billing_') ? 'Faturamento' : ['guide_processes','guide_billing','authorizations'].includes(key) ? 'Tratamentos' : key === 'patients' ? 'Pacientes' : key === 'integrations' ? 'Integrações' : 'Cadastros'
 const moduleNames = computed(() => [...new Set(matrix.value.map(p => moduleName(p.moduleKey)))].sort((a,b)=>a.localeCompare(b,'pt-BR')))
 const permissionGroups = computed(() => moduleNames.value.filter(name => !selectedModule.value || selectedModule.value === name).map(name => ({name,items:matrix.value.filter(p => moduleName(p.moduleKey) === name && (p.label + ' ' + name).toLocaleLowerCase('pt-BR').includes(functionSearch.value.toLocaleLowerCase('pt-BR')))})).filter(group => group.items.length))
 function applyGroup(items: Permission[], mode: 'all' | 'withoutDelete' | 'view' | 'none') {

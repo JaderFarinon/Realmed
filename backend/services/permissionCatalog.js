@@ -1,4 +1,5 @@
 const permissionCatalog = [
+  ["events", "Eventos — Confirmações"],
   ["guide_billing", "Tratamentos — Faturamento por guia"],
   ["billing_dashboard", "Faturamento — Dashboard analítico"],
   ["billing_reports", "Faturamento — Relatórios"],
