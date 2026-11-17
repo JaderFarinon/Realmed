@@ -24,6 +24,8 @@ export function userHome(user: AuthUser | null, includePhysio = true): string {
     ['professionals', '/cadastros/profissionais'], ['procedures', '/cadastros/procedimentos'],
     ['document_templates', '/cadastros/modelos-documentos'],
     ['events', '/eventos/confraternizacao-2026'],
+    ['indicator_panels', '/indicadores/paineis'],
+    ['indicator_analysis', '/indicadores/analise-critica'],
   ]
   return destinations.find(([module]) => user.permissions?.some(p => p.moduleKey === module && p.canView))?.[1] || '/meu-perfil'
 }

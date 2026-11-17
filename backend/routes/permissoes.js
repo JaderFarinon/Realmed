@@ -1,7 +1,7 @@
 const express = require("express");
 const knexFactory = require("knex");
 const knexConfig = require("../knexfile");
-const { permissionCatalog } = require("../services/permissionCatalog");
+const { permissionCatalog, missingDependencies } = require("../services/permissionCatalog");
 const authMiddleware = require("../middleware/auth");
 const {
   permissionMiddleware,
@@ -129,6 +129,7 @@ const validatePermissionsPayload = (payload) => {
 
 router.use(authMiddleware);
 router.use(permissionMiddleware(["masteradmin", "admin"]));
+router.use((_req,res,next) => {res.set('Cache-Control','no-store'); next();});
 router.get("/catalog", (_req, res) => res.json(permissionCatalog));
 router.get("/users", async (_req, res) => {
   try {
@@ -288,6 +289,12 @@ router
       const normalizedPermissions = validatePermissionsPayload(
         req.body?.permissions,
       );
+      if (!['admin','masteradmin'].includes(req.body.role || targetUser.role)) {
+        const missing = missingDependencies(normalizedPermissions.map(mapPermissionRow));
+        if (missing.length) throw new HttpError(422,
+          'Confirme as dependências antes de salvar: ' + missing.map(item =>
+            'Visualizar ' + permissionCatalog.find(p => p.key === item.moduleKey).label).join('; ') + '.');
+      }
       const previousPermissions = await trx("user_permissions").where(
         "user_id",
         userId,

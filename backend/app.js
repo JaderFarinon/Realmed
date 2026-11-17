@@ -36,6 +36,12 @@ function createApp() {
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
   app.use('/api/public/events', require('./routes/public-events').createPublicEventsRouter(require('./routes/guide-center').knex))
+  const evaluationBooking = require('./routes/evaluation-booking').createEvaluationBooking({ db: require('./routes/guide-center').knex })
+  app.use('/api/public/evaluation-booking', evaluationBooking.publicRouter)
+  app.use('/api/evaluation-booking', evaluationBooking.privateRouter)
+  const patientPortal = require('./routes/patient-portal').createPatientPortal(require('./routes/guide-center').knex)
+  app.use('/api/public/patient-portal', patientPortal.publicRouter)
+  app.use('/api/patient-portal', patientPortal.privateRouter)
   const live = require('./services/treatmentLiveUpdates').createTreatmentLiveUpdates()
   app.use(live.observe)
   const config = require('./knexfile')[process.env.NODE_ENV || 'development'] || require('./knexfile').development
@@ -48,7 +54,9 @@ function createApp() {
   app.use('/api/auth', authRoutes)
   app.use('/api/notifications', require('./routes/notifications').createNotificationsRouter(require('./routes/guide-center').knex))
   app.use('/api/events', require('./routes/events').createEventsRouter(require('./routes/guide-center').knex))
+  app.use('/api/indicators', require('./routes/indicators').createIndicatorsRouter(require('./routes/guide-center').knex))
   app.use('/api/physio', require('./routes/physiotherapist-mode'))
+  app.use('/api/patient-preview', require('./routes/patient-preview').createPatientPreviewRouter(require('./routes/guide-center').knex))
   app.use('/api/usuarios', usuariosRoutes)
   app.use('/api/permissoes', permissoesRoutes)
   app.use('/api', guideCenterRoutes)

@@ -15,9 +15,12 @@ const { createFacialLoginAttempts } = require('../services/facialLoginAttempts')
 const { createPhysioSession, serializePhysioStenci } = require('../services/physioStenciSession')
 const { memberships } = require('../services/billingAgendaFilters')
 const { groupSessions, sessionAccess, serverNow } = require('../services/physioAgenda')
+const clinicalService = require('../services/physioClinical').createClinicalService({db:knex,sessionStore:stenciSessionStore})
 
 const challenges = new Map()
 const router = express.Router()
+const appRouter = express.Router({mergeParams:true})
+const previewAccess = require('../services/physioAdminPreview').createAdminPreviewAccess({db:knex,sessionStore:stenciSessionStore,createSession:createPhysioSession})
 // Desafio e tentativa de autenticação têm limites separados: cada leitura usa os dois endpoints.
 const challengeLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -89,6 +92,7 @@ router.post('/auth/face', loginAttempts.attempt, async (req, res) => {
   } finally { descriptors?.forEach(descriptor => descriptor.fill(0)) }
 })
 
+router.use('/admin-preview/:professionalId', auth, previewAccess.middleware, appRouter)
 router.use(auth, async (req,res,next)=>{
   try {
     const user=await knex('users as u').join('people as p','p.id','u.person_id')
@@ -104,13 +108,14 @@ router.use(auth, async (req,res,next)=>{
     next()
   } catch(error){next(error)}
 })
+function physioSid(req){return req.physioAdminPreview ? req.physioSid : req.user.sid}
 function ownSession(req){
-  const session=stenciSessionStore.get(req.user.sid)
-  if(session?.mode==='physio-shared'&&!stenciSessionStore.hasCredentials(req.user.sid))return null
-  return session && ['physio-shared','physio-development'].includes(session.mode) && Number(session.userId)===Number(req.user.id) && Number(session.professionalId)===Number(req.physiotherapist.professional_id) ? session : null
+  const session=stenciSessionStore.get(physioSid(req))
+  if(session?.mode==='physio-shared'&&!stenciSessionStore.hasCredentials(physioSid(req)))return null
+  return session && Boolean(session.adminPreview)===Boolean(req.physioAdminPreview) && ['physio-shared','physio-development'].includes(session.mode) && Number(session.userId)===Number(req.user.id) && Number(session.professionalId)===Number(req.physiotherapist.professional_id) ? session : null
 }
 function profile(req,session=ownSession(req)){
-  return {professionalId:req.physiotherapist.professional_id,professionalName:req.physiotherapist.professional_name,faceEnrolled:Boolean(req.physiotherapist.face_enrolled),schedules:req.physioSchedules,developmentMode:session?.mode==='physio-development',needsSession:!session}
+  return {adminPreview:Boolean(req.physioAdminPreview),professionalId:req.physiotherapist.professional_id,professionalName:req.physiotherapist.professional_name,faceEnrolled:Boolean(req.physiotherapist.face_enrolled),schedules:req.physioSchedules,developmentMode:session?.mode==='physio-development',needsSession:!session}
 }
 function physioError(res,error,fallback){
   if(['STENCI_REFRESH_REQUIRED','AUTH_SESSION_EXPIRED'].includes(error.code))return res.status(428).json({error:'A conexão da agenda precisa ser renovada.',code:'PHYSIO_SESSION_REQUIRED'})
@@ -121,15 +126,17 @@ async function readStenci(req,operations){
   const session=ownSession(req)
   if(!session)throw Object.assign(new Error('Conexão ausente'),{code:'STENCI_REFRESH_REQUIRED'})
   if(session.mode==='physio-development')throw Object.assign(new Error('Modo de desenvolvimento'),{status:503})
-  return serializePhysioStenci(()=>refreshStenci({sid:req.user.sid,sessionStore:stenciSessionStore,scope:'physio',operations}))
+  return serializePhysioStenci(()=>refreshStenci({sid:physioSid(req),sessionStore:stenciSessionStore,scope:'physio',operations}))
 }
 async function calendar(req,date){
+  await req.revalidatePhysioPreview?.()
   const snapshots=[]
   for(let index=0;index<req.physioSchedules.length;index+=4){
     const group=req.physioSchedules.slice(index,index+4)
     const batch=await readStenci(req,group.map(schedule=>({name:'physioRead',date,scheduleId:schedule.schedule_id})))
     for(let i=0;i<group.length;i++)snapshots.push({scheduleId:group[i].schedule_id,scheduleName:group[i].schedule_name,slots:batch[i]?.value?.slots||[],items:(batch[i]?.value?.items||[]).map(item=>({...item,schedule_id:group[i].schedule_id,schedule_name:group[i].schedule_name}))})
   }
+  await req.revalidatePhysioPreview?.()
   const sessions=groupSessions(snapshots,date)
   return {items:sessions.flatMap(session=>session.items),sessions}
 }
@@ -145,11 +152,12 @@ function ownScheduleNames(req,row){
   const allowed=new Map(req.physioSchedules.map(schedule=>[String(schedule.schedule_id),schedule.schedule_name]))
   return [...new Set(memberships(row).filter(link=>allowed.has(String(link.id))).map(link=>allowed.get(String(link.id))))].filter(Boolean).join(' • ')
 }
-router.get('/me',(req,res)=>res.json(profile(req)))
-router.post('/session',async(req,res)=>{
+appRouter.get('/me',(req,res)=>res.json(profile(req)))
+appRouter.post('/session',async(req,res)=>{
   let sid
   try{
     if(ownSession(req))return res.json({profile:profile(req)})
+    if(req.physioAdminPreview){await req.ensurePhysioPreview();return res.json({profile:profile(req)})}
     const access=await createPhysioSession({userId:req.user.id,professionalId:req.physiotherapist.professional_id,sessionStore:stenciSessionStore})
     sid=access.sid
     const remaining=Number(req.user.exp)-Math.floor(Date.now()/1000)
@@ -160,13 +168,13 @@ router.post('/session',async(req,res)=>{
     res.json({token,profile:profile(req,stenciSessionStore.get(sid))})
   }catch(error){if(sid)stenciSessionStore.delete(sid);physioError(res,error,'Não foi possível conectar sua agenda ao Stenci. Tente novamente.')}
 })
-router.get('/agenda',async(req,res)=>{
+appRouter.get('/agenda',async(req,res)=>{
   const date=String(req.query.date||'')
   if(!validDate(date))return res.status(400).json({error:'Informe uma data válida.'})
   try{const agenda=await calendar(req,date);res.json({...agenda,date,server_time:new Date(serverNow()).toISOString()})}
   catch(error){physioError(res,error,'Não foi possível carregar a agenda do Stenci.')}
 })
-router.get('/agenda/:appointmentId',async(req,res)=>{
+appRouter.get('/agenda/:appointmentId',async(req,res)=>{
   const date=String(req.query.date||''),id=String(req.params.appointmentId)
   if(!validDate(date)||!/^[a-zA-Z0-9_-]{1,100}$/.test(id))return res.status(400).json({error:'Agendamento inválido.'})
   try{
@@ -174,16 +182,33 @@ router.get('/agenda/:appointmentId',async(req,res)=>{
     if(!appointment)return res.status(404).json({error:'Este agendamento não está disponível nas suas agendas para esta data.'})
     const session=agenda.sessions.find(group=>group.items.some(item=>item.id===id))
     const outsideSession=()=>res.status(409).json({code:'PHYSIO_OUTSIDE_SESSION',error:'Este atendimento só pode ser aberto durante o horário da sessão. Consulte a sessão atual na agenda.'})
-    if(sessionAccess(session,date,serverNow())!=='current')return outsideSession()
+    if(!req.physioAdminPreview && sessionAccess(session,date,serverNow())!=='current')return outsideSession()
     const visits=await ownLedger(req).where({patient_external_id:appointment.patient_id}).select('external_id','service_date','start_at','schedule_id','schedule_name','schedule_memberships','status').orderBy('service_date','desc').orderBy('start_at','desc').limit(21)
     const now=serverNow()
-    if(sessionAccess(session,date,now)!=='current')return outsideSession()
-    res.json({appointment,session:session?{...session,items:undefined}:null,date,server_time:new Date(now).toISOString(),
+    if(!req.physioAdminPreview && sessionAccess(session,date,now)!=='current')return outsideSession()
+    await req.revalidatePhysioPreview?.()
+    res.json({adminPreview:Boolean(req.physioAdminPreview),appointment,session:session?{...session,items:undefined}:null,date,server_time:new Date(now).toISOString(),
       history:visits.slice(0,20).map(visit=>({id:visit.external_id,date:visit.service_date instanceof Date?visit.service_date.toISOString().slice(0,10):String(visit.service_date).slice(0,10),startAt:visit.start_at,schedule:ownScheduleNames(req,visit),status:visit.status})),hasMoreHistory:visits.length>20,
       capabilities:{start:false,saveEvolution:false,finish:false},clinicalHistoryAvailable:false})
   }catch(error){physioError(res,error,'Não foi possível abrir este atendimento. Tente novamente.')}
 })
-router.get('/patients/search',async(req,res)=>{
+async function clinical(req,res,action){
+  const date=String(req.query.date||''),appointmentId=String(req.params.appointmentId);
+  if(!validDate(date)||!/^[a-zA-Z0-9_-]{1,100}$/.test(appointmentId))return res.status(400).json({error:'Agendamento inválido.'});
+  try{
+    const body=action==='evaluation'?{processId:req.query.processId}:req.body||{};
+    const result=await clinicalService.run({sid:physioSid(req),userId:req.user.id,professionalId:req.physiotherapist.professional_id,date,appointmentId,action,body});
+    res.json(result);
+  }catch(error){
+    if(error.code==='STENCI_LOGOUT_FAILED')return res.status(502).json({code:error.code,error:'O Stenci não confirmou o encerramento da conexão. Confira o atendimento antes de reenviar.'});
+    if(error.code?.startsWith('PHYSIO_')||error.status&&error.status<500)return res.status(error.status||409).json({code:error.code,error:error.message});
+    physioError(res,error,'Não foi possível conferir o atendimento no Stenci. Seu texto permanece na tela.');
+  }
+}
+appRouter.get('/agenda/:appointmentId/clinical',(req,res)=>clinical(req,res,'read'));
+appRouter.get('/agenda/:appointmentId/evaluation',(req,res)=>clinical(req,res,'evaluation'));
+appRouter.post('/agenda/:appointmentId/clinical/preview',(req,res)=>clinical(req,res,'preview'));
+appRouter.get('/patients/search',async(req,res)=>{
   const search=String(req.query.search||'').trim()
   if(search.length<2||search.length>180)return res.status(400).json({error:'Digite pelo menos dois caracteres para buscar.'})
   try{
@@ -210,10 +235,11 @@ router.get('/patients/search',async(req,res)=>{
       if(!grouped.has(key))grouped.set(key,new Map())
       grouped.get(key).set(visit.id,{id:visit.id,date:today,schedule:visit.schedule_name,startAt:visit.startDate,status:visit.status,isSession:Boolean(visit.expenses?.some(expense=>expense.type==='session'&&String(expense.code||'').replace(/\D/g,'')!=='50000144'))})
     }
+    await req.revalidatePhysioPreview?.()
     res.json({items:patients.filter(patient=>grouped.has(String(patient.external_id))).map(patient=>({...patient,appointments:[...grouped.get(String(patient.external_id)).values()].sort((a,b)=>b.date.localeCompare(a.date)||String(b.startAt).localeCompare(String(a.startAt)))})),hasMore:Boolean(result.hasMore)})
   }catch(error){physioError(res,error,'Não foi possível buscar pacientes das suas agendas no Stenci.')}
 })
-router.get('/production',async(req,res)=>{
+appRouter.get('/production',async(req,res)=>{
   try{
     const {start,end}=period({start:String(req.query.start||''),end:String(req.query.end||'')})
     const schedules=req.physioSchedules.map(s=>s.schedule_id)
@@ -225,7 +251,9 @@ router.get('/production',async(req,res)=>{
       const current=byDay.get(day)||{date:day,appointments:0,completed:0,sessions:0}
       current.appointments++;current.completed+=item.status==='finished'?1:0;current.sessions+=item.is_session?1:0;byDay.set(day,current)
     }
+    await req.revalidatePhysioPreview?.()
     res.json({start,end,totals:{appointments:items.length,completed:items.filter(item=>item.status==='finished').length,sessions:items.filter(item=>Boolean(item.is_session)).length},days:[...byDay.values()]})
   }catch(error){physioError(res,error,'Não foi possível carregar o relatório de produção.')}
 })
+router.use(appRouter)
 module.exports=router

@@ -269,6 +269,7 @@ import { useTreatmentLiveUpdates } from '@/composables/useTreatmentLiveUpdates'
 import { apiCooldownRemaining } from '@/utils/apiCooldown'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/plugins/axios'
+import { openPatientPortal } from '@/utils/patientPortal'
 import PageShell from '@/components/PageShell.vue'
 import DataList from '@/components/DataList.vue'
 import { useAuthUser } from '@/composables/useAuthUser'
@@ -500,6 +501,12 @@ const toolbarActions = computed(() => {
       onClick: () => openTreatment(selected.value),
     },
     {
+      icon: 'eye',
+      label: 'Abrir app do paciente em outra aba',
+      disabled: !selected.value,
+      onClick: () => { if (selected.value) void openPatientPortal(selected.value.id) },
+    },
+    {
       icon: 'edit',
       label: 'Avaliar tratamento selecionado',
       disabled: !selected.value || !canOperational('guide_processes', 'canEdit'),
@@ -683,10 +690,9 @@ onMounted(async () => {
       if (typeof route.query[key] === 'string') filters[key] = route.query[key] as string
   }
   try {
-    ;[insurers.value, professionals.value] = await Promise.all([
-      (await api.get('/insurance-providers', { params: { active: true } })).data,
-      (await api.get('/professionals', { params: { active: true } })).data,
-    ])
+    const choices = (await api.get('/guide-processes/filter-options')).data
+    insurers.value = choices.insurers
+    professionals.value = choices.professionals
     if (disposed) return
     initialized = true
     await Promise.all([load(), loadQueueCounts()])

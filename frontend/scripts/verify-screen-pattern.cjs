@@ -13,6 +13,8 @@ async function prepare(page,user={id:999,role:'admin',username:'teste-visual',na
     const url=new URL(route.request().url()),p=url.pathname
     let data=records
     if(p==='/api/auth/me')data={user}
+    else if(p==='/api/guide-processes/filter-options')data={insurers:records,professionals:records}
+    else if(p==='/api/document-templates/options')data={insurances:records}
     else if(p==='/api/guide-processes/queue-counts')data=Object.fromEntries(Object.keys(require('../../backend/services/treatmentQueues').queues).map(key=>[key,records.length]))
     else if(p==='/api/guide-processes'){const size=Number(url.searchParams.get('pageSize')||20),pageNum=Number(url.searchParams.get('page')||1);data={data:records.slice((pageNum-1)*size,pageNum*size),pagination:{page:pageNum,pageSize:size,total:records.length,pages:Math.ceil(records.length/size)}}}
     else if(p==='/api/guide-processes/1')data=treatment

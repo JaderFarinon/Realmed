@@ -92,6 +92,7 @@ async function billingRead(client, input) {
         id: x.id,
         patient_id: x.patient.id,
         patient_name: x.patient.name,
+        ...(Object.keys(require('../../backend/services/patientDemographics').demographics(x.patient)).length ? {patient_demographics: require('../../backend/services/patientDemographics').demographics(x.patient)} : {}),
         insurance_name: x.insurance?.name,
         insurance_id: x.insurance?.id,
         startDate: x.startDate,

@@ -61,6 +61,7 @@ function normalizeDay(branchId, date, snapshots, now = new Date()) {
         schedule_name: schedule.name,
         patient_external_id: String(row.patient_id),
         patient_name: row.patient_name,
+        ...(row.patient_demographics ? {patient_demographics: JSON.stringify(row.patient_demographics)} : {}),
         insurance_external_id: row.insurance_id || null,
         insurance_name: row.insurance_name || null,
         start_at: row.startDate,
@@ -94,6 +95,7 @@ function normalizeDay(branchId, date, snapshots, now = new Date()) {
         previous.is_evaluation ||= value.is_evaluation;
         previous.is_session ||= value.is_session;
         previous.is_physiotherapy ||= value.is_physiotherapy;
+        if (value.patient_demographics) previous.patient_demographics = JSON.stringify({...JSON.parse(value.patient_demographics),...JSON.parse(previous.patient_demographics || '{}')});
         previous.schedule_memberships = JSON.stringify(
           [
             ...JSON.parse(previous.schedule_memberships),

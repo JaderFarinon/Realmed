@@ -1,5 +1,9 @@
 # Stenci: autenticação e consultas temporárias
 
+## Consulta de agendamento online — 13/11/2026
+
+Conector público restrito do agendamento de avaliações usa conta dedicada STENCI_BOOKING_USERNAME/PASSWORD ou, por escolha explícita do administrador na configuração privada, a conexão institucional do fisio. Autenticação/branch/me e logoff temporários; mesma fila de serialização da conta compartilhada, limite próprio de operações, sem JWT/sid administrativo no paciente. Nenhuma credencial em navegador/log/banco. Somente consultas confirmadas e campos mínimos; criação de paciente/reserva ainda bloqueada até contratos adicionais. Esta extensão de finalidade não abre as rotas genéricas Stenci a usuários anônimos/locais. Ver AGENDAMENTO_ONLINE_AVALIACAO.md.
+
 ## Exceção local no modo fisioterapeuta — 11/11/2026
 
 Contas LOCAL vinculadas ao fisioterapeuta podem usar reconhecimento facial ou senha Realmed para abrir a área própria. A senha local autentica somente no Realmed. A conexão externa usa `STENCI_FISIO_USERNAME/PASSWORD` nos secrets do servidor, com autenticação, seleção de branch, identidade e logoff confirmados antes de publicar sessão/dados. O arquivo privado de ambiente é a origem autorizada desses secrets; cópias por sessão permanecem somente no envelope AES-256-GCM em memória. Não escrever credenciais em banco, frontend, JWT, logs ou documentação.

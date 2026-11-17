@@ -9,10 +9,10 @@ const origin=process.env.REALMED_UI_TEST_URL||'http://127.0.0.1:5198';
  const fixture={...records[0],patient_id:1,notes:'Dados originais',documents:[],authorizations:[],procedures:[],pendingItems:[],history:[],workflow_stages:{reception:{completed_at:'2026-11-11'}}};
  const output=path.resolve(__dirname,'../../.deployment/edit-recovery-qa');fs.mkdirSync(output,{recursive:true});
  try{
-  async function pageFor(name,userId=999,canEdit=true){
+  async function pageFor(name,userId=999,canEdit=true,clockOffset=0){
    const page=await browser.newPage({viewport:{width:1366,height:900}});page.on('pageerror',e=>errors.push(e.message));
    await prepare(page,canEdit?{id:userId,role:'admin',username:name,name,permissionsEnabled:true,permissions:[]}:{id:userId,role:'user',username:name,name,permissionsEnabled:true,permissions:[{moduleKey:'guide_processes',canView:true,canEdit:false,canCreate:false,canDelete:false}]});
-   await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+100));
+   await page.clock.install({time:new Date(Date.now()+clockOffset)});await page.clock.pauseAt(new Date(Date.now()+clockOffset+100));
    await page.route('**/api/treatment-updates',r=>r.fulfill({contentType:'text/event-stream',body:'data: refresh\n\n'}));
    await page.route('**/api/guide-processes/1',r=>{assert.equal(r.request().method(),'GET','Recovery must not save stale fields');return r.fulfill({json:fixture})});
    await page.route('**/api/guide-processes/1/evaluation**',r=>r.fulfill({json:r.request().url().endsWith('/options')?{patient:{},professionals:[]}:{id:1,status:'COMPLETED'}}));
@@ -30,7 +30,7 @@ const origin=process.env.REALMED_UI_TEST_URL||'http://127.0.0.1:5198';
      }
      if(method==='DELETE'&&locks.owned(owners[stage],userId,editor))owners[stage].expires_at=0;
      const row=owners[stage],active=locks.active(row),owned=locks.owned(row,userId,editor),sameUser=active&&row.owner_id===userId;
-     return r.fulfill({json:{locked:active,owned,sameUser,owner:'Pessoa de teste',expiresAt:row?.expires_at,...(active&&sameUser&&!owned?{recoverFrom:row.editor_id}:{})}});
+     return r.fulfill({json:{serverTime:Date.now(),locked:active,owned,sameUser,owner:'Pessoa de teste',expiresAt:row?.expires_at,...(active&&sameUser&&!owned?{recoverFrom:row.editor_id}:{})}});
     }catch(e){return r.fulfill({status:e.status||500,json:{error:e.message,code:e.code}})}
    });
    await page.goto(origin+'/central-de-guias/tratamentos/1');await page.getByRole('tab',{name:'Central de Guias',exact:true}).click();
@@ -41,13 +41,23 @@ const origin=process.env.REALMED_UI_TEST_URL||'http://127.0.0.1:5198';
   const dialog=p=>p.getByRole('dialog',{name:'Recuperar edição nesta janela?',exact:true});
   const focus=async p=>{await p.evaluate(()=>window.dispatchEvent(new Event('online')))};
   const confirm=async p=>{await recovering(p).click();await dialog(p).getByRole('button',{name:'Confirmar recuperação',exact:true}).click();await p.getByText('Edição recuperada nesta janela. Os dados salvos foram atualizados.',{exact:true}).waitFor()};
-  const a=await pageFor('janela-a');await a.getByRole('button',{name:'Editar aba',exact:true}).click();await notes(a).fill('Rascunho da janela A');
+  const a=await pageFor('janela-a',999,true,4*3600000);await a.getByRole('button',{name:'Editar aba',exact:true}).click();await a.clock.runFor(1);assert.equal(await notes(a).isDisabled(),false,'A PC four hours ahead must not lose an active server lease');await notes(a).fill('Rascunho da janela A');
+  // Changing the PC wall clock in either direction must not change a valid lease or discard the draft.
+  for(const wallTime of ['2040-01-01T12:00:00Z','2000-01-01T12:00:00Z']){
+   await a.clock.setSystemTime(new Date(wallTime));const renewals=calls.filter(c=>c.name==='janela-a'&&c.body.renew).length;
+   await a.clock.runFor(15001);await a.waitForFunction(()=>!document.querySelector('#treatment-tabpanel-central textarea[disabled]'));assert.equal(await notes(a).isDisabled(),false);assert.equal(await notes(a).inputValue(),'Rascunho da janela A');
+   assert.ok(calls.filter(c=>c.name==='janela-a'&&c.body.renew).length>renewals,'Renewal continues after a wall clock change');
+  }
+  offline.add('janela-a');await a.clock.runFor(15001);await a.getByRole('button',{name:'Conferir edição',exact:true}).waitFor();assert.equal(await notes(a).isDisabled(),true);assert.equal(await notes(a).inputValue(),'Rascunho da janela A');
+  assert.equal(await a.getByText(/Sua conta está editando esta aba em outra janela/).count(),0,'Unconfirmed own connection is not claimed as another window');
+  offline.delete('janela-a');await a.getByRole('button',{name:'Conferir edição',exact:true}).click();await a.getByRole('button',{name:'Terminar edição',exact:true}).waitFor();assert.equal(await notes(a).isDisabled(),false);assert.equal(await notes(a).inputValue(),'Rascunho da janela A');
   offline.add('janela-a');
   const b=await pageFor('janela-b');await recovering(b).waitFor();assert.equal(await notes(b).isDisabled(),true);
   await recovering(b).click();await dialog(b).getByRole('button',{name:'Cancelar',exact:true}).click();assert.equal(owners.central.editor_id,editors.get('janela-a'));
   for(const viewport of [{width:1366,height:900},{width:1024,height:600},{width:390,height:844}]){
    await b.setViewportSize(viewport);await recovering(b).click();
-   assert.ok(await b.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
+   await b.evaluate(()=>document.fonts.ready);await b.waitForTimeout(150);await b.screenshot({path:path.join(output,'confirmation-'+viewport.width+'.png')});
+   assert.ok(await b.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Viewport '+viewport.width);
    const box=await dialog(b).boundingBox();assert.ok(box.x>=0&&box.x+box.width<=viewport.width+2);
    await b.screenshot({path:path.join(output,'confirmation-'+viewport.width+'.png')});
    await dialog(b).getByRole('button',{name:'Cancelar',exact:true}).click();
@@ -76,6 +86,8 @@ const origin=process.env.REALMED_UI_TEST_URL||'http://127.0.0.1:5198';
   await confirm(b);assert.equal(await notes(b).isDisabled(),true);assert.equal(await b.getByRole('button',{name:'Reabrir etapa',exact:true}).count(),1);
   assert.ok((await b.getByRole('tab',{name:/Central de Guias/}).textContent()).includes('✓'));
   await b.screenshot({path:path.join(output,'completed-stage.png')});
-  assert.deepEqual(errors,[]);console.log('PASS edit recovery UI: own/foreign accounts, permissions, cancel/confirm, responsive modal, fresh data, reconnect, draft preservation/discard, no automatic takeover, stale dialog, completed stage.');
+  // A server-confirmed expiration still blocks a PC with its clock far behind.
+  owners.central.expires_at=Date.now()-1;await focus(b);await b.getByRole('button',{name:'Editar aba',exact:true}).waitFor();assert.equal(await notes(b).isDisabled(),true);
+  assert.deepEqual(errors,[]);console.log('PASS edit recovery UI: PC +4h, wall clock forwards/backwards, unchanged draft, renewals, offline/recheck, server expiry; own/foreign accounts, permissions, cancel/confirm, responsive modal, fresh data, reconnect, draft preservation/discard, no automatic takeover, stale dialog, completed stage.');
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

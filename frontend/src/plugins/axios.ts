@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { deferApiRequests, deferFacialLogin } from '@/utils/apiCooldown'
 import { requestStenciRefresh, type StenciOperation } from '@/composables/useStenciRefresh'
+import { notify } from '@/composables/useNotifications'
 
 const configuredUrl = import.meta.env.VITE_API_URL || 'http://localhost:3005'
 const origin = configuredUrl.replace(/\/+$/, '')
@@ -36,8 +37,10 @@ api.interceptors.response.use(undefined, async (error) => {
     const defer = publicPhysioFaceRequest ? deferFacialLogin : deferApiRequests
     defer(error.response.headers?.['retry-after'])
   }
-  if (requestPath.startsWith('/physio/') && requestPath !== '/physio/session' && error.response?.data?.code === 'PHYSIO_SESSION_REQUIRED' && !error.config?._physioRetried) {
-    await ensurePhysioSession()
+  const previewMatch = /^\/physio\/admin-preview\/([1-9]\d*)\//.exec(requestPath)
+  const sessionPath = previewMatch ? '/physio/admin-preview/' + previewMatch[1] + '/session' : '/physio/session'
+  if (requestPath.startsWith('/physio/') && requestPath !== sessionPath && error.response?.data?.code === 'PHYSIO_SESSION_REQUIRED' && !error.config?._physioRetried) {
+    await (previewMatch ? ensurePhysioPreviewSession(previewMatch[1]) : ensurePhysioSession())
     return api.request({...error.config,_physioRetried:true})
   }
   if (
@@ -96,10 +99,11 @@ api.interceptors.response.use(undefined, async (error) => {
   if (
     !publicPhysioFaceRequest &&
     error.response?.status === 403 &&
-    error.response?.data?.code !== 'STENCI_SESSION_EXPIRED' &&
-    window.location.pathname !== '/sem-permissao'
+    error.response?.data?.code !== 'STENCI_SESSION_EXPIRED'
   ) {
-    window.location.assign('/sem-permissao')
+    // The route guard owns page access. A denied action or secondary query must
+    // not discard the current page (and its unsaved fields) or end the session.
+    notify(error.response?.data?.error || 'Usuário sem permissão a essa função', 'error')
   }
   return Promise.reject(error)
 })
@@ -115,4 +119,17 @@ export function ensurePhysioSession(): Promise<any> {
     }).finally(() => { physioSession = null })
   }
   return physioSession
+}
+
+const physioPreviews = new Map<string, Promise<any>>()
+export function ensurePhysioPreviewSession(professionalId: string): Promise<any> {
+  const token = localStorage.getItem('token'), key = String(token) + ':' + professionalId
+  if (!physioPreviews.has(key)) {
+    const pending = api.post('/physio/admin-preview/' + encodeURIComponent(professionalId) + '/session').then(({data}) => {
+      if (localStorage.getItem('token') !== token) throw new Error('A sessão administrativa mudou durante a consulta.')
+      return data.profile
+    }).finally(() => physioPreviews.delete(key))
+    physioPreviews.set(key, pending)
+  }
+  return physioPreviews.get(key)!
 }

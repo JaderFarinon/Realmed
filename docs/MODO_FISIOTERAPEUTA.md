@@ -1,4 +1,28 @@
+## Visão administrativa do fisioterapeuta — 16/11/2026
+
+Administradores ativos (admin/masteradmin) podem selecionar um fisioterapeuta ativo CREFITO em Cadastros → Profissionais e usar **Ver visão do fisio** (olho na barra ou botão no formulário). Abre /modo-fisio/visualizar/:professionalId em nova aba, reutilizando a sessão administrativa; não exige senha/rosto do profissional nem troca o token do administrador. Não é endereço público: a conta administrativa precisa estar autenticada.
+
+Reutiliza Agenda, Pacientes, Produção, Configurações e atendimento do tablet, com identificação de Visualização administrativa. Somente esse contexto permite abrir pacientes de sessões passadas/futuras e consultar avaliações concluídas ou preparar o texto de evolução fora do horário. O modo normal continua com início inclusivo/fim exclusivo e validação de relógio/vínculo no servidor. Datas, agrupamento, contador Stenci e capacidade de gravação não mudam; iniciar/salvar/finalizar no Stenci continuam desabilitados até os contratos pendentes.
+
+API /physio/admin-preview/:professionalId usa allowlist de consultas, POST de conexão e prévia determinística. Revalida papel ativo, cadastro CREFITO e agendas explicitamente vinculadas antes/depois das leituras. Conexão institucional e login/logoff mantêm fila compartilhada; SID interno separado por token administrativo/profissional, nunca devolvido ao navegador, limitado a 30 minutos e à validade do token. Renovação não substitui credenciais/token da conta Realmed. Criação concorrente deduplicada e abertura auditada em physio_admin_preview_audit, sem paciente, texto ou token. Alterar profissional, status ou papel revoga o acesso correspondente; nenhuma permissão é concedida ao fisioterapeuta.
+
+Validação: deploy/test-physio-shared-access.cjs e deploy/test-physio-evolution.cjs em MySQL descartável; frontend/scripts/verify-physio-admin-preview.cjs para botão, nova aba, consulta/avaliação e tablet/celular; regressão verify-physio-session-window.cjs preserva o bloqueio normal.
+
 # Modo Fisioterapeuta
+
+## Prévia de evolução, contador Stenci e avaliação — 12/11/2026
+
+Ver [EVOLUCAO_FISIOTERAPEUTICA.md](EVOLUCAO_FISIOTERAPEUTICA.md). Agenda/detalhe mostram bundle.current/total; igualdade identifica a última sessão prevista. Questionário diário e reavaliação final geram texto revisável com identificação profissional do vínculo autenticado. Ver Avaliação consulta a avaliação local concluída do paciente/ciclo, em leitura. Rascunho apenas na memória, sem envio. O HAR recebido confirma criação/salvamento/finalização, mas não a retomada do objeto completo; esses comandos permanecem indisponíveis até a captura complementar. A regra anterior de campos clínicos inteiramente desabilitados passa a permitir somente preparação/prévia, preservando vínculo/horário e ausência de persistência clínica.
+
+## Sessões com encaixes isolados — 12/11/2026
+
+Os limites passam a considerar blocos de ao menos duas posições distintas consecutivas de um minuto, da mesma agenda/data, incluindo vagas efetivamente retornadas. Horários isolados entre esses blocos são encaixes dentro da janela e não criam uma divisão. A sessão termina no início do próximo bloco consecutivo; o último bloco estima seu fim pelo intervalo entre os dois últimos blocos, ou 45 minutos quando não há intervalo conhecido. Encaixes não participam desse cálculo.
+
+Exemplo: 16:15, 16:16, …, 16:20, encaixe às 16:33 e próximo bloco às 17:00 formam uma sessão 16:15–17:00 com todos os sete pacientes. Às 16:40 todos podem abrir atendimento; às 17:00 essa sessão fecha e abre a próxima. Sem próximo bloco, a previsão de 45 minutos também termina às 17:00, sem encurtar para 16:33. Intervalos de outra duração entre blocos permanecem respeitados.
+
+Horários isolados fora das janelas conhecidas continuam visíveis em sessões estimadas separadas, iniciadas em um horário observado, usando o último intervalo entre blocos consecutivos anteriores ou 45 minutos. Outros isolados dentro dessa previsão pertencem ao mesmo grupo; não estender a sessão anterior nem fabricar posições. Se existir bloco consecutivo antes do término previsto, ele delimita o fim. Agenda sem qualquer sequência usa essa mesma previsão, explicitada como Fim previsto. Não inferir novo intervalo clínico pela distância entre encaixes.
+
+`groupSessions` calcula os mesmos limites usados pela agenda e por `sessionAccess` na API do detalhe. Preservar validações antes/depois da leitura, relógio do servidor, datas/fuso, início inclusivo/fim exclusivo e expiração da tela aberta. Sem alterações de rodízio, capacidade, produção ou gravações Stenci. Testes incluem o encaixe às 16:33 e acesso às 16:40, fim da última sessão, intervalos variáveis, agendas esparsas, isolamento e meia-noite; MySQL/API temporário e teste de toque/expiração no tablet. Esta regra substitui a divisão histórica por todo grupo isolado.
 
 ## Horários recolhidos na agenda — 11/11/2026
 
@@ -32,7 +56,7 @@ Validação: frontend/scripts/verify-physio-settings.cjs cobre os dois tipos de 
 
 O usuário confirmou duração atual de 45 minutos, mas pediu inferir os limites pela agenda para acompanhar alterações. `physioRead` usa o contrato GET `/v1/calendar` já conhecido, retornando campos selecionados do paciente/convênio/serviços e apenas os horários das posições vazias. `physioAgenda.groupSessions` agrupa minutos consecutivos da mesma agenda/data, inclusive posições vagas entre pacientes. Não fabricar vagas, somar capacidade ou misturar agendas. Agendamentos duplicados em várias agendas vinculadas aparecem uma vez; grupos vazios ajudam a delimitar os horários, mas não ocupam cards na tela. Numeração cronológica dos grupos com pacientes.
 
-O fim de uma sessão corresponde ao início do próximo grupo observado. Para o último grupo, usa o intervalo entre os dois últimos grupos; se só houver um grupo observado, usa 45 minutos. Ambos os casos mostram Fim previsto; previsão de 45 minutos é indicada explicitamente. Não confundir o endDate técnico de um minuto de cada posição com a duração da sessão. Datas/horas em America/Sao_Paulo. Cálculo do rodízio e contagem da produção permanecem independentes.
+Atualizado em 12/11: o fim de uma sessão corresponde ao início do próximo bloco de posições consecutivas, ignorando encaixes isolados. Para o último bloco, usa o intervalo entre os dois últimos blocos consecutivos; se só houver um, usa 45 minutos. Ambos os casos mostram Fim previsto; previsão de 45 minutos é indicada explicitamente. Horários esparsos seguem a regra da seção Sessões com encaixes isolados. Não confundir o endDate técnico de um minuto de cada posição com a duração da sessão. Datas/horas em America/Sao_Paulo. Cálculo do rodízio e contagem da produção permanecem independentes.
 
 Paleta da legenda enviada pelo usuário: scheduled/agendado #F1E87A; cancelamentos paciente/profissional #FF9696; confirmed #00B6AE; unsuccessful #8B68CE; in_attendance #20F8FF; waiting #E8A363; missed #F85C5C; finished #3197FF; report #30FF9B; payment #B74AFF; pending #787878; rescheduled #E895FF; screening #B4FF00. Rótulo textual acompanha a cor; estado desconhecido não é apresentado como Agendado. Códigos corroborados pelos contratos anteriores, inclusive `stenci_har_docs.zip`.
 

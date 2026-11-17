@@ -1,34 +1,29 @@
 <template>
   <main class="physio-appointment">
+    <PhysioPreviewBanner v-if="isPreview" />
     <div class="appointment-brand"><span>REALMED <b>· Atendimento</b></span><span>{{ data ? simpleDate(data.date) : 'Agenda do fisioterapeuta' }}</span></div>
     <div v-if="loading" class="appointment-empty" role="status">Carregando atendimento…</div>
     <div v-else-if="!data" class="appointment-empty"><h1>Atendimento indisponível</h1><p>{{ loadError || 'Confira a data e o vínculo com a agenda ou tente carregar novamente.' }}</p><button type="button" class="btn-secondary" @click="load">Tentar novamente</button></div>
-    <div v-else-if="!inCurrentSession" class="appointment-empty" role="status"><h1>Atendimento fora do horário</h1><p>Este atendimento só fica disponível durante o horário da sessão. Consulte a sessão atual na agenda.</p><button type="button" class="btn-secondary" @click="load">Conferir horário</button></div>
+    <div v-else-if="!inCurrentSession" class="appointment-empty" role="status"><h1>Atendimento fora do horário</h1><p>Este atendimento só fica disponível durante o horário da sessão. Consulte a sessão atual na agenda.</p><p v-if="localDraft?.dirty">Seu rascunho permanece apenas na memória desta tela. Ele não foi enviado ao Stenci.</p><button type="button" class="btn-secondary" @click="load">Conferir horário</button></div>
     <template v-else>
       <header ref="patientHeader" class="appointment-patient">
-        <div class="patient-identity"><div class="patient-avatar" aria-hidden="true">{{ initials }}</div><div class="patient-title"><p>Atendimento do paciente</p><h1>{{ data.appointment.patient_name }}</h1><div class="patient-meta"><span>{{ data.appointment.insurance_name || 'Convênio não informado' }}</span><span>Nascimento: {{ data.appointment.patient_birth_date ? simpleDate(data.appointment.patient_birth_date) : 'não informado' }}<template v-if="age !== null"> · {{ age }} anos</template></span></div></div></div>
-        <div class="patient-actions"><PhysioAppointmentStatus :status="data.appointment.status" /><button type="button" class="start-attendance" disabled title="O início no Stenci será habilitado após a integração do atendimento."><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 5 11 7-11 7Z" /></svg>Iniciar atendimento</button></div>
+        <div class="patient-identity"><div class="patient-avatar" aria-hidden="true">{{ initials }}</div><div class="patient-title"><p>{{ isPreview ? 'Visualização administrativa · Atendimento' : 'Atendimento do paciente' }}</p><h1>{{ data.appointment.patient_name }}</h1><div class="patient-meta"><span>{{ data.appointment.insurance_name || 'Convênio não informado' }}</span><span>Nascimento: {{ data.appointment.patient_birth_date ? simpleDate(data.appointment.patient_birth_date) : 'não informado' }}<template v-if="age !== null"> · {{ age }} anos</template></span></div></div></div>
+        <div class="patient-actions"><PhysioAppointmentStatus :status="data.appointment.status" /><button type="button" class="btn-secondary" @click="evaluationOpen=true">Ver Avaliação</button><button type="button" class="btn-primary" @click="selectTab('evolution')">Preparar evolução</button></div>
       </header>
       <div class="appointment-body">
-        <div class="attendance-availability" role="status"><strong>Consulta disponível</strong><span>O início, a evolução e a finalização no Stenci serão habilitados na próxima etapa. Os campos abaixo estão apenas para conferência.</span></div>
+        <div class="attendance-availability" role="status"><strong v-if="data.appointment.session_progress">Sessão {{ data.appointment.session_progress.current }}/{{ data.appointment.session_progress.total }}</strong><span>Prepare o texto e consulte a avaliação. O envio de evoluções ao Stenci ainda está em integração.</span></div>
         <div class="patient-allergies"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 10 18H2ZM12 9v5m0 3v1" /></svg><p><strong>Alergias não consultadas.</strong> Confira essa informação no prontuário do Stenci.</p></div>
         <div class="appointment-panel">
           <nav ref="navTabs" class="appointment-tabs" role="tablist" aria-label="Dados do atendimento"><button v-for="tab in tabs" :id="`appointment-tab-${tab.key}`" :key="tab.key" type="button" role="tab" :aria-selected="activeTab === tab.key" :tabindex="activeTab === tab.key ? 0 : -1" aria-controls="appointment-panel" :class="{active:activeTab===tab.key}" @click="selectTab(tab.key)" @keydown="tabKeys($event,tab.key)">{{ tab.label }}</button></nav>
           <section id="appointment-panel" role="tabpanel" :aria-labelledby="`appointment-tab-${activeTab}`" class="appointment-tab-content">
+            <PhysioEvolution v-show="activeTab==='evolution'" :key="data.appointment.id" :appointment="data.appointment" :date="data.date" :active="activeTab==='evolution'" :draft="localDraft" @draft="localDraft=$event" @status="data.appointment.status=$event" />
             <template v-if="activeTab==='summary'">
               <div class="appointment-summary-heading"><div><p class="section-eyebrow">{{ data.session ? `Sessão ${data.session.number}` : 'Agendamento' }}</p><h2>{{ sessionTime }}</h2><small v-if="data.session?.end_estimated">Fim previsto{{ data.session.end_source==='default_45' ? ' · 45 minutos' : ' pelo intervalo anterior' }}</small></div><span class="appointment-date">{{ simpleDate(data.date) }}</span></div>
               <dl class="appointment-facts"><div><dt>Agenda</dt><dd>{{ data.appointment.schedule_name }}</dd></div><div><dt>Posição no Stenci</dt><dd>{{ time(data.appointment.startDate) }}</dd></div></dl>
               <h3 class="procedures-title">Serviços agendados</h3><ul v-if="data.appointment.expenses?.length" class="appointment-procedures"><li v-for="(expense,index) in data.appointment.expenses" :key="index"><div><strong>{{ expense.name || 'Serviço sem descrição' }}</strong><small v-if="expense.code">Código {{ expense.code }}</small></div><span v-if="expense.quantity != null">Qtd. {{ expense.quantity }}</span></li></ul><p v-else class="empty-procedures">O agendamento não retornou serviços.</p>
-              <div class="prepare-attendance"><div><h3>Ficha de atendimento</h3><p>Confira a organização da anamnese e da evolução para uso no tablet.</p></div><button type="button" class="btn-primary" @click="selectTab('evolution')">Visualizar ficha de atendimento</button></div>
+              <div class="prepare-attendance"><div><h3>Evolução do atendimento</h3><p>Questionário e revisão do texto com identificação profissional. Rascunho temporário, ainda sem envio ao Stenci.</p></div><button type="button" class="btn-primary" @click="selectTab('evolution')">Preencher evolução</button></div>
             </template>
-            <template v-else-if="activeTab==='evolution'">
-              <div class="evolution-context"><strong>{{ simpleDate(data.date) }} · {{ sessionTime }}</strong><span>{{ data.appointment.schedule_name }}</span><span v-if="data.appointment.expenses?.length">{{ data.appointment.expenses.map(item=>item.name).filter(Boolean).join(' · ') }}</span></div>
-              <div class="evolution-title"><h2>Anamnese / evolução</h2><span>Registro ainda indisponível</span></div>
-              <label class="evolution-field">CID<input class="input" type="text" placeholder="Código do diagnóstico" disabled /></label>
-              <label class="evolution-field">Texto da evolução<textarea class="input evolution-editor" rows="10" placeholder="O registro da evolução ficará disponível após a integração com o Stenci." disabled /></label>
-              <div class="evolution-actions"><button type="button" class="btn-secondary" disabled><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8" /></svg>Salvar rascunho</button><button type="button" class="btn-primary" disabled>Finalizar atendimento</button></div>
-            </template>
-            <template v-else>
+            <template v-else-if="activeTab==='history'">
               <h2>Histórico da agenda</h2><p class="history-description">Atendimentos deste paciente nas suas agendas vinculadas. As evoluções clínicas do Stenci ainda não estão disponíveis nesta tela.</p>
               <ol v-if="data.history.length" class="appointment-history"><li v-for="visit in data.history" :key="visit.id"><div><strong>{{ simpleDate(visit.date) }} · {{ time(visit.startAt) }}</strong><span>{{ visit.schedule }}</span></div><PhysioAppointmentStatus :status="visit.status" /></li></ol><p v-else class="appointment-history-empty">Nenhum atendimento anterior na coleta disponível das suas agendas.</p>
               <p v-if="data.hasMoreHistory" class="history-description">Mostrando os 20 atendimentos mais recentes disponíveis.</p>
@@ -37,20 +32,34 @@
         </div>
       </div>
     </template>
+    <PhysioEvaluationDialog v-if="data&&inCurrentSession" :open="evaluationOpen" :appointment-id="data.appointment.id" :date="data.date" :patient-name="data.appointment.patient_name" @close="evaluationOpen=false" />
+    <ListDetailDialog :open="leaveOpen" title="Sair sem enviar a evolução?" @close="resolveLeave(false)"><p>Há alterações que ainda não foram enviadas ao Stenci. Sair descarta este rascunho da tela.</p><template #footer><button class="btn-secondary" @click="resolveLeave(false)">Continuar preenchendo</button><button class="btn-primary" @click="resolveLeave(true)">Descartar e sair</button></template></ListDetailDialog>
   </main>
 </template>
 <script setup lang="ts">
-import {computed,nextTick,onBeforeUnmount,ref,watch} from 'vue'
-import {useRoute} from 'vue-router'
-import api from '@/plugins/axios'
+import {computed,nextTick,onBeforeUnmount,onMounted,ref,watch} from 'vue'
+import {useRoute,onBeforeRouteLeave,onBeforeRouteUpdate} from 'vue-router'
+import { usePhysioAccess } from '@/composables/usePhysioAccess'
 import {notify} from '@/composables/useNotifications'
+import PhysioPreviewBanner from '@/components/PhysioPreviewBanner.vue'
 import PhysioAppointmentStatus from '@/components/PhysioAppointmentStatus.vue'
 import {physioDate as simpleDate,physioTime as time,sessionAccess,type PhysioAppointment,type PhysioSession,type PhysioVisit} from '@/utils/physioAgenda'
 import {usePhysioClock} from '@/composables/usePhysioClock'
-type Detail={appointment:PhysioAppointment;session:Omit<PhysioSession,'items'>|null;date:string;server_time:string;history:PhysioVisit[];hasMoreHistory:boolean;clinicalHistoryAvailable:boolean;capabilities:{start:boolean;saveEvolution:boolean;finish:boolean}}
+import PhysioEvolution from './PhysioEvolution.vue'
+import PhysioEvaluationDialog from './PhysioEvaluationDialog.vue'
+import ListDetailDialog from '@/components/ListDetailDialog.vue'
+type Detail={adminPreview?:boolean;appointment:PhysioAppointment;session:Omit<PhysioSession,'items'>|null;date:string;server_time:string;history:PhysioVisit[];hasMoreHistory:boolean;clinicalHistoryAvailable:boolean;capabilities:{start:boolean;saveEvolution:boolean;finish:boolean}}
+const {api, isPreview} = usePhysioAccess()
 const route=useRoute(),data=ref<Detail|null>(null),loading=ref(false),activeTab=ref('summary'),loadError=ref('')
+const localDraft=ref<{text:string;answers:Record<string,string>;dirty:boolean}|null>(null),evaluationOpen=ref(false),leaveOpen=ref(false)
+let leaveResolve:((value:boolean)=>void)|undefined
+function resolveLeave(value:boolean){leaveOpen.value=false;leaveResolve?.(value);leaveResolve=undefined}
+function guardLeave(){if(!localDraft.value?.dirty)return true;leaveOpen.value=true;return new Promise<boolean>(resolve=>{leaveResolve=resolve})}
+onBeforeRouteLeave(guardLeave);onBeforeRouteUpdate(guardLeave)
+function beforeUnload(event:BeforeUnloadEvent){if(localDraft.value?.dirty){event.preventDefault();event.returnValue=''}}
+onMounted(()=>window.addEventListener('beforeunload',beforeUnload))
 const clock=usePhysioClock(()=>void load())
-const inCurrentSession=computed(()=>Boolean(data.value&&sessionAccess(data.value.session,data.value.date,clock.now.value)==='current'))
+const inCurrentSession=computed(()=>Boolean(data.value&&(data.value.adminPreview===true || sessionAccess(data.value.session,data.value.date,clock.now.value)==='current')))
 const tabs=[{key:'summary',label:'Resumo'},{key:'evolution',label:'Anamnese / evolução'},{key:'history',label:'Histórico'}]
 const patientHeader=ref<HTMLElement>(),navTabs=ref<HTMLElement>()
 async function selectTab(key:string){activeTab.value=key;await nextTick();const top=navTabs.value?.getBoundingClientRect().top,headerBottom=Math.max(0,patientHeader.value?.getBoundingClientRect().bottom||0);if(top!==undefined&&top<headerBottom+8)window.scrollBy({top:top-headerBottom-8,behavior:'instant'})}
@@ -65,8 +74,8 @@ async function load(){
   catch(error){if(current!==request||(error as any).code==='ERR_CANCELED')return;loadError.value=(error as any).response?.data?.error||'Não foi possível carregar o atendimento. Tente novamente.';notify(loadError.value,(error as any).response?.data?.code==='PHYSIO_OUTSIDE_SESSION'?'warning':'error')}
   finally{if(current===request)loading.value=false}
 }
-watch(()=>[route.params.id,route.query.date],()=>void load(),{immediate:true})
-onBeforeUnmount(()=>{request++;controller?.abort()})
+watch(()=>[route.params.professionalId,route.params.id,route.query.date],()=>{localDraft.value=null;evaluationOpen.value=false;void load()},{immediate:true})
+onBeforeUnmount(()=>{request++;controller?.abort();window.removeEventListener('beforeunload',beforeUnload);resolveLeave(false)})
 </script>
 <style scoped>
 .physio-appointment{min-height:100dvh;background:#f2f5f9;color:#132b45;padding-bottom:28px}.appointment-brand{display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:1360px;margin:auto;padding:16px 24px;font-size:12px;color:#506984}.appointment-brand>span:first-child{font-weight:800;letter-spacing:.09em}.appointment-brand b{font-weight:500;letter-spacing:0}.appointment-empty{max-width:900px;margin:50px auto;padding:28px;background:white;border-radius:18px;text-align:center}.appointment-empty h1{font-size:24px;font-weight:700}.appointment-empty p{margin:16px 0}
@@ -78,7 +87,7 @@ onBeforeUnmount(()=>{request++;controller?.abort()})
 @media(orientation:landscape) and (max-height:700px){.appointment-brand{padding-top:9px;padding-bottom:9px}.appointment-patient{padding:14px 20px}.patient-title h1{font-size:25px}.patient-avatar{height:48px;width:48px}.appointment-body{margin-top:12px}.appointment-tab-content{padding:20px}.patient-actions{flex-direction:row;align-items:center}.patient-actions .start-attendance{padding:10px 12px}}
 @media(max-height:450px){.appointment-patient{position:static}}
 @media screen and (min-width:640px) and (max-width:1368px), screen and (min-width:640px) and (pointer:coarse){
-  .physio-appointment{padding-bottom:20px}.appointment-brand{padding:7px 17px;font-size:11px}.appointment-patient{padding:10px 14px;gap:12px;border-radius:12px;margin-left:14px;margin-right:14px}.patient-identity{gap:11px}.patient-avatar{height:34px;width:34px;font-size:16px}.patient-title h1{font-size:20px;margin:3px 0 5px}.patient-meta{font-size:11px;gap:4px 14px}.patient-actions{gap:7px}.patient-actions .start-attendance{min-height:36px;padding:7px 12px;font-size:12px;border-radius:8px}
+  .physio-appointment{padding-bottom:20px}.appointment-brand{padding:7px 17px;font-size:11px}.appointment-patient{padding:10px 14px;gap:12px;border-radius:12px;margin-left:14px;margin-right:14px}.patient-identity{gap:11px}.patient-avatar{height:34px;width:34px;font-size:16px}.patient-title h1{font-size:20px;margin:3px 0 5px}.patient-meta{font-size:11px;gap:4px 14px}.patient-actions{gap:7px}.patient-actions button{min-height:36px;padding:7px 12px;font-size:12px;border-radius:8px}
   .appointment-body{margin:8px 14px}.attendance-availability{padding:8px 11px;gap:6px 11px;border-radius:8px;font-size:11px}.patient-allergies{padding:9px 3px;gap:7px;font-size:11px}.patient-allergies svg{width:15px;height:15px}
   .appointment-panel{border-radius:12px}.appointment-tabs{padding:5px 11px 0;gap:3px}.appointment-tabs button{min-height:36px;padding:5px 11px;font-size:12px}.appointment-tab-content{padding:14px}.appointment-tab-content h2{font-size:16px}.appointment-summary-heading{gap:11px}.section-eyebrow{font-size:11px;margin-bottom:3px}.appointment-date{padding:6px 8px;font-size:12px;border-radius:7px}
   .appointment-facts{gap:14px;padding:15px 0}.appointment-facts dt{font-size:11px}.appointment-facts dd{font-size:13px;margin-top:3px}.procedures-title{margin-top:14px;font-size:13px}.appointment-procedures{margin-top:8px}.appointment-procedures li{padding:10px;gap:8px;margin-bottom:6px;font-size:12px;border-radius:7px}.appointment-procedures small{margin-top:3px}.prepare-attendance{padding-top:16px;margin-top:11px;gap:11px}.prepare-attendance h3{font-size:13px}.prepare-attendance p{font-size:11px;margin-top:3px}.prepare-attendance button{min-height:36px;padding:7px 12px;font-size:12px}

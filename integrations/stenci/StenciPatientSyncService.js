@@ -13,6 +13,8 @@ async function syncPatientFromStenci(knex, externalPatient) {
       gender: mapped.metadata.gender,
       cellphone: externalPatient.cellphone || null,
     };
+    const demographics = require('../../backend/services/patientDemographics').demographics(externalPatient);
+    for (const key of ['city','neighborhood','state']) if (demographics[key]) stored[key] = demographics[key];
     const patientData = Object.fromEntries(
       Object.entries(stored).filter(([key]) => key !== "metadata"),
     );
@@ -29,6 +31,7 @@ async function syncPatientFromStenci(knex, externalPatient) {
           "email",
           "gender",
           "cellphone",
+          "city", "neighborhood", "state",
         ],
         updates = {};
       for (const field of allowed)

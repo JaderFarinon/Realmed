@@ -1,0 +1,371 @@
+.indicator-controls,
+.indicator-card {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.indicator-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid #dce4ef;
+  padding-bottom: 10px;
+}
+.indicator-tabs button,
+.analysis-outline button {
+  border: 1px solid #d1dbea;
+  border-radius: 9px;
+  padding: 10px 16px;
+  white-space: nowrap;
+  color: #344764;
+  background: #fff;
+}
+.indicator-tabs button.active,
+.analysis-outline button.active {
+  color: #3538dc;
+  background: #eef2ff;
+  border-color: #585dff;
+  box-shadow: inset 0 -2px #585dff;
+}
+.indicator-controls details summary,
+.analysis-periods summary,
+.analysis-preview summary {
+  cursor: pointer;
+  color: #344764;
+  padding: 8px 0;
+  font-weight: 500;
+}
+.indicator-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 10px 0;
+}
+.indicator-filter-fields label,
+.analysis-editor label,
+.indicator-controls > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.indicator-filter-fields .input,
+.analysis-editor .input,
+.indicator-controls > label .input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.indicator-filter-help {
+  grid-column: 1/-1;
+  color: #52637b;
+  font-size: var(--realmed-help-size);
+}
+.indicator-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.indicator-context,
+.indicator-footnotes {
+  color: #596b83;
+  font-size: var(--realmed-help-size);
+  line-height: 1.5;
+}
+.indicator-footnotes {
+  padding: 8px 16px;
+  display: grid;
+  gap: 5px;
+}
+.indicator-coverage {
+  background: #fff8e6;
+  border-left: 3px solid #d59b17;
+  border-radius: 6px;
+  color: #77540d;
+  padding: 10px 14px;
+}
+.indicator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.indicator-card {
+  padding: 0 0 16px;
+  gap: 6px;
+}
+.indicator-card > a {
+  justify-self: start;
+  align-self: start;
+  margin: 0 16px;
+}
+.indicator-card {align-content:start}
+.indicator-method summary {cursor:pointer;color:#315c7b;font-weight:500;padding:5px 0}
+.indicator-method p {margin:5px 0}
+.indicator-metric .billing-cartesian text {font-size:20px}
+.indicator-metric {
+  min-width: 0;
+}
+.indicator-metric .billing-chart {
+  border: 0;
+  box-shadow: none;
+  padding: 12px 16px;
+}
+.indicator-metric-total {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 16px 16px 0;
+  flex-wrap: wrap;
+}
+.indicator-metric-total > span {
+  font-size: var(--realmed-help-size);
+  color: #596b83;
+}
+.indicator-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.indicator-picker button {
+  white-space: normal;
+  text-align: left;
+}
+.analysis-empty {
+  padding: 45px;
+  text-align: center;
+  color: #596b83;
+}
+.analysis-workspace {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.analysis-outline {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  position: sticky;
+  top: 12px;
+}
+.analysis-outline ol {
+  display: grid;
+  gap: 6px;
+}
+.analysis-outline button {
+  white-space: normal;
+  text-align: left;
+  width: 100%;
+  padding: 8px;
+}
+.analysis-outline .table-action-button {
+  width: 40px;
+  text-align: center;
+}
+.analysis-editor {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.analysis-text-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.analysis-text-fields section {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.analysis-text-fields h3 {
+  border-bottom: 2px solid #dfe7f2;
+  padding-bottom: 8px;
+}
+.analysis-compare-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.analysis-compare-filters fieldset {
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+.analysis-compare-filters legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.analysis-slide {
+  padding: 20px;
+  background: white;
+  color: #15263d;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+}
+.analysis-slide > header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #dce4ef;
+  margin-bottom: 18px;
+}
+.analysis-eyebrow {
+  font-size: var(--realmed-help-size);
+  letter-spacing: 0.12em;
+  color: #2f6790;
+  margin-bottom: 5px;
+}
+.analysis-three-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.analysis-three-columns > section {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.analysis-three-columns h3 {
+  padding-bottom: 10px;
+  border-bottom: 3px solid #179aaa;
+  margin-bottom: 10px;
+}
+.analysis-three-columns h3 span {
+  color: #8b9bb0;
+  font-size: var(--realmed-help-size);
+  margin-right: 8px;
+}
+.analysis-three-columns h4 {
+  font-weight: 600;
+  margin: 18px 0 6px;
+}
+.analysis-prose {
+  white-space: pre-wrap;
+}
+.analysis-future {
+  padding: 0 14px;
+  background: #f2f8f7;
+  border-radius: 8px;
+}
+.analysis-future dl {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+}
+.analysis-future dt {
+  font-weight: 500;
+}
+.analysis-slide .indicator-footnotes {
+  font-size: 11px;
+  padding: 8px;
+}
+.analysis-slide .indicator-metric .billing-chart {
+  padding: 6px;
+}
+.analysis-slide .billing-chart-heading {
+  gap: 5px;
+}
+.analysis-slide .billing-chart-heading p {
+  display: none;
+}
+.indicator-presentation-dialog {
+  max-width: 1600px !important;
+  width: 96vw !important;
+}
+.indicator-presentation-dialog .list-dialog-content {
+  display: grid;
+  gap: 15px;
+}
+.indicator-print-document {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .analysis-workspace {
+    grid-template-columns: 1fr;
+  }
+  .analysis-outline {
+    position: static;
+  }
+  .analysis-outline ol {
+    display: flex;
+    overflow-x: auto;
+  }
+  .analysis-outline ol li {
+    min-width: 180px;
+    max-width: 260px;
+  }
+  .analysis-text-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+  .analysis-text-fields section:last-child {
+    grid-column: 1/-1;
+  }
+  .analysis-preview .analysis-three-columns {
+    grid-template-columns: 1fr;
+  }
+  .analysis-preview .analysis-slide .billing-cartesian {
+    max-height: 220px;
+  }
+}
+@media (max-width: 700px) {
+  .indicator-grid,
+  .analysis-text-fields,
+  .analysis-compare-filters,
+  .analysis-three-columns {
+    grid-template-columns: 1fr;
+  }
+  .indicator-controls,
+  .analysis-editor {
+    padding: 12px;
+  }
+  .analysis-slide {
+    padding: 12px;
+  }
+  .indicator-tabs button {
+    padding: 9px 12px;
+  }
+  .indicator-filter-fields {
+    grid-template-columns: 1fr;
+  }
+}
+@media print {
+  body.printing-indicators > * {
+    display: none !important;
+  }
+  body.printing-indicators > .indicator-print-document {
+    display: block !important;
+  }
+  .indicator-print-document > h1 {
+    margin-bottom: 15px;
+  }
+  .indicator-print-document .analysis-slide {
+    break-before: page;
+    break-inside: avoid;
+    border: 0;
+    padding: 0;
+    font-size: 10pt;
+  }
+  .indicator-print-document .analysis-three-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .indicator-print-document .billing-chart-data {
+    display: none;
+  }
+  .indicator-print-document .indicator-footnotes {
+    font-size: 8pt;
+  }
+  .indicator-print-document .typography-metric {
+    font-size: 20pt;
+  }
+  .indicator-print-document .analysis-prose {
+    font-size: 10pt;
+  }
+  .indicator-print-document .analysis-future {
+    print-color-adjust: exact;
+  }
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+}

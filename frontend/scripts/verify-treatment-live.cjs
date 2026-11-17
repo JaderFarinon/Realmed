@@ -31,7 +31,7 @@ const root=path.resolve(__dirname,'../..'),origin='http://127.0.0.1:5198';
           if(owner && owner!==editor) return r.fulfill({status:423,json:{error:'Outra janela está editando.'}});
           owner=editor;expires=Date.now()+60000;
         } else if(r.request().method()==='DELETE' && owner===editor){owner='';expires=0;}
-        await r.fulfill({json:{locked:!!owner,owned:!!owner&&owner===editor,owner:owner?'Ana — teste fictício':undefined,expiresAt:expires}});
+        await r.fulfill({json:{locked:!!owner,owned:!!owner&&owner===editor,owner:owner?'Ana — teste fictício':undefined,serverTime:Date.now(),expiresAt:expires}});
       });
       await page.route('**/api/guide-processes/1/document-generation-options',r=>r.fulfill({json:[]}));
       await page.route('**/api/guide-processes/1/evaluation**',r=>r.fulfill({json:r.request().url().endsWith('/options')?{patient:{},professionals:[]}:evaluation}));

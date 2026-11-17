@@ -7,15 +7,17 @@ function createEditLocks(db, guardDb) {
   const router = express.Router();
   const editor = req => String(req.headers['x-realmed-editor'] || '');
   async function status(req, row) {
-    if (!locks.active(row)) return {locked:false,owned:false};
-    const person = await db('users as u').leftJoin('people as p','p.id','u.person_id').where('u.id',row.owner_id).select('p.full_name').first();
-    const owned=locks.owned(row,req.user.id,editor(req));
+    const person = locks.active(row) ? await db('users as u').leftJoin('people as p','p.id','u.person_id').where('u.id',row.owner_id).select('p.full_name').first() : null;
+    const serverTime = Date.now();
+    if (Number(row?.expires_at || 0) <= serverTime) return {locked:false,owned:false,serverTime};
     const sameUser=Number(row.owner_id)===Number(req.user.id);
-    return {locked:true,owned,sameUser,owner:person?.full_name || 'Outro usuário',expiresAt:Number(row.expires_at),
+    const owned=sameUser && row.editor_id===editor(req);
+    return {locked:true,owned,sameUser,owner:person?.full_name || 'Outro usuário',expiresAt:Number(row.expires_at),serverTime,
       ...(sameUser && !owned ? {recoverFrom:row.editor_id} : {})};
   }
   const path='/guide-processes/:id/edit-lock/:stage';
   router.all(path, auth, (req,res,next) => {
+    res.set('Cache-Control','no-store');
     if (!/^\d+$/.test(req.params.id) || !locks.STAGES.includes(req.params.stage)) return res.status(400).json({error:'Aba inválida.'});
     if(req.params.stage==='documents') req.params.stage='central';
     next();
