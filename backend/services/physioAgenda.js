@@ -1,5 +1,31 @@
 const { localStart } = require('./physiotherapyRotation');
 const clock = minute => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+
+function sessionWindows(groups) {
+  // Only a run of distinct one-minute positions establishes a session boundary.
+  // An isolated fit-in must not shorten a clinical session or its final estimate.
+  const blocks = groups.filter(group => group.last > group.start);
+  const windows = blocks.map((group, index) => {
+    const next = blocks[index + 1], previous = blocks[index - 1];
+    return {
+      start: group.start,
+      end: next?.start ?? Math.max(group.last + 1, group.start + (previous ? group.start - previous.start : 45)),
+      end_source: next ? 'next_session' : previous ? 'previous_interval' : 'default_45',
+    };
+  });
+  for (const group of groups) {
+    if (windows.some(window => group.start >= window.start && group.start < window.end)) continue;
+    // Sparse schedules still keep every observed appointment. Outside a block's
+    // window, start a separate estimated session; never extend the previous one.
+    const preceding = blocks.filter(block => block.start < group.start);
+    const interval = preceding.length > 1 ? preceding.at(-1).start - preceding.at(-2).start : 45;
+    const next = blocks.find(block => block.start > group.start);
+    const end = Math.min(group.start + interval, next?.start ?? Infinity);
+    windows.push({ start: group.start, end, end_source: end === next?.start ? 'next_session' : preceding.length > 1 ? 'previous_interval' : 'default_45' });
+  }
+  return windows.sort((a, b) => a.start - b.start);
+}
+
 function groupSessions(snapshots, date) {
   const sessions = [];
   for (const snapshot of snapshots) {
@@ -11,14 +37,13 @@ function groupSessions(snapshots, date) {
       if (!previous || minute > previous.last + 1) groups.push({ start: minute, last: minute });
       else previous.last = minute;
     }
-    groups.forEach((group, index) => {
-      const next = groups[index + 1], previous = groups[index - 1];
-      const end = next?.start ?? Math.max(group.last + 1, group.start + (previous ? group.start - previous.start : 45));
-      const items = rows.filter(row => { const time = localStart(row.startDate); return time?.date === date && time.minute >= group.start && time.minute <= group.last; });
+    sessionWindows(groups).forEach(group => {
+      const end = group.end;
+      const items = rows.filter(row => { const time = localStart(row.startDate); return time?.date === date && time.minute >= group.start && time.minute < end; });
       if (!items.length) return;
       sessions.push({ id: `${snapshot.scheduleId}:${date}:${group.start}`, schedule_id: snapshot.scheduleId, schedule_name: snapshot.scheduleName,
         start_minute: group.start, end_minute: end, start_time: clock(group.start), end_time: clock(end), end_next_day: end >= 1440,
-        end_estimated: !next, end_source: next ? 'next_session' : previous ? 'previous_interval' : 'default_45', items });
+        end_estimated: group.end_source !== 'next_session', end_source: group.end_source, items });
     });
   }
   sessions.sort((a, b) => a.start_minute - b.start_minute || String(a.schedule_id).localeCompare(String(b.schedule_id)));

@@ -63,6 +63,7 @@
           @click="editTab = tab.id"
         >{{ tab.label }}</button>
       </nav>
+      <div v-if="isProfessional && isAdmin && editing" class="mb-4"><button type="button" class="btn-secondary" :disabled="!canPreviewProfessional(items.find(item => item.id === editing))" @click="openPhysioPreview(items.find(item => item.id === editing))">Ver visão do fisio</button><p class="mt-2 text-xs text-slate-500">Abre o app em outra aba, com os dados salvos e sem restrição de horário para consulta.</p></div>
       <form v-if="!isInsurance || !editing || editTab === 'data'" class="grid gap-4 md:grid-cols-3" @submit.prevent="saveAndClose">
         <label v-for="field in config.fields" :key="field.key"
           ><FieldLabel :required="field.required">{{ field.label }}</FieldLabel
@@ -228,7 +229,7 @@ import {
 
 type Item = Record<string, any>
 const route = useRoute(),
-  { canOperational } = useAuthUser()
+  { canOperational, role, authUser } = useAuthUser()
 const replicationOpen = ref(false)
 const editTab = ref('data'),
   replicationTab = ref('procedures'),
@@ -295,6 +296,12 @@ const configs: Record<string, any> = {
   },
 }
 const config = computed(() => configs[String(route.meta.catalog)])
+const isProfessional = computed(() => String(route.meta.catalog) === 'professionals')
+const isAdmin = computed(() => ['admin', 'masteradmin'].includes(role.value || ''))
+const canPreviewProfessional = (item?: Item | null) => Boolean(isAdmin.value && isProfessional.value && item?.id && item.active && item.type === 'PHYSIOTHERAPIST' && String(item.council).toUpperCase() === 'CREFITO')
+function openPhysioPreview(item?: Item | null) {
+  if (canPreviewProfessional(item)) window.open('/modo-fisio/visualizar/' + encodeURIComponent(String(item!.id)), '_blank', 'noopener,noreferrer')
+}
 const isInsurance = computed(() => String(route.meta.catalog) === 'insurance')
 const canEditLogo = computed(() =>
   canOperational(config.value.endpoint.replaceAll('-', '_'), 'canEdit'),
@@ -320,7 +327,7 @@ async function load() {
   Object.values(logoUrls).forEach(revoke)
   Object.keys(logoUrls).forEach((key) => delete logoUrls[Number(key)])
   items.value = (await api.get(`/${config.value.endpoint}`)).data
-  if (isInsurance.value) {
+  if (isInsurance.value && authUser.value?.authProvider !== 'LOCAL') {
     try {
       const source = (await api.get('/integrations/stenci/insurances')).data.items || []
       const locals = items.value
@@ -587,6 +594,7 @@ const toolbarActions = computed(() => {
       },
     )
   }
+  if (isProfessional.value && isAdmin.value) actions.push({icon:'eye',label:'Ver visão do fisio',disabled:!canPreviewProfessional(selected.value),onClick:()=>openPhysioPreview(selected.value)})
   actions.push({ icon: 'refresh', label: 'Atualizar', onClick: load })
   return actions
 })

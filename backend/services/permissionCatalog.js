@@ -1,4 +1,6 @@
 const permissionCatalog = [
+  ["indicator_panels", "Indicadores — Painéis"],
+  ["indicator_analysis", "Indicadores — Análise crítica"],
   ["events", "Eventos — Confirmações"],
   ["guide_billing", "Tratamentos — Faturamento por guia"],
   ["billing_dashboard", "Faturamento — Dashboard analítico"],
@@ -24,5 +26,29 @@ const permissionCatalog = [
   ["inventory_purchase_orders", "Estoque — Pedidos de compra"],
   ["inventory_fulfillment", "Estoque — Atendimento de pedidos"],
   ["inventory_reports", "Estoque — Relatórios"],
-].map(([key, label]) => ({ key, label }));
-module.exports = { permissionCatalog };
+].map(([key, label]) => ({
+  key, label,
+  adminOnly: key === 'integrations',
+  requires: ({
+    authorizations: ['guide_processes'],
+    guide_billing: ['guide_processes'],
+    procedures: ['insurance_providers'],
+    inventory_fulfillment: ['inventory_requests'],
+  }[key] || []).map(moduleKey => ({moduleKey, action:'canView'})),
+}));
+function missingDependencies(permissions) {
+  const rows = new Map(permissions.map(row => [row.moduleKey, row]));
+  const missing = new Map();
+  for (const item of permissionCatalog) {
+    if (!rows.get(item.key)?.canView || item.adminOnly) continue;
+    for (const required of item.requires) {
+      if (!rows.get(required.moduleKey)?.[required.action]) {
+        const key=required.moduleKey+':'+required.action;
+        if (!missing.has(key)) missing.set(key,{...required,requiredBy:[]});
+        missing.get(key).requiredBy.push(item.key);
+      }
+    }
+  }
+  return [...missing.values()];
+}
+module.exports = { permissionCatalog, missingDependencies };

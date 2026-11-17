@@ -11,7 +11,7 @@ async function main(){
     const secret=crypto.randomBytes(32).toString('hex'),settings={...env,DB_NAME:name,JWT_SECRET:secret,NODE_ENV:'test',PERMISSIONS_ENABLED:'true',STENCI_BRANCH_ID:'test-branch'};
     const envPath=path.join(temp,'.env');fs.writeFileSync(envPath,Object.entries(settings).map(([k,v])=>k+'='+JSON.stringify(String(v))).join('\n'),{mode:0o600});process.env.DOTENV_CONFIG_PATH=envPath;
     pool=require(path.join(root,'backend/db'));db=dep('knex')({client:'mysql2',connection:{...connection,database:name}});
-    for(const file of ['001_create_people.js','002_create_users.js','20250520000031_create_user_permissions.js','20260916000001_add_stenci_users.js','20260915000002_create_guide_center.js','20261014000001_create_inventory.js','20261020000006_billing_agenda_collection.js','20261020000007_billing_agenda_filters.js','20261028000001_physiotherapy_rotation.js','20261029000001_physiotherapist_face_access.js','20261106000001_add_local_authentication.js','20261111000001_system_notifications.js'])await require(path.join(root,'backend/migrations',file)).up(db);
+    for(const file of ['001_create_people.js','002_create_users.js','20250520000031_create_user_permissions.js','20260916000001_add_stenci_users.js','20260915000002_create_guide_center.js','20261014000001_create_inventory.js','20261020000006_billing_agenda_collection.js','20261020000007_billing_agenda_filters.js','20261028000001_physiotherapy_rotation.js','20261029000001_physiotherapist_face_access.js','20261106000001_add_local_authentication.js','20261111000001_system_notifications.js','20261116000001_physio_admin_preview_audit.js'])await require(path.join(root,'backend/migrations',file)).up(db);
     const [person]=await db('people').insert({full_name:'Admin fictício A'}),[actor]=await db('users').insert({username:'admin-a',person_id:person,role:'admin',status:'active'});
     const [personB]=await db('people').insert({full_name:'Admin fictício B'}),[actorB]=await db('users').insert({username:'admin-b',person_id:personB,role:'admin',status:'active'});
     const [professionalA]=await db('professionals').insert({full_name:'Fisio A',type:'PHYSIOTHERAPIST',council:'CREFITO',council_number:'TEST-A',state:'PR'});
@@ -21,7 +21,13 @@ async function main(){
     const remote=[],configFactory=()=>({branchId:'test-branch'}),serviceFactory=()=>({
       authenticateUser:async(username,password)=>{assert.equal(username,'shared-test');assert.equal(password,'shared-test-password');remote.push('login');return{stenci_user_id:'shared-id'}},
       logout:async()=>{remote.push('logout')},
-      physioRead:async op=>{remote.push(op.scheduleId);return{slots:Array.from({length:6},(_,i)=>({startDate:op.date+`T12:0${i}:00Z`})),items:[{id:'today-'+op.scheduleId,patient_id:op.scheduleId===scheduleA?'patient-new':'patient-b',patient_name:op.scheduleId===scheduleA?'Paciente novo A':'Paciente B',startDate:op.date+'T12:05:00Z',status:'scheduled',expenses:[]}]}},
+      physioRead:async op=>{remote.push(op.scheduleId);
+        if(op.date==='2026-11-09'){
+          const times=['15:30','15:31','16:15','16:16','16:17','16:18','16:19','16:20','16:33'];
+          const slots=times.map(time=>({startDate:op.date+'T'+time+':00-03:00'}));
+          return{slots,items:slots.slice(2).map((slot,index)=>({...slot,id:'fit-test-'+index,patient_id:'patient-fit-'+index,patient_name:'Paciente fictício '+index,status:'scheduled',expenses:[]}))};
+        }
+        return{slots:Array.from({length:6},(_,i)=>({startDate:op.date+`T12:0${i}:00Z`})),items:[{id:'today-'+op.scheduleId,patient_id:op.scheduleId===scheduleA?'patient-new':'patient-b',patient_name:op.scheduleId===scheduleA?'Paciente novo A':'Paciente B',startDate:op.date+'T12:05:00Z',status:'scheduled',expenses:[]}]}},
       searchPatients:async()=>({items:[{id:'patient-a',name:'Paciente A'},{id:'patient-b',name:'Paciente B'},{id:'patient-new',name:'Paciente novo A'}],hasMore:false}),
     });
     const shared=require(path.join(root,'backend/services/physioStenciSession')),createShared=shared.createPhysioSession;
@@ -87,12 +93,55 @@ async function main(){
     await call('GET',`/physio/agenda/today-${scheduleA}?date=2026-11-12`,undefined,token,409);
     await call('GET',`/physio/agenda/today-${scheduleB}?date=2026-11-11`,undefined,token,404);
     await call('GET',`/physio/agenda/today-${scheduleA}?date=2026-02-31`,undefined,token,400);
+    accessNow=Date.parse('2026-11-09T16:40:00-03:00');
+    const fitted=await call('GET','/physio/agenda?date=2026-11-09',undefined,token);
+    assert.equal(fitted.sessions.length,1);assert.equal(fitted.sessions[0].start_time,'16:15');assert.equal(fitted.sessions[0].end_time,'17:00');assert.equal(fitted.sessions[0].items.length,7);
+    for(let index=0;index<7;index++){
+      const current=await call('GET',`/physio/agenda/fit-test-${index}?date=2026-11-09`,undefined,token);
+      assert.equal(current.session.end_minute,1020);assert.equal(current.appointment.id,'fit-test-'+index);
+    }
+    accessNow=Date.parse('2026-11-09T17:00:00-03:00');
+    for(const id of ['fit-test-0','fit-test-6'])assert.equal((await call('GET',`/physio/agenda/${id}?date=2026-11-09`,undefined,token,409)).code,'PHYSIO_OUTSIDE_SESSION');
+    accessNow=Date.parse('2026-11-11T12:00:00Z');
     const challenge=await call('POST','/physio/auth/challenge',{});const facial=await call('POST','/physio/auth/face',{challenge:challenge.id,frames:['synthetic']});assert.equal(jwt.decode(facial.token).authProvider,'LOCAL');assert.equal(Number((await db('system_notifications').count({n:'*'}).first()).n),1,'Facial login does not notify admins');
     store.delete(jwt.decode(token).sid);await call('GET','/physio/agenda?date=2026-11-11',undefined,token,428);
     token=(await call('POST','/physio/session',{},token)).token;await call('GET','/physio/agenda?date=2026-11-11',undefined,token);
     await db('users').where({id:a.id}).update({status:'blocked'});for(const url of ['/physio/me','/physio/agenda?date=2026-11-11','/physio/production?start=2026-11-01&end=2026-11-30'])await call('GET',url,undefined,token,403);
     await db('users').where({id:actorB}).update({role:'user'});await call('GET','/notifications',undefined,adminToken(actorB),403);
     await db('users').where({id:a.id}).update({status:'active'});await db('physiotherapist_user_links').where({user_id:a.id}).delete();await call('GET','/physio/patients/search?search=Paciente',undefined,token,403);
+    // Admin access stays separate from the regular login, and is confined to the selected professional.
+    const previewToken=adminToken(actor), previewBase='/physio/admin-preview/'+professionalA;
+    await call('GET',previewBase+'/me',undefined,token,403);
+    await call('GET',previewBase+'/me',undefined,adminToken(actorB),403);
+    assert.equal((await call('GET',previewBase+'/me',undefined,previewToken)).needsSession,true);
+    const auditBefore=Number((await db('physio_admin_preview_audit').count({n:'*'}).first()).n);
+    const previewOpened=await Promise.all([1,2,3].map(()=>call('POST',previewBase+'/session',{},previewToken)));
+    for(const opened of previewOpened){assert.equal(opened.token,undefined);assert.equal(opened.sid,undefined);assert.equal(opened.profile.adminPreview,true);assert.equal(opened.profile.professionalName,'Fisio A')}
+    assert.equal(Number((await db('physio_admin_preview_audit').count({n:'*'}).first()).n),auditBefore+1,'Concurrent openings share one session and audit');
+    await call('POST',previewBase+'/session',{},previewToken);
+    assert.equal(Number((await db('physio_admin_preview_audit').count({n:'*'}).first()).n),auditBefore+1);
+    const adminAgenda=await call('GET',previewBase+'/agenda?date=2026-11-10&professionalId='+professionalB,undefined,previewToken);
+    assert.deepEqual(adminAgenda.items.map(i=>i.schedule_id),[scheduleA]);
+    for(const day of ['2026-11-10','2026-11-12']){
+      const outsidePreview=await call('GET',previewBase+'/agenda/today-'+scheduleA+'?date='+day,undefined,previewToken);
+      assert.equal(outsidePreview.adminPreview,true);assert.equal(outsidePreview.appointment.patient_id,'patient-new');assert.equal(outsidePreview.capabilities.start,false);
+    }
+    await call('GET',previewBase+'/agenda/today-'+scheduleB+'?date=2026-11-11',undefined,previewToken,404);
+    for(const action of ['start','save','finish'])await call('POST',previewBase+'/agenda/today-'+scheduleA+'/clinical/'+action,{},previewToken,403);
+    await call('DELETE',previewBase+'/session',{},previewToken,403);
+    const previewBScope='/physio/admin-preview/'+professionalB;
+    await call('POST',previewBScope+'/session',{},previewToken);
+    assert.equal((await call('GET',previewBScope+'/agenda?date=2026-11-11',undefined,previewToken)).items[0].schedule_id,scheduleB);
+    await db('professionals').where({id:professionalA}).update({active:0});await call('GET',previewBase+'/me',undefined,previewToken,404);
+    await db('professionals').where({id:professionalA}).update({active:1});
+    await db('users').where({id:actor}).update({role:'user'});await call('GET',previewBase+'/agenda?date=2026-11-11',undefined,previewToken,403);
+    await db('users').where({id:actor}).update({role:'admin'});
+    assert.ok(store.get(jwt.decode(token).sid),'Admin preview preserves the other Stenci sessions');
+    const adminSids=[...store.sessions].filter(([,s])=>s.session.adminPreview).map(([sid])=>sid);
+    assert.equal(adminSids.length,2);for(const sid of adminSids)store.delete(sid);
+    assert.equal((await call('GET',previewBase+'/me',undefined,previewToken)).needsSession,true);
+    await call('GET',previewBase+'/agenda?date=2026-11-11',undefined,previewToken,428);
+    console.log('PASS admin preview: roles, revocation, coalescing, audit, per-professional isolation, past/future access, blocked writes, session expiry, no token replacement.');
     console.log('PASS isolated MySQL/API: local creation/link/face, password notification, individual read receipts/admin revocation, no grants, shared login/logoff, bound agenda/patients/production, grouped sessions and appointment detail scope, session recovery, blocked/unlinked accounts, no facial notification.');
   }finally{
     if(store)for(const sid of store.sessions.keys())store.delete(sid);

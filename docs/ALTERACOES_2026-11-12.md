@@ -1,5 +1,34 @@
 # Alterações do Realmed — 12/11/2026
 
+## Tablet: numeração, prévia de evolução e avaliação inicial
+
+- Publicado na release `20261112-180930`. Build/TypeScript, 212 testes backend, MySQL isolado e testes de interface aprovados; padrão compartilhado, agenda e bloqueio por horário preservados. Interface publicada verificada com dados fictícios; site/API HTTP 200, novas rotas anônimas 401. Sem novas migrations ou escritas clínicas. Logs `.deployment/physio-evolution-publish.log` e `.deployment/physio-evolution-public-ui.log`.
+
+- Numeração real da agenda Stenci nos cards e detalhe (ex.: 10/11); última sessão identificada pela igualdade entre atual/total, sem inferir pelo histórico local.
+- Questionário diário para preparar texto revisável; última sessão inclui comparação inicial/final, objetivos, limitações e desfecho. Identificação com nome/CREFITO/UF do fisioterapeuta autenticado.
+- Ver Avaliação exibe avaliações locais concluídas do mesmo paciente, com escolha de tratamento/ciclo e continuidade somente em leitura.
+- Rascunho temporário em memória e aviso de descarte ao sair. Iniciar/salvar/finalizar no Stenci ainda pendentes: HAR recebido não inclui a consulta de retomada de um registro existente. Tela informa que nada foi enviado.
+- Nenhum atendimento real foi criado ou modificado na validação. Contratos e captura complementar necessária em EVOLUCAO_FISIOTERAPEUTICA.md.
+
+## Sessões do fisioterapeuta com encaixes
+
+- Publicado na release `20261112-173036`, com build/TypeScript e 208 testes backend aprovados, sem migrations pendentes. Interface publicada validada com dados fictícios, hash do agrupamento ativo conferido e cenário das 16:33/16:40/17:00 reproduzido na versão ativa sem consultas ou gravações Stenci. API saudável; dependências preservadas em `20261109-153438/backend/node_modules`. Logs `.deployment/physio-fit-in-publish.log`, `.deployment/physio-fit-in-public-ui.log` e `.deployment/physio-fit-in-production.log`.
+- Separação por blocos de posições consecutivas de um minuto; encaixes isolados ficam na sessão correspondente e não antecipam o encerramento do atendimento.
+- Corrigido o caso do bloco 16:15–16:20 com encaixe às 16:33: janela 16:15–17:00 quando o próximo bloco é às 17:00 ou a previsão é 45 minutos, mantendo os pacientes acessíveis às 16:40.
+- Última sessão estima duração pelos blocos consecutivos, ignorando encaixes. Horários esparsos preservados em janelas estimadas, sem estender a sessão anterior. Mesma regra na lista e na API, com bloqueio no fim correto e preservação do relógio do servidor, vínculo profissional, meia-noite e layout recolhido.
+- Testes unitários, MySQL/API temporário e interface tablet cobrem o exemplo, transição automática, detalhe aberto e ausência de polling. Logs `.deployment/physio-fit-in-unit.log`, `.deployment/physio-fit-in-api.log`, `.deployment/physio-fit-in-ui.log` e `.deployment/physio-fit-in-agenda.log`.
+
+## Indicadores e análise crítica
+
+- Publicado na release `20261112-172024`, asset `index-B5yDugqu.js`. Build/TypeScript e 204 testes backend aprovados; migration `20261112000003_indicators` aplicada com backup na publicação inicial. Padrão compartilhado e interface publicada aprovados; site/API saudáveis. Validação somente de leitura nas quatro áreas confirmou, no recorte de 01 a 12/11, 726 pacientes distintos e 84 guias previstas para 28 ciclos. Nenhum paciente ou apresentação fictícia criado em produção. Logs `.deployment/indicators-final-publish.log`, `.deployment/indicators-public-ui.log` e `.deployment/indicators-production-final.log`.
+- Novo menu Indicadores com Painéis e Análise crítica; abas Perfil epidemiológico, Recepção, Fisioterapia e Faturamento.
+- Perfil por sexo, faixa etária, convênio, município, bairro e tipo de tratamento/procedimento, combinando agenda coletada e cadastros/tratamentos locais por vínculo explícito, sem contar paciente a cada sessão.
+- Filtros por período, convênio, origem e, para agenda, status/agenda/unidade; indicação de dados ausentes e cobertura. Geografia passa a ser preservada na sincronização, sem inventar dados anteriores.
+- Análise crítica com capturas Antes/Agora, interpretação e Futuro (meta, ações, responsável, prazo). Até 30 telas, reordenação, salvar/reabrir, apresentação e impressão/PDF; gráficos salvos não mudam com a atualização da base.
+- Permissões próprias, revisões para conflito de edição, exclusão lógica e auditoria. Dados retornados apenas agregados, sem nomes ou prontuário.
+- Faturamento conta as três guias obrigatórias por ciclo, inclusive antes da primeira movimentação, preservando decisões individuais e faturamento legado. Pendente não significa apta a faturar. A base atual tem lacunas de sexo/nascimento e ainda não tem município/bairro no recorte validado; os gráficos explicitam Não informado, e a sincronização existente passa a preservar a geografia quando retornada.
+- Validações locais: unidade, MySQL descartável com quatro áreas/CRUD/permissões/capturas imutáveis, interface responsiva com montagem/salvamento/reabertura/apresentação/impressão. Logs `.deployment/indicators-unit.log`, `.deployment/indicators-api.log`, `.deployment/indicators-ui.log`.
+
 ## Eventos e confirmações no sistema
 
 - Publicado na release `20261112-104853`, asset `index-DM0B8JOH.js`. Build/TypeScript e 197 testes backend aprovados; backup antes da migration `20261112000002_events`. Site e API saudáveis, acesso anônimo à lista rejeitado com 401. Consulta somente de leitura confirmou o evento e os totais das confirmações existentes; interface publicada validada com APIs sintéticas, sem convidados fictícios em produção. Logs: `.deployment/events-module-publish.log`, `.deployment/events-module-public-ui.log` e `.deployment/events-module-production-counts.log`.

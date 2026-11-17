@@ -48,10 +48,14 @@ async function main(){
     const a=crypto.randomUUID(),b=crypto.randomUUID(),c=crypto.randomUUID(),url='/guide-processes/1/edit-lock/reception';
     const call=async(method,editor=a,body,who=1,target=url)=>{
       const r=await fetch(base+target,{method,headers:{Authorization:'Bearer '+tokens[who],'X-Realmed-Editor':editor,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
-      return {status:r.status,data:await r.json()};
+      return {status:r.status,data:await r.json(),cacheControl:r.headers.get('cache-control')};
     };
     assert.equal((await call('POST',a,{renew:true})).status,423,'Heartbeat cannot acquire an empty lease');
-    assert.equal((await call('POST',a,{})).data.owned,true);
+    const requestStarted=Date.now(),reserved=await call('POST',a,{});
+    assert.equal(reserved.data.owned,true);assert.equal(reserved.cacheControl,'no-store');
+    assert.ok(reserved.data.serverTime>=requestStarted&&reserved.data.serverTime<=Date.now());
+    assert.ok(reserved.data.expiresAt-reserved.data.serverTime>0&&reserved.data.expiresAt-reserved.data.serverTime<=60000,'Lease duration uses server timestamps');
+    const free=await call('GET',a,undefined,1,'/guide-processes/1/edit-lock/central');assert.equal(free.data.owned,false);assert.equal(typeof free.data.serverTime,'number');assert.equal(free.cacheControl,'no-store');
     const same=await call('GET',b);assert.equal(same.data.sameUser,true);assert.equal(same.data.recoverFrom,a);
     const foreign=await call('GET',b,undefined,2);assert.equal(foreign.data.sameUser,false);assert.equal(foreign.data.recoverFrom,undefined);
     assert.equal((await call('POST',b,{})).status,423);

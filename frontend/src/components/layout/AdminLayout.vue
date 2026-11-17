@@ -43,6 +43,10 @@
           <RouterLink to="/faturamento/dashboard" class="menu-link sub">Dashboard</RouterLink>
           <RouterLink to="/faturamento/relatorios" class="menu-link sub">Relatórios</RouterLink>
         </MenuGroup>
+        <MenuGroup id="indicators" label="Indicadores" :active="route.path.startsWith('/indicadores/')">
+          <RouterLink to="/indicadores/paineis" class="menu-link sub">Painéis</RouterLink>
+          <RouterLink to="/indicadores/analise-critica" class="menu-link sub">Análise crítica</RouterLink>
+        </MenuGroup>
         <MenuGroup
           id="integrations"
           label="Integrações"

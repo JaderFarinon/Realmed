@@ -55,17 +55,7 @@ async function main() {
       client: "mysql2",
       connection: { ...connection, database: name },
     });
-    for (const migration of [
-      "001_create_people.js",
-      "002_create_users.js",
-      "20250520000031_create_user_permissions.js",
-      "20260916000001_add_stenci_users.js",
-      "20261106000001_add_local_authentication.js",
-      "20261014000001_create_inventory.js",
-      "20261019000002_legacy_inventory_import.js",
-      "20261019000005_consumption_and_purchase_orders.js",
-    ])
-      await require(path.join(root, "backend/migrations", migration)).up(db);
+    await db.migrate.latest({directory:path.join(root, 'backend/migrations')});
     const [personId] = await db("people").insert({
       full_name: "Realmed verification admin",
       email: "verify-admin@example.invalid",

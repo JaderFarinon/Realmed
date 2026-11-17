@@ -13,6 +13,7 @@
             <h2 id="treatment-patient-name">{{ process.patient_name }}</h2>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" class="btn-secondary" aria-label="Abrir app do paciente em outra aba" @click="openPatientPortal(process.id)">App do paciente ↗</button>
             <span class="treatment-identity-status">{{ process.authorization_status === 'PENDING' ? 'Pendência do convênio' : treatmentStatusLabel(process) }}</span>
             <GuideContinuity v-if="process.billing_due && canOperational('authorizations','canEdit')" :key="process.id" :process="process" :can-edit="!startingEdit && !hasLocalDraft()" billing-entry @open-guide="openRelatedGuide" />
           </div>
@@ -46,13 +47,14 @@
         </details>
     <div v-if="activeTreatmentTab !== 'history'" class="treatment-edit-notice rounded-xl border px-4 py-2" :class="editingLock.locked && !editingOwned ? 'border-warning-300 bg-warning-50' : 'border-blue-200 bg-blue-50'" role="status" aria-live="polite">
       <div>
-      <p v-if="editingLock.locked && !editingOwned" class="font-semibold">{{ editingLock.sameUser ? `Sua conta está editando esta aba em outra janela. ${mayEditActiveTab ? 'Você pode recuperar a edição aqui.' : 'Somente leitura.'}` : `Em edição por ${editingLock.owner || 'outro usuário'} · Somente leitura` }}</p>
+      <p v-if="editingLock.locked && !editingOwned" class="font-semibold">{{ editingLock.sameUser ? (editingLock.recoverFrom ? `Sua conta está editando esta aba em outra janela. ${mayEditActiveTab ? 'Você pode recuperar a edição aqui.' : 'Somente leitura.'}` : 'Sua reserva de edição precisa ser conferida · Somente leitura') : `Em edição por ${editingLock.owner || 'outro usuário'} · Somente leitura` }}</p>
       <p v-else-if="editingOwned">Você está editando a aba {{ activeTabLabel }}. Outros usuários só podem visualizar.</p>
       <p v-else>{{ activeTabLabel }}</p>
 
 
       <p class="sr-only">{{ liveConnected ? 'Atualização automática conectada.' : 'Reconectando atualização automática…' }}</p>
       </div>
+      <button v-if="!editingOwned && editingLock.locked && editingLock.sameUser && !editingLock.recoverFrom" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit" @click="editLease.check()">Conferir edição</button>
       <button v-if="mayEditActiveTab && !editingOwned && editingLock.recoverFrom" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit" @click="recoverySource = editingLock.recoverFrom">Recuperar edição</button>
       <button v-if="mayEditActiveTab && !editingOwned && !editingLock.locked" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit" @click="beginEditing()">Editar aba</button>
       <button v-if="editingOwned" type="button" class="btn-secondary shrink-0" :disabled="editLockBusy || startingEdit || hasLocalDraft()" @click="finishEditing">Terminar edição</button>
@@ -262,6 +264,7 @@
           aria-labelledby="treatment-tab-evaluation"
           tabindex="0"
         >
+          <PatientPortalAccess :key="`${process.id}:${process.patient_id}`" :process-id="process.id" :active="activeTreatmentTab === 'evaluation'" />
           <p v-if="process.continuation_of_id" class="mb-4 rounded-lg bg-blue-50 p-3">Continuação em sequência: não é necessária uma nova avaliação. {{ evaluation ? `Avaliação inicial do tratamento #${process.treatment_root_id}, disponível somente para consulta.` : 'Não há ficha digital da avaliação inicial disponível neste tratamento.' }}</p>
           <PhysiotherapyEvaluation
             v-if="!process.continuation_of_id || evaluation"
@@ -382,6 +385,8 @@ import { useTreatmentLiveUpdates } from '@/composables/useTreatmentLiveUpdates'
 import { useTreatmentEditLock } from '@/composables/useTreatmentEditLock'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import PhysiotherapyEvaluation from '@/components/PhysiotherapyEvaluation.vue'
+import PatientPortalAccess from '@/components/PatientPortalAccess.vue'
+import { openPatientPortal } from '@/utils/patientPortal'
 import GuideBilling from '@/components/GuideBilling.vue'
 import AuthorizationWorkflow from '@/components/AuthorizationWorkflow.vue'
 import { computed, defineComponent, h, nextTick, onMounted, reactive, ref, watch } from 'vue'
@@ -605,7 +610,9 @@ function explainReadonly() {
       ? 'Esta avaliação pertence ao tratamento original e está disponível apenas para consulta.'
       : `A etapa ${activeTabLabel.value} já foi finalizada. Para alterar os campos, reabra a etapa primeiro. Se necessário, clique em Editar aba e depois em ${activeTreatmentTab.value === 'evaluation' ? 'Reabrir avaliação' : 'Reabrir etapa'}.`, editable: !process.value?.continuation_of_id || activeTreatmentTab.value !== 'evaluation' }
   } else if (editingLock.value.locked && !editingOwned.value) {
-    stageNotice.value = editingLock.value.sameUser
+    stageNotice.value = editingLock.value.sameUser && !editingLock.value.recoverFrom
+      ? {title:'Conferir reserva de edição',message:'Não foi possível confirmar a reserva desta janela. Clique em Conferir edição para consultar a situação atual. Seus dados não salvos continuam nesta tela.'}
+      : editingLock.value.sameUser
       ? {title:'Edição em outra janela',message:`Sua conta já está editando esta aba em outra janela ou conexão anterior. ${mayEditActiveTab.value ? 'Clique em Recuperar edição para continuar aqui.' : 'Esta aba está disponível apenas para consulta.'}`}
       : {title:'Aba em edição por outra pessoa',message:`${editingLock.value.owner || 'Outro usuário'} está editando a aba ${activeTabLabel.value}. Você pode consultar os dados, mas precisa aguardar a liberação para alterar.`}
   } else if (!editingOwned.value) {

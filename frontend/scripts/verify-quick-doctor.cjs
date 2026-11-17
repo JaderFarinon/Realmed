@@ -29,7 +29,7 @@ const { prepare, records } = require('./verify-screen-pattern.cjs');
       await page.route('**/api/guide-processes/1/edit-lock/*', r => {
         if (r.request().method() === 'POST') owned = true;
         if (r.request().method() === 'DELETE') owned = false;
-        return r.fulfill({ json: { locked: owned || scenario === 'other-editor', owned: scenario !== 'other-editor' && owned, userName: 'Outro editor', expiresAt: Date.now() + 60000 } });
+        return r.fulfill({ json: { locked: owned || scenario === 'other-editor', owned: scenario !== 'other-editor' && owned, userName: 'Outro editor', serverTime:Date.now(),expiresAt: Date.now() + 60000 } });
       });
       await page.route('**/api/professionals', r => {
         assert.equal(r.request().method(), 'POST');

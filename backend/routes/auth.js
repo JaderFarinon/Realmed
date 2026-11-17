@@ -125,6 +125,7 @@ function createAuthRouter({
   })
 
   router.get('/me', authMiddleware, async (req, res) => {
+    res.set('Cache-Control', 'no-store')
     try {
       const [rows] = await db.query(
         `SELECT u.id, u.username, u.role, u.status, u.person_id, u.auth_provider,

@@ -12,7 +12,7 @@ const {prepare,records}=require('./verify-screen-pattern.cjs');
   await page.route('**/api/guide-processes/1/document-generation-options',r=>r.fulfill({json:types.map(document_type=>({id:'sadt-v1:'+document_type,name:document_type,version:1,document_type}))}));
   await page.route('**/api/guide-processes/1/rotation**',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/authorization-guides',r=>r.fulfill({json:{items:[],partial:false}}));
-  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,expiresAt:Date.now()+60000}})});
+  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,serverTime:Date.now(),expiresAt:Date.now()+60000}})});
   const checkSaved=()=>{assert.equal(Number(fixture.requesting_doctor_id),21);assert.equal(fixture.referral_date,'2026-11-18');assert.equal(fixture.expected_start_date,'2026-11-18')};
   await page.route('**/api/guide-processes/1/code-review-options',r=>{checkSaved();calls.push('review');return r.fulfill({json:[{id:1,procedure_id:1,type:'CONSULTATION',code:'100',source_code:'100',description:'Consulta fictícia',requested_quantity:1}]})});
   await page.route('**/api/guide-processes/1/documents/preview',r=>{checkSaved();calls.push('preview');return r.fulfill({contentType:'application/pdf',body:'%PDF-1.4\n%%EOF'})});

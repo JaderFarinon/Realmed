@@ -19,7 +19,7 @@ const {prepare,records}=require('./verify-screen-pattern.cjs');
   await page.route('**/api/guide-processes/1/preparation-options',r=>r.fulfill({json:{insurances:[],professionals:[],procedures:[]}}));
   for(const endpoint of ['document-generation-options','rotation'])await page.route('**/api/guide-processes/1/'+endpoint+'**',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/authorization-guides',r=>r.fulfill({json:{items:[],partial:false}}));
-  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,expiresAt:Date.now()+60000}})});
+  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,serverTime:Date.now(),expiresAt:Date.now()+60000}})});
   await page.route('**/api/guide-processes/1/stages/central/complete',r=>{writes++;fixture.workflow_stages.central=done;fixture.workflow_stages.documents=done;return r.fulfill({json:{stage:'central',completed:true,workflow_stages:fixture.workflow_stages}})});
   await page.goto(process.env.REALMED_UI_TEST_URL+'/central-de-guias/tratamentos/1');
   const central=page.locator('#treatment-tabpanel-central');await central.getByRole('heading',{name:'Procedimentos do tratamento',exact:true}).waitFor();

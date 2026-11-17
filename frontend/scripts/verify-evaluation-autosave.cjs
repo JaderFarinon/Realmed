@@ -9,6 +9,7 @@ const {prepare,records}=require('./verify-screen-pattern.cjs');
   const fixture={...records[0],patient_id:1,documents:[],authorizations:[],procedures:[],pendingItems:[],history:[],workflow_stages:{reception:{completed_at:'2026-11-09'}}};let evaluation=null,owned=false,fail=false,releaseSave;
   const delayed=new Promise(resolve=>releaseSave=resolve);
   await page.route('**/api/guide-processes/1',r=>r.fulfill({json:fixture}));
+  await page.route('**/api/patient-portal/treatments/1/access',r=>r.fulfill({json:{path:'/paciente/'+'A'.repeat(43)}}));
   await page.route('**/api/guide-processes/1/evaluation**',async r=>{
    if(r.request().url().endsWith('/options'))return r.fulfill({json:{patient:{},professionals:[]}});
    if(r.request().method()==='GET')return r.fulfill({json:evaluation});
@@ -20,7 +21,7 @@ const {prepare,records}=require('./verify-screen-pattern.cjs');
   await page.route('**/api/guide-processes/1/preparation-options',r=>r.fulfill({json:{insurances:[],professionals:[],procedures:[]}}));
   for(const endpoint of ['rotation','document-generation-options'])await page.route('**/api/guide-processes/1/'+endpoint+'**',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/authorization-guides',r=>r.fulfill({json:{items:[],partial:false}}));
-  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,owner:'Teste',expiresAt:Date.now()+86400000}})});
+  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,owner:'Teste',serverTime:Date.now(),expiresAt:Date.now()+86400000}})});
   await page.goto(process.env.REALMED_UI_TEST_URL+'/central-de-guias/tratamentos/1');const complaint=page.getByLabel('Queixa principal / motivo do atendimento',{exact:true});await complaint.waitFor();
   await page.clock.runFor(60000);assert.equal(writes.length,0,'Readers do not autosave');
   await page.getByRole('button',{name:'Editar aba',exact:true}).click();await complaint.fill('Primeiro rascunho');

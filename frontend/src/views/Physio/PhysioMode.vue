@@ -3,15 +3,16 @@
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-8">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-3">
         <div class="min-w-0">
-          <p class="text-xs font-semibold uppercase tracking-[.18em] text-blue-700">REALMED · Atendimento</p>
+          <p class="text-xs font-semibold uppercase tracking-[.18em] text-blue-700">REALMED · {{ isPreview ? 'Visualização administrativa' : 'Atendimento' }}</p>
           <h1 class="truncate text-lg font-semibold sm:text-xl">{{ profile?.professionalName || 'Modo Fisioterapeuta' }}</h1>
         </div>
         <div class="flex items-center gap-2">
           <RouterLink :to="systemHome" class="hidden rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium sm:block">Sistema completo</RouterLink>
-          <button class="min-h-12 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white" @click="logout">Sair</button>
+          <button v-if="!isPreview" class="min-h-12 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white" @click="logout">Sair</button>
         </div>
       </div>
     </header>
+    <PhysioPreviewBanner v-if="isPreview" :name="profile?.professionalName" />
 
     <div class="physio-main mx-auto max-w-6xl px-4 py-5 sm:px-8 sm:py-8">
       <nav class="physio-mode-tabs grid grid-cols-4 gap-1 rounded-2xl bg-white p-2 shadow-sm sm:gap-2" aria-label="Seções do modo fisioterapeuta">
@@ -51,9 +52,9 @@
               </h3>
             </header>
             <div v-if="expandedSessions.has(session.id)" :id="`session-patients-${session.number}`" class="physio-patients-grid">
-              <component :is="session.access === 'current' ? RouterLink : 'article'" v-for="appointment in session.items" :key="appointment.id" :to="session.access === 'current' ? {path:`/modo-fisio/atendimentos/${appointment.id}`,query:{date}} : undefined" class="physio-patient-card" :class="{'is-locked':session.access !== 'current'}" :aria-disabled="session.access === 'current' ? undefined : 'true'" :aria-label="session.access === 'current' ? `Abrir atendimento de ${appointment.patient_name}` : `${appointment.patient_name} · ${sessionAccessLabel[session.access]}`">
-                <div class="physio-patient-card-main"><h4>{{ appointment.patient_name }}</h4><p>{{ appointment.insurance_name || 'Convênio não informado' }}</p></div>
-                <div class="physio-patient-card-footer"><PhysioAppointmentStatus :status="appointment.status" /><span v-if="session.access === 'current'" class="physio-patient-open" aria-hidden="true">Abrir <span>›</span></span><svg v-else aria-hidden="true" class="physio-patient-lock" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg></div>
+              <component :is="session.canOpen ? RouterLink : 'article'" v-for="appointment in session.items" :key="appointment.id" :to="session.canOpen ? {path:appPath(`/modo-fisio/atendimentos/${appointment.id}`),query:{date}} : undefined" class="physio-patient-card" :class="{'is-locked':!session.canOpen}" :aria-disabled="session.canOpen ? undefined : 'true'" :aria-label="session.canOpen ? `Abrir atendimento de ${appointment.patient_name}` : `${appointment.patient_name} · ${sessionAccessLabel[session.access]}`">
+                <div class="physio-patient-card-main"><h4>{{ appointment.patient_name }}</h4><p>{{ appointment.insurance_name || 'Convênio não informado' }}<span v-if="appointment.session_progress"> · Sessão {{ appointment.session_progress.current }}/{{ appointment.session_progress.total }}<b v-if="appointment.session_progress.final"> · Última sessão prevista</b></span></p></div>
+                <div class="physio-patient-card-footer"><PhysioAppointmentStatus :status="appointment.status" /><span v-if="session.canOpen" class="physio-patient-open" aria-hidden="true">Abrir <span>›</span></span><svg v-else aria-hidden="true" class="physio-patient-lock" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg></div>
               </component>
             </div>
           </section>
@@ -118,9 +119,10 @@ import { unref as unwrapNoticeValue } from 'vue'
 import { useFeedback } from '@/composables/useNotifications'
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import api, { ensurePhysioSession } from '@/plugins/axios'
+import { usePhysioAccess } from '@/composables/usePhysioAccess'
 import { useAuthUser } from '@/composables/useAuthUser'
 import { userHome } from '@/utils/userHome'
+import PhysioPreviewBanner from '@/components/PhysioPreviewBanner.vue'
 import PhysioAppointmentStatus from '@/components/PhysioAppointmentStatus.vue'
 import PhysioSettings from './PhysioSettings.vue'
 import {physioTime as time, sessionAccess, sessionAccessLabel, type PhysioAppointment, type PhysioSession} from '@/utils/physioAgenda'
@@ -128,6 +130,7 @@ import {usePhysioClock} from '@/composables/usePhysioClock'
 
 type Patient = { external_id: string; full_name: string; cpf?: string | null; birth_date?: string | null; phone?: string | null; appointments: Array<{ id: string; date: string; schedule: string; startAt: string; status: string; isSession: boolean }> }
 type Production = { start: string; end: string; totals: { appointments: number; completed: number; sessions: number }; days: Array<{ date: string; appointments: number; completed: number; sessions: number }> }
+const {api, isPreview, ensureSession, appPath} = usePhysioAccess()
 const router = useRouter()
 const route = useRoute()
 const {authUser}=useAuthUser()
@@ -140,7 +143,7 @@ const appointments = ref<PhysioAppointment[]>([])
 const sessions = ref<PhysioSession[]>([])
 const expandedSessions = ref(new Set<string>())
 const clock = usePhysioClock(() => { if(profile.value) void loadAgenda() })
-const agendaSessions = computed(() => sessions.value.map(session=>({...session,access:sessionAccess(session,date.value,clock.now.value)})))
+const agendaSessions = computed(() => sessions.value.map(session=>({...session,access:sessionAccess(session,date.value,clock.now.value),canOpen:profile.value?.adminPreview === true || sessionAccess(session,date.value,clock.now.value) === 'current'})))
 const date = ref(typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date) ? route.query.date : localDate())
 let agendaRequest = 0
 let agendaAbort: AbortController | undefined
@@ -219,10 +222,21 @@ async function logout() {
 function simpleDate(value: string) { return String(value || '').slice(0, 10).split('-').reverse().join('/') }
 function cpf(value?: string | null) { const digits = String(value || '').replace(/\D/g, ''); return digits.length === 11 ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : value || '—' }
 watch(activeTab, (value) => { if(value === 'configuracoes') settingsOpened.value = true; if (value === 'producao' && !production.value && !profile.value?.developmentMode) void loadProduction() })
-onMounted(async () => {
-  try { profile.value = (await api.get('/physio/me')).data; if (profile.value.needsSession) profile.value=await ensurePhysioSession(); if (!profile.value.developmentMode) await loadAgenda() }
-  catch (cause) { error.value = errorText(cause, 'Não foi possível abrir o modo fisioterapeuta.') }
-})
+let profileRequest = 0
+watch(() => route.params.professionalId, async () => {
+  const current = ++profileRequest
+  agendaRequest++; agendaAbort?.abort(); profile.value=null; sessions.value=[]; appointments.value=[]; patientResults.value=[]; production.value=null; expandedSessions.value=new Set(); activeTab.value='agenda'
+  try {
+    let value = (await api.get('/physio/me')).data
+    if (current !== profileRequest) return
+    if (value.needsSession) value=await ensureSession()
+    if (current !== profileRequest) return
+    profile.value=value
+    if (!value.developmentMode) await loadAgenda()
+  } catch (cause) { if(current===profileRequest) error.value = errorText(cause, 'Não foi possível abrir o modo fisioterapeuta.') }
+}, {immediate:true})
+onBeforeUnmount(()=>{profileRequest++})
+
 
 useFeedback(() => unwrapNoticeValue(error), () => 'error')
 useFeedback(() => message.value, () => 'info')

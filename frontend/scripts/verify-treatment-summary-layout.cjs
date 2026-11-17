@@ -13,7 +13,7 @@ const {prepare,records}=require('./verify-screen-pattern.cjs');
   await page.route('**/api/guide-processes/1/document-generation-options',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/rotation**',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/authorization-guides',r=>r.fulfill({json:{items:[],partial:false}}));
-  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,owner:'Teste',expiresAt:Date.now()+60000}})});
+  await page.route('**/api/guide-processes/1/edit-lock/*',r=>{if(r.request().method()==='POST')owned=true;if(r.request().method()==='DELETE')owned=false;return r.fulfill({json:{locked:owned,owned,owner:'Teste',serverTime:Date.now(),expiresAt:Date.now()+60000}})});
   await page.goto((process.env.REALMED_UI_TEST_URL||'http://127.0.0.1:5186')+'/central-de-guias/tratamentos/1');
   const card=page.locator('.treatment-identity'),summary=card.locator('.treatment-identity-more > summary');
   await card.waitFor();assert.equal(await page.getByRole('heading',{name:'Resumo Tratamento',exact:true}).count(),0);assert.equal(await page.getByRole('heading',{name:'Dados do Paciente',exact:true}).count(),0);assert.equal(await page.locator('#treatment-summary,.treatment-patient-card').count(),0);

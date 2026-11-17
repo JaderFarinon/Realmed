@@ -27,7 +27,7 @@ test('physio calendar uses the existing read contract and selects only appointme
  hasMore=true;await assert.rejects(()=>physioRead(client,{date,scheduleId:'a'.repeat(32)}),{code:'PHYSIO_CALENDAR_INCOMPLETE'});
 });
 test('attendance access uses the whole current session with inclusive start and exclusive end',()=>{
- const sessions=groupSessions([snapshot(['13:00','13:01','13:02','13:03','13:04','13:05','13:45','13:46','14:45'],[appointment('last-minute','13:05'),appointment('next','13:46'),appointment('last','14:45')])],date);
+ const sessions=groupSessions([snapshot(['13:00','13:01','13:02','13:03','13:04','13:05','13:45','13:46','14:45','14:46'],[appointment('last-minute','13:05'),appointment('next','13:46'),appointment('last','14:45')])],date);
  const atInstant=value=>Date.parse(date+'T'+value+'-03:00');
  assert.equal(sessionAccess(sessions[0],date,atInstant('12:59:59.999')),'future');
  assert.equal(sessionAccess(sessions[0],date,atInstant('13:00:00')),'current');
@@ -38,6 +38,52 @@ test('attendance access uses the whole current session with inclusive start and 
  assert.equal(sessionAccess(sessions[2],date,atInstant('15:45:00')),'past');
  assert.equal(sessionAccess(sessions[0],'2026-11-10',atInstant('13:15:00')),'past');
  assert.equal(sessionAccess(sessions[0],'2026-11-12',atInstant('13:15:00')),'future');
+});
+
+test('16:33 fit-in belongs to the 16:15 block and does not close attendance at 16:40',()=>{
+ const times=['16:15','16:16','16:17','16:18','16:19','16:20','16:33','17:00','17:01'];
+ const rows=times.map((time,index)=>appointment(String(index),time));
+ const sessions=groupSessions([snapshot(times,rows)],date);
+ assert.deepEqual(sessions.map(s=>[s.start_time,s.end_time]),[['16:15','17:00'],['17:00','17:45']]);
+ assert.equal(sessions[0].items.length,7);assert.equal(sessions[0].items.at(-1).id,'6');
+ assert.equal(sessionAccess(sessions[0],date,Date.parse(at('16:40'))),'current');
+ assert.equal(sessionAccess(sessions[1],date,Date.parse(at('16:40'))),'future');
+ assert.equal(sessionAccess(sessions[0],date,Date.parse(at('17:00'))),'past');
+ assert.equal(sessionAccess(sessions[1],date,Date.parse(at('17:00'))),'current');
+});
+
+test('isolated appointments never change the final estimate from consecutive blocks',()=>{
+ for(const [previous,expected,source] of [[['15:30','15:31'],'17:00','previous_interval'],[['15:15','15:16'],'17:15','previous_interval'],[[],'17:00','default_45']]){
+  const slots=[...previous,'16:15','16:16','16:17','16:18','16:19','16:20'];
+  const original=[appointment('base','16:15')];
+  const baseline=groupSessions([snapshot(slots,original)],date)[0];
+  const fits=[appointment('fit','16:33'),appointment('fit2','16:49')];
+  const result=groupSessions([snapshot([...slots,'16:33','16:49'],[...original,...fits])],date);
+  assert.equal(result.length,1);assert.equal(result[0].end_time,expected);assert.equal(result[0].end_source,source);
+  assert.equal(result[0].end_minute,baseline.end_minute);assert.equal(result[0].start_minute,baseline.start_minute);
+  assert.deepEqual(result[0].items.map(p=>p.id),['base','fit','fit2']);
+  assert.equal(sessionAccess(result[0],date,Date.parse(at('16:40'))),'current');
+ }
+});
+
+test('sparse schedules and out-of-window appointments remain visible without stretching earlier sessions',()=>{
+ const sparse=groupSessions([snapshot([],['09:00','09:18','10:00'].map(time=>appointment(time,time)))],date);
+ assert.deepEqual(sparse.map(s=>[s.start_time,s.end_time]),[['09:00','09:45'],['10:00','10:45']]);
+ assert.deepEqual(sparse[0].items.map(p=>p.id),['09:00','09:18']);
+ const result=groupSessions([snapshot(['16:15','16:16'],[appointment('base','16:15'),appointment('later','17:05')])],date);
+ assert.deepEqual(result.map(s=>[s.start_time,s.end_time]),[['16:15','17:00'],['17:05','17:50']]);
+ assert.equal(sessionAccess(result[0],date,Date.parse(at('17:03'))),'past');
+ assert.equal(sessionAccess(result[1],date,Date.parse(at('17:03'))),'future');
+});
+
+test('fit-ins do not mix agendas or move midnight boundaries',()=>{
+ const a=snapshot(['23:30','23:31'],[appointment('night','23:31'),appointment('fit','23:53')]);
+ const b=snapshot(['23:45','23:46'],[appointment('other','23:46')],'agenda-b');
+ const sessions=groupSessions([a,b],date);
+ assert.deepEqual(sessions.map(s=>[s.start_time,s.end_time]),[['23:30','00:15'],['23:45','00:30']]);
+ assert.equal(sessions[0].items.length,2);assert.equal(sessions[1].items.length,1);
+ assert.equal(sessionAccess(sessions[0],date,Date.parse('2026-11-12T00:05:00-03:00')),'current');
+ assert.equal(sessionAccess(sessions[0],date,Date.parse('2026-11-12T00:15:00-03:00')),'past');
 });
 test('attendance window respects Sao Paulo dates, midnight and unavailable boundaries',()=>{
  const session=groupSessions([snapshot([], [appointment('night','23:45')])],date)[0];

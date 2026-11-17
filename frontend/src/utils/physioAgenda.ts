@@ -2,6 +2,7 @@ export interface PhysioAppointment {
   id: string; patient_id: string; patient_name: string; patient_birth_date?: string | null;
   insurance_name?: string | null; startDate: string; endDate?: string | null; status: string;
   schedule_id: string; schedule_name: string;
+  session_progress?: { current:number; total:number; final:boolean } | null;
   expenses?: Array<{ name?: string | null; code?: string | null; type?: string | null; quantity?: number | null }>
 }
 export interface PhysioSession {

@@ -45,7 +45,7 @@
             ><select
               v-model="role"
               class="input"
-              :disabled="selectedId === authUser?.id || role === 'masteradmin'"
+              :disabled="saving || Boolean(dependencyChange) || selectedId === authUser?.id || role === 'masteradmin'"
             >
               <option value="user">Usuário</option>
               <option value="admin">Administrador</option>
@@ -89,11 +89,13 @@
           <label>Módulo<select v-model="selectedModule" aria-label="Módulo" class="input"><option value="">Todos os módulos</option><option v-for="group in moduleNames" :key="group" :value="group">{{ group }}</option></select></label>
         </div>
         <p class="text-sm text-gray-500">Use os atalhos para aplicar permissões às funções exibidas em cada módulo. Sem excluir habilita visualizar, criar e editar.</p>
+        <p class="text-sm text-gray-500">Acessos obrigatórios de outras funções serão incluídos somente após sua confirmação. Configurações administrativas continuam exclusivas de administradores.</p>
+        <p v-if="!matrixReadOnly && existingDependencies.length" class="rounded-lg border border-warning-300 bg-warning-50 p-3 text-warning-900">Há funções que dependem de outros acessos ainda não marcados. Ao salvar, você poderá conferir e autorizar essas dependências.</p>
         <p v-if="sectorRequired && !sectorId" class="rounded-lg border border-warning-300 bg-warning-50 p-3 text-warning-900">Selecione um setor para permitir requisições e retiradas de estoque.</p>
         <section v-for="group in permissionGroups" :key="group.name" class="rounded-xl border p-3" :aria-label="'Permissões de ' + group.name">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div><h3>{{ group.name }}</h3><p class="text-sm text-gray-500">{{ matrixReadOnly ? group.items.length : group.items.filter(item => item.canView).length }} de {{ group.items.length }} funções com acesso</p></div>
-            <div class="flex flex-wrap gap-2">
+            <div><h3>{{ group.name }}</h3><p class="text-sm text-gray-500">{{ matrixReadOnly ? group.items.length : group.items.filter(item => !item.adminOnly && item.canView).length }} de {{ group.items.length }} funções com acesso</p></div>
+            <div v-if="group.items.some(item => !item.adminOnly)" class="flex flex-wrap gap-2">
               <button type="button" class="btn-secondary" :disabled="matrixReadOnly || saving" @click="applyGroup(group.items, 'all')">Habilitar tudo</button>
               <button type="button" class="btn-secondary" :disabled="matrixReadOnly || saving" @click="applyGroup(group.items, 'withoutDelete')">Sem excluir</button>
               <button type="button" class="btn-secondary" :disabled="matrixReadOnly || saving" @click="applyGroup(group.items, 'view')">Só visualizar</button>
@@ -101,9 +103,10 @@
             </div>
           </div>
           <DataList :items="group.items" :columns="permissionColumns" row-key="moduleKey" :selectable="false" :all-rows="true" embedded>
-            <template #cell-all="{item}"><input type="checkbox" :checked="matrixReadOnly || actions.every(action => item[action.key])" :indeterminate="!matrixReadOnly && actions.some(action => item[action.key]) && !actions.every(action => item[action.key])" :aria-label="'Todas as ações de ' + item.label" :disabled="matrixReadOnly || saving" @change="applyGroup([item], ($event.target as HTMLInputElement).checked ? 'all' : 'none')" /></template>
+            <template #cell-label="{item}">{{ item.label }}<small v-if="item.adminOnly" class="block text-gray-500">Somente administradores</small><small v-else-if="item.requires?.length" class="block text-gray-500">Depende de: {{ item.requires.map((r: Requirement) => 'Visualizar ' + permissionLabel(r.moduleKey)).join('; ') }}</small></template>
+            <template #cell-all="{item}"><input type="checkbox" :checked="matrixReadOnly || (!item.adminOnly && actions.every(action => item[action.key]))" :indeterminate="!matrixReadOnly && !item.adminOnly && actions.some(action => item[action.key]) && !actions.every(action => item[action.key])" :aria-label="'Todas as ações de ' + item.label" :disabled="matrixReadOnly || item.adminOnly || saving" @change="changeAll(item, $event)" /></template>
             <template v-for="action in actions" :key="action.key" #[`cell-${action.key}`]="{ item }">
-              <input :checked="matrixReadOnly || item[action.key]" type="checkbox" :aria-label="action.label + ' ' + item.label" :disabled="matrixReadOnly || saving" @change="changePermission(item, action.key, $event)" />
+              <input :checked="matrixReadOnly || (!item.adminOnly && item[action.key])" type="checkbox" :aria-label="action.label + ' ' + item.label" :disabled="matrixReadOnly || item.adminOnly || saving" @change="changePermission(item, action.key, $event)" />
             </template>
           </DataList>
         </section>
@@ -112,6 +115,19 @@
       <template #footer>
         <button type="button" class="btn-secondary" :disabled="saving" @click="editorOpen = false">Cancelar</button>
         <button type="button" class="btn-primary" :disabled="saving || loading || !loaded" @click="save">{{ saving ? 'Salvando...' : 'Salvar permissões' }}</button>
+      </template>
+    </ListDetailDialog>
+    <ListDetailDialog :open="Boolean(dependencyChange)" :title="dependencyChange?.removing ? 'Remover acessos dependentes?' : 'Autorizar acessos necessários?'" @close="dependencyChange = null">
+      <template v-if="dependencyChange">
+        <p v-if="dependencyChange.removing">As funções abaixo precisam do acesso que você está retirando. Para continuar, elas também serão desmarcadas. Confirma?</p>
+        <p v-else>Para usar as funções selecionadas, este usuário também precisa dos acessos abaixo. Posso marcá-los?</p>
+        <ul class="mt-4 list-disc space-y-2 pl-5">
+          <li v-for="item in dependencyChange.changes" :key="item.moduleKey + item.action"><strong>{{ dependencyChange.removing ? 'Remover ' : '' }}{{ actionLabel(item.action) }} {{ permissionLabel(item.moduleKey) }}</strong><span v-if="item.requiredBy?.length" class="block text-sm text-gray-500">Necessário para {{ item.requiredBy.map(permissionLabel).join('; ') }}.</span></li>
+        </ul>
+      </template>
+      <template #footer>
+        <button type="button" class="btn-secondary" @click="dependencyChange = null">Cancelar</button>
+        <button type="button" class="btn-primary" @click="confirmDependencies">{{ dependencyChange?.removing ? 'Confirmar remoção' : 'Marcar acessos necessários' }}</button>
       </template>
     </ListDetailDialog>
   </PageShell>
@@ -128,6 +144,7 @@ import { useRoute } from 'vue-router'
 import api from '@/plugins/axios'
 import { useAuthUser } from '@/composables/useAuthUser'
 type Action = 'canView' | 'canCreate' | 'canEdit' | 'canDelete'
+type Requirement = {moduleKey: string; action: Action; requiredBy?: string[]}
 type Permission = {
   moduleKey: string
   label: string
@@ -135,6 +152,8 @@ type Permission = {
   canCreate: boolean
   canEdit: boolean
   canDelete: boolean
+  adminOnly?: boolean
+  requires?: Requirement[]
 }
 const { authUser, loadUser } = useAuthUser()
 const users = ref<
@@ -149,7 +168,7 @@ const users = ref<
   }>
 >([])
 const sectors = ref<Array<{ id: number; name: string }>>([]),
-  catalog = ref<Array<{ key: string; label: string }>>([])
+  catalog = ref<Array<{ key: string; label: string; adminOnly?: boolean; requires?: Requirement[] }>>([])
 const selectedId = ref<number | ''>(''),
   matrix = ref<Permission[]>([]),
   role = ref('user'),
@@ -180,8 +199,74 @@ function normalize(item: Permission, key: Action) {
   } else if (item[key]) item.canView = true
 }
 function changePermission(item: Permission, key: Action, event: Event) {
-  item[key] = (event.target as HTMLInputElement).checked
-  normalize(item, key)
+  const input = event.target as HTMLInputElement, checked = input.checked
+  input.checked = item[key]
+  if (matrixReadOnly.value || item.adminOnly || saving.value) return
+  const candidate = matrix.value.map(p => ({...p}))
+  const changed = candidate.find(p => p.moduleKey === item.moduleKey)!
+  changed[key] = checked
+  normalize(changed, key)
+  proposeChange(candidate)
+}
+function changeAll(item: Permission, event: Event) {
+  const input = event.target as HTMLInputElement, checked = input.checked
+  input.checked = actions.every(action => item[action.key])
+  applyGroup([item], checked ? 'all' : 'none')
+}
+const dependencyChange = ref<{candidate: Permission[]; changes: Requirement[]; removing: boolean; saveAfter: boolean; userId: number | ''} | null>(null)
+const permissionLabel = (key: string) => catalog.value.find(p => p.key === key)?.label || key
+const actionLabel = (key: Action) => actions.find(a => a.key === key)?.label || key
+function dependencies(rows: Permission[]): Requirement[] {
+  const missing = new Map<string, Requirement>()
+  for (const item of rows) {
+    if (!item.canView || item.adminOnly) continue
+    for (const requirement of item.requires || []) {
+      if (rows.find(p => p.moduleKey === requirement.moduleKey)?.[requirement.action]) continue
+      const key = requirement.moduleKey + requirement.action
+      if (!missing.has(key)) missing.set(key, {...requirement, requiredBy: []})
+      missing.get(key)!.requiredBy!.push(item.moduleKey)
+    }
+  }
+  return [...missing.values()]
+}
+const existingDependencies = computed(() => dependencies(matrix.value))
+function proposeChange(candidate: Permission[], saveAfter = false) {
+  if (dependencyChange.value || saving.value) return
+  // Revoking a prerequisite removes its dependents only after a second confirmation.
+  const removed = new Set(candidate.filter(p => !p.canView && matrix.value.find(old => old.moduleKey === p.moduleKey)?.canView).map(p => p.moduleKey))
+  const removals: Requirement[] = []
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const item of candidate) {
+      if (!item.canView || !item.requires?.some(r => removed.has(r.moduleKey))) continue
+      for (const action of actions) item[action.key] = false
+      removed.add(item.moduleKey); removals.push({moduleKey:item.moduleKey,action:'canView'}); changed = true
+    }
+  }
+  if (removals.length) {
+    dependencyChange.value = {candidate,changes:removals,removing:true,saveAfter,userId:selectedId.value}; return
+  }
+  const additions = new Map<string, Requirement>()
+  for (let depth=0;depth<catalog.value.length;depth++) {
+    const missing = dependencies(candidate)
+    if (!missing.length) break
+    for (const required of missing) {
+      const item = candidate.find(p => p.moduleKey === required.moduleKey)
+      if (!item || item.adminOnly) return
+      item[required.action] = true; normalize(item,required.action)
+      additions.set(required.moduleKey + required.action,required)
+    }
+  }
+  if (additions.size) dependencyChange.value = {candidate,changes:[...additions.values()],removing:false,saveAfter,userId:selectedId.value}
+  else matrix.value = candidate
+}
+function confirmDependencies() {
+  const pending = dependencyChange.value
+  dependencyChange.value = null
+  if (!pending || pending.userId !== selectedId.value || matrixReadOnly.value || saving.value) return
+  matrix.value = pending.candidate
+  if (pending.saveAfter) void save()
 }
 async function refresh() {
   const data = (await api.get('/permissoes/users')).data
@@ -190,6 +275,7 @@ async function refresh() {
 }
 async function selectUser() {
   message.value = ''
+  dependencyChange.value = null
   functionSearch.value = ''; selectedModule.value = ''
   loaded.value = false
   matrix.value = []
@@ -206,6 +292,8 @@ async function selectUser() {
     matrix.value = catalog.value.map((c) => ({
       moduleKey: c.key,
       label: c.label,
+      adminOnly: c.adminOnly,
+      requires: c.requires,
       canView: false,
       canCreate: false,
       canEdit: false,
@@ -221,6 +309,7 @@ async function selectUser() {
   }
 }
 async function save() {
+  if (!matrixReadOnly.value && existingDependencies.value.length) { proposeChange(matrix.value.map(p => ({...p})), true); return }
   if (sectorRequired.value && !sectorId.value) { error.value = true; message.value = 'Selecione um setor para permitir requisições e retiradas de estoque.'; return }
   if (saving.value || loading.value || !loaded.value || !selectedId.value) return
   saving.value = true
@@ -245,16 +334,18 @@ async function save() {
 const functionSearch = ref(''), selectedModule = ref('')
 const matrixReadOnly = computed(() => ['admin','masteradmin'].includes(role.value))
 const sectorRequired = computed(() => !matrixReadOnly.value && matrix.value.some(p => p.canCreate && ['inventory_consumptions','inventory_requests'].includes(p.moduleKey)))
-const moduleName = (key: string) => key === 'events' ? 'Eventos' : key.startsWith('inventory_') ? 'Estoque' : key.startsWith('billing_') ? 'Faturamento' : ['guide_processes','guide_billing','authorizations'].includes(key) ? 'Tratamentos' : key === 'patients' ? 'Pacientes' : key === 'integrations' ? 'Integrações' : 'Cadastros'
+const moduleName = (key: string) => key.startsWith('indicator_') ? 'Indicadores' : key === 'events' ? 'Eventos' : key.startsWith('inventory_') ? 'Estoque' : key.startsWith('billing_') ? 'Faturamento' : ['guide_processes','guide_billing','authorizations'].includes(key) ? 'Tratamentos' : key === 'patients' ? 'Pacientes' : key === 'integrations' ? 'Integrações' : 'Cadastros'
 const moduleNames = computed(() => [...new Set(matrix.value.map(p => moduleName(p.moduleKey)))].sort((a,b)=>a.localeCompare(b,'pt-BR')))
 const permissionGroups = computed(() => moduleNames.value.filter(name => !selectedModule.value || selectedModule.value === name).map(name => ({name,items:matrix.value.filter(p => moduleName(p.moduleKey) === name && (p.label + ' ' + name).toLocaleLowerCase('pt-BR').includes(functionSearch.value.toLocaleLowerCase('pt-BR')))})).filter(group => group.items.length))
 function applyGroup(items: Permission[], mode: 'all' | 'withoutDelete' | 'view' | 'none') {
   if (matrixReadOnly.value || saving.value) return
-  for (const item of items) {
+  const candidate = matrix.value.map(p => ({...p}))
+  for (const item of candidate.filter(p => !p.adminOnly && items.some(i => i.moduleKey === p.moduleKey))) {
     item.canView = mode !== 'none'
     item.canCreate = item.canEdit = mode === 'all' || mode === 'withoutDelete'
     item.canDelete = mode === 'all'
   }
+  proposeChange(candidate)
 }
 const permissionColumns = [
   { key: 'label', label: 'Função' },

@@ -183,7 +183,7 @@ const form = reactive<any>({ name: '', document_type: '', insurance_provider_id:
 async function load() {
   ;[templates.value, insurances.value] = await Promise.all([
     (await api.get('/document-templates')).data,
-    (await api.get('/insurance-providers')).data,
+    (await api.get('/document-templates/options')).data.insurances,
   ])
 }
 async function saveTemplate() {

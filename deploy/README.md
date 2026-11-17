@@ -1,5 +1,56 @@
 # Implantação Realmed
 
+## Permissões e cascata confirmada — 16/11/2026
+
+Release `20261116-170823`, asset `index-D6Ctopm8.js`: consultas auxiliares de Tratamentos/Modelos autorizadas pelo próprio módulo, 403 preserva tela/rascunho, matriz propõe dependências com consentimento para incluir/remover e API rejeita combinações incompletas. Nenhuma concessão silenciosa ou mudança de perfil real. Build/TypeScript, 226 testes backend locais/no servidor, integrações MySQL descartáveis de usuários/estoque, navegador com login real e 25 telas User, padrão compartilhado e interface publicada com APIs sintéticas aprovados. Sem migrations pendentes; hashes ativos e site/API saudáveis conferidos. Dependências continuam em `20261109-153438/backend/node_modules` com manifests idênticos, destino preservado; rollback `20261116-112111`. Evidências em `deploy/test-permissions-e2e.cjs` e log consolidado em `docs/ALTERACOES_2026-11-16.md`.
+
+## Reserva de edição e relógio do PC — 16/11/2026
+
+Release `20261116-112111`, asset `index-Dj6VBQ-K.js`: prazo da reserva calculado somente por horários do servidor, conferência após reconexão/visibilidade e botão Conferir edição enquanto a própria reserva está incerta. Preserva recuperação exclusiva da mesma conta e rascunhos em memória. Build/TypeScript, 226 testes backend locais/no servidor, integração MySQL descartável e regressões de reconexão/relógio/rascunho automático aprovados. Interface publicada com APIs simuladas, hash da rota ativa e site/API 200 conferidos; nenhuma migration. Dependências em `20261109-153438/backend/node_modules`, manifests idênticos, destino preservado; rollback `20261116-094955`. Registro em docs/ALTERACOES_2026-11-16.md.
+
+## Texto original do aviso no convite — 16/11/2026
+
+Release `20261116-094955`, asset `index-Co1VXYL8.js`: restaurados texto e ordem originais do aviso de acompanhante, mantendo card amarelo/dourado e maior legibilidade. Build/TypeScript, 226 testes backend e convite publicado em celular/desktop aprovados; confirmações de teste simuladas. Sem migrations, site/API 200. Dependências em `20261109-153438/backend/node_modules` preservadas; rollback `20261116-090850`. Resultado consolidado em docs/ALTERACOES_2026-11-16.md.
+
+
+## Aviso de acompanhante no convite — 16/11/2026
+
+Release `20261116-090850`, asset `index-BHLc6Eu9.js`: aviso do custo do acompanhante destacado em bloco âmbar, título maior/negrito e informação da participação custeada pela Realmed. Build/TypeScript, 226 testes backend no servidor e convite público conferido em 320/390 px e desktop com confirmações simuladas. Sem migrations ou registros fictícios; frontend/API 200. Dependências em `20261109-153438/backend/node_modules`, destino preservado; rollback `20261116-090329`. Registro em docs/ALTERACOES_2026-11-16.md.
+
+
+## Visão administrativa do fisioterapeuta — 16/11/2026
+
+Release final `20261116-090329`, asset `index-B36LR2X_.js`: Cadastros → Profissionais abre o app do tablet em nova aba, autenticado pela conta administrativa e sem limite de horário para consulta. Preserva login normal, escopo de agendas, token do administrador e bloqueio de gravações clínicas pendentes. Inicial `20261116-090125` aplicou a migration de auditoria após backup; final sem pendências. Build/TypeScript, 226 testes backend locais/no servidor, MySQL descartável, padrão compartilhado, regressão do horário normal e interface publicada com APIs sintéticas aprovados. Site/API 200, rota anônima 401, tabela/vínculo e hash ativo conferidos por leitura. Dependências em `20261109-153438/backend/node_modules`, manifests idênticos; preservar o destino. Rollback imediato `20261116-090125`, anterior à entrega `20261113-121311`; auditoria preservada. Log em docs/ALTERACOES_2026-11-16.md.
+
+
+## Agendamento: agenda Avaliação e layout desktop — 13/11/2026
+
+Release `20261113-121311`, asset `index-apI0ahvB.js`: formulário ampliado no desktop, celular preservado e prévia administrativa da grade salva. 225 testes backend, build/TypeScript, MySQL temporário, padrão compartilhado e interface aprovados; nenhuma migration nova. Configuração auditada revisão 1 ativou somente a agenda Avaliação da Matriz (`64df712e7859670b029747fb`), serviço Avaliação Inicial (Ambulatorial), 75 planos vinculados e conexão institucional. Consultas reais confirmaram 36 posições/dia e vagas em 18, 19 e 23/11 para MedSênior, sem gravações Stenci. Confirmação segue bloqueada. Site/API saudáveis e página publicada conferida em 360/390/1280/1920 px; prévia privada anônima retorna 401. Dependências preservadas em `20261109-153438/backend/node_modules`, manifests idênticos; rollback anterior `20261113-103318`. Configuração de leitura persiste em rollback; nenhuma reserva existente foi alterada. Detalhes em docs/ALTERACOES_2026-11-13.md e docs/AGENDAMENTO_ONLINE_AVALIACAO.md.
+
+## Rodapé fixo do paciente — 13/11/2026
+
+Release `20261113-103318`, asset `index-CeBlbjgx.js`: barra fixa de 28 px, área segura e espaço reservado para o conteúdo do app do paciente. Build/TypeScript, padrão compartilhado e 225 testes backend aprovados, nenhuma migration pendente. Conteúdo curto/longo/erro conferido em celular e desktop; build ativo e saúde confirmados. Nenhuma alteração de vínculo, link ou dado clínico. Dependências preservadas em `20261109-153438/backend/node_modules`; rollback anterior `20261113-100348`. Registro em docs/ALTERACOES_2026-11-13.md.
+
+## App público do paciente e QR individual — 13/11/2026
+
+Release final `20261113-100348`, asset `index-SVsBgmp0.js`: mesmo app sem login pelo QR da Avaliação, card e olho da Gestão; removido o atalho de agendamento online. Link aleatório estável por paciente, com envelope/hash e emissão transacional; não alterar vínculo existente ou regenerar o acesso ao mudar de guia. Backup e migration `20261113000002_patient_portal` aplicados na inicial `20261113-100201`; final sem pendências. Build/TypeScript e 225 testes aprovados; MySQL descartável, padrão compartilhado e versão publicada em celular/desktop aprovados. Site/API 200, código inválido 404/no-store, emissão anônima 401. Sem dados fictícios ou consulta de pacientes reais em produção. Dependências em `20261109-153438/backend/node_modules`, manifests idênticos; rollback anterior à entrega `20261113-093952`. Preservar tabela e chave PATIENT_PORTAL_KEY ou JWT_SECRET utilizada pelos envelopes, inclusive em rollback/rotação. Detalhes em docs/VISAO_DO_PACIENTE.md e docs/ALTERACOES_2026-11-13.md.
+
+## Visão interna do paciente — 13/11/2026
+
+Release `20261113-093952`, asset `index-AVnbHUDj.js`: prévia autenticada pela Gestão de Tratamentos, avaliação concluída e agenda já coletada, com atalho separado para o agendamento público. Build/TypeScript e 222 testes aprovados localmente e no servidor; nenhuma migration nova. MySQL descartável, padrão compartilhado, interface celular/desktop e versão publicada com APIs sintéticas aprovados. Site/API 200 e prévia anônima 401. Dependências preservadas em `20261109-153438/backend/node_modules`, manifests idênticos; rollback anterior `20261113-091126`. Prévia não concede acesso público ao paciente; evoluções/relatório final pendentes. Agendamento mantém configuração e confirmação bloqueada até contratos validados. Detalhes em docs/VISAO_DO_PACIENTE.md e docs/ALTERACOES_2026-11-13.md.
+
+## Agendamento online de avaliações — 13/11/2026
+
+Release `20261113-091126`, asset `index-DRfYKFNN.js`: página pública /agendar-avaliacao, consultas restritas e configuração administrativa. Build/TypeScript e 220 testes aprovados; backup antes da migration `20261113000001_evaluation_booking`. MySQL descartável, padrão compartilhado, interface celular/desktop e versão publicada com APIs sintéticas aprovados. Site/API 200; configuração privada sem login 401. Configuração inicial desabilitada/sem agendas; confirmação sempre bloqueada até os contratos de gravação/reconciliação/conflito do Stenci. Dependências preservadas em `20261109-153438/backend/node_modules`, manifests idênticos; rollback anterior `20261112-180930`. Detalhes em docs/AGENDAMENTO_ONLINE_AVALIACAO.md e docs/ALTERACOES_2026-11-13.md.
+
+## Prévia de evolução e avaliação no tablet — 12/11/2026
+
+Release `20261112-180930`: contador Stenci, questionário diário/final, prévia identificada e consulta da avaliação local concluída. Iniciar/salvar/finalizar continuam pendentes da captura de reabertura do registro; nenhum prontuário escrito. Build/TypeScript e 212 testes backend aprovados, sem migrations novas; MySQL isolado, QA tablet/celular, padrão compartilhado e interface publicada verificados. Site/API 200, rotas anônimas 401. Dependências preservadas em `20261109-153438/backend/node_modules`, manifests idênticos; rollback anterior `20261112-173036`. Detalhes em docs/EVOLUCAO_FISIOTERAPEUTICA.md.
+
+Sessões do fisio com encaixes isolados corrigidas na release `20261112-173036`: build/TypeScript e 208 testes backend aprovados, nenhuma migration pendente. Testes MySQL/API temporários e interface publicada confirmaram que o encaixe 16:33 não corta o bloco 16:15–17:00 nem bloqueia os pacientes às 16:40; expiração e próxima sessão preservadas. Hash do serviço ativo coincide com o validado, saúde confirmada e cenário sintético executado sem acessar dados/agenda Stenci. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md` e regra em `docs/MODO_FISIOTERAPEUTA.md`.
+
+Indicadores → Painéis e Análise crítica publicados na release `20261112-172024`, asset `index-B5yDugqu.js`. Build/TypeScript e 204 testes backend aprovados; migration `20261112000003_indicators` aplicada após backup na publicação inicial `20261112-171324`, sem pendências na versão final. MySQL temporário, padrão compartilhado, interface pública com APIs sintéticas e quatro painéis reais por consulta somente de leitura aprovados. API saudável e rotas privadas autenticadas; nenhum registro fictício em produção. Dependências preservadas em `20261109-153438/backend/node_modules`, com manifests idênticos. Registro funcional e limitações de cobertura em `docs/INDICADORES_E_ANALISE_CRITICA.md` e `docs/ALTERACOES_2026-11-12.md`.
+
 Eventos → Confraternização 2026 publicado na release `20261112-104853`, asset `index-DM0B8JOH.js`. Build/TypeScript, 197 testes backend, integração MySQL temporária e padrão de telas aprovados; backup antes da migration `20261112000002_events`. Interface publicada validada com APIs sintéticas, catálogo/contagens existentes conferidos somente por leitura, API saudável e lista privada retornando 401 sem login. Permissão independente `events/view`, sem concessões automáticas; revisão geral de permissões adiada por solicitação do usuário. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md`.
 
 Máximo de um acompanhante e aviso de custos junto à seleção publicados na release `20261112-103448`, asset `index-Cx8d45RS.js`. Build/TypeScript e 197 testes aprovados, sem migrations pendentes. API pública rejeita dois acompanhantes; layout/fluxo público e saúde confirmados, sem confirmações fictícias em produção. Dependências preservadas em `20261109-153438/backend/node_modules`. Registro em `docs/ALTERACOES_2026-11-12.md`.

@@ -7,7 +7,7 @@ async function readyTreatment(page) {
   const complete={completed_at:'2026-11-09T10:00:00Z',completed_by:1};
   await page.route('**/api/guide-processes/1',r=>r.fulfill({json:{...records[0],documents:[],authorizations:[],procedures:[],pendingItems:[],history:[],workflow_stages:{reception:complete,central:complete,documents:complete,authorization:complete}}}));
   await page.route('**/api/guide-processes/1/evaluation**',r=>r.fulfill({json:r.request().url().endsWith('/options')?{patient:{},professionals:[]}:{id:1,status:'COMPLETED'}}));
-  await page.route('**/api/guide-processes/1/edit-lock/*',r=>r.fulfill({json:{locked:r.request().method()==='POST',owned:r.request().method()==='POST',expiresAt:Date.now()+60000}}));
+  await page.route('**/api/guide-processes/1/edit-lock/*',r=>r.fulfill({json:{locked:r.request().method()==='POST',owned:r.request().method()==='POST',serverTime:Date.now(),expiresAt:Date.now()+60000}}));
   await page.route('**/api/guide-processes/1/preparation-options',r=>r.fulfill({json:{professionals:[],insurances:[],procedures:[]}}));
   await page.route('**/api/guide-processes/1/document-generation-options',r=>r.fulfill({json:[]}));
   await page.route('**/api/guide-processes/1/rotation**',r=>r.fulfill({json:[]}));

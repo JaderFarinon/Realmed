@@ -19,7 +19,7 @@ const root=path.resolve(__dirname,'../..'),origin='http://127.0.0.1:5199';
       const stage=new URL(r.request().url()).pathname.split('/').pop(),editor=r.request().headers()['x-realmed-editor'];
       if(r.request().method()==='POST')owners[stage]=editor;
       if(r.request().method()==='DELETE')delete owners[stage];
-      return r.fulfill({json:{locked:!!owners[stage],owned:owners[stage]===editor,owner:'Teste',expiresAt:Date.now()+60000}});
+      return r.fulfill({json:{locked:!!owners[stage],owned:owners[stage]===editor,owner:'Teste',serverTime:Date.now(),expiresAt:Date.now()+60000}});
     });
     await page.route('**/api/guide-processes/1/document-generation-options',r=>r.fulfill({json:[]}));
     await page.route('**/api/guide-processes/1/preparation-options',r=>r.fulfill({json:{professionals:[{id:99,full_name:'Fisio sorteado',council:'CREFITO',active:true}],insurances:[],procedures:[]}}));

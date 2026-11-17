@@ -1,5 +1,30 @@
 # Usuários e permissões
 
+## Revisão ponta a ponta e dependências confirmadas — 16/11/2026
+
+Usuário com permissões operacionais não precisa ser administrador para abrir os módulos concedidos. Corrigidas duas dependências indevidas: filtros de Tratamentos agora consultam `/guide-processes/filter-options` com `guide_processes/view`, retornando somente IDs/nomes de convênios e profissionais; Modelos consulta `/document-templates/options` com `document_templates/view`. Nenhuma dessas consultas concede acesso aos cadastros completos. Conta LOCAL usa os convênios já cadastrados sem tentar consulta Stenci no carregamento dessa lista.
+
+Respostas 403 de ações e consultas auxiliares notificam o usuário e preservam a tela, formulário e sessão. A navegação continua barrando rotas sem permissão em Sem Permissão; API continua negando operações não autorizadas. `/auth/me` e a matriz usam `Cache-Control: no-store`. Checkboxes das tabelas podem ser alternados também com Espaço, sem o evento da linha cancelar o comando.
+
+### Dependências na matriz
+
+O catálogo do servidor define `requires`. Selecionar função com dependência ausente prepara uma proposta, sem alterar a matriz imediatamente: modal **Autorizar acessos necessários?** lista exatamente o que será marcado e para qual função. **Marcar acessos necessários** aplica a escolha e as dependências; Cancelar/X mantém todas as opções anteriores. Vale para checkbox, Todas e atalhos de módulo, mesmo com pesquisa/filtro ocultando o acesso necessário. Persistência ocorre ao Salvar permissões. Dependências atuais:
+
+- Liberação e Faturamento por guia: Visualizar Gestão de tratamentos.
+- Procedimentos: Visualizar Convênios, onde fica o cadastro por convênio.
+- Atendimento de pedidos: Visualizar Requisições anteriores, onde fica a operação.
+
+Não conceder criar/editar/excluir ao módulo dependente quando apenas visualizar basta. Retirar um pré-requisito com dependentes ativos pede confirmação antes de desmarcá-los. Matriz antiga incompleta é conferida ao salvar, também com consentimento. API rejeita combinações incompletas com 422 dentro da transação; não preenche permissões silenciosamente. Integração Stenci administrativa é identificada como exclusiva de administradores; não promover usuários por cascata nem liberar configuração administrativa por checkbox. Essa regra permite inclusão de dependências somente após confirmação explícita, preservando a ausência de concessões automáticas no login/cadastro.
+
+### Evidência de testes
+
+`deploy/test-permissions-e2e.cjs`: navegador, login local real, API completa e MySQL local descartável, sem simular respostas da API. Cobre cadastro, checkboxes/teclado, persistência/reconsulta, 25 telas operacionais com User, módulos independentes, edição do tratamento, leitura/criação/edição/exclusão, Sem excluir, inativação negada, revogação com formulário aberto e rascunho preservado, todos os pares de dependências, confirmação/cancelamento/remoção, filtro da matriz e modal em celular/desktop. `deploy/test-inventory.cjs` cobre consumo/compras/estoque transacional; `deploy/test-user-permissions.cjs` cobre JWT desatualizado, papéis, bloqueio e auditoria. Ambos usam o esquema completo atual em banco descartável. Nenhum perfil ou permissão de conta real foi alterado por estes testes.
+
+
+## Indicadores — 12/11/2026
+
+Matriz inclui Indicadores — Painéis (`indicator_panels/view`) e Indicadores — Análise crítica (`indicator_analysis`, ações independentes visualizar/criar/editar/excluir). Análise crítica autoriza consulta agregada dos indicadores e apresentações compartilhadas. Criar/editar permite capturar resultados; visualizar não permite salvar ou excluir. Backend revalida usuário/permissões, revisões evitam sobrescrita e exclusão é lógica/auditada. Nenhuma concessão automática. Login de conta com somente esse acesso pode abrir o módulo correspondente. Ver `INDICADORES_E_ANALISE_CRITICA.md`.
+
 ## Eventos — 12/11/2026
 
 Permissão independente `events` (Eventos — Confirmações), agrupada em Eventos na matriz. Visualizar permite abrir Eventos → Confraternização 2026 e consultar confirmações, acompanhantes e totais. API exige autenticação e `events/view`, revalidando perfil/status/permissão no banco. Administradores seguem o acesso integral existente; não conceder permissões automaticamente. Conta somente de Eventos pode iniciar nessa tela. Não há ações administrativas de criação/edição/exclusão de confirmações neste módulo. O formulário público continua sem login e sem exposição da lista. A revisão geral das permissões foi explicitamente adiada pelo usuário; a integração deste módulo é validada isoladamente.

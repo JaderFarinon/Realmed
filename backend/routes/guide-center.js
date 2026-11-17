@@ -15,6 +15,20 @@ const handle = (res, error) => { console.error('[Central de Guias]', error); res
 const required = (body, fields) => { for (const field of fields) if (body[field] === undefined || clean(body[field]) === '') throw Object.assign(new Error(`Campo obrigatório: ${field}.`), { status: 400 }) }
 
 router.use(auth)
+// Filter choices belong to the treatment list; they do not grant catalog access.
+router.get('/guide-processes/filter-options', modulePermission('guide_processes'), async (_req,res) => {
+  try {
+    const [insurers,professionals]=await Promise.all([
+      knex('insurance_providers').where({active:true}).select('id','name').orderBy('name'),
+      knex('professionals').where({active:true}).select('id','full_name').orderBy('full_name'),
+    ]);
+    res.set('Cache-Control','no-store').json({insurers,professionals});
+  } catch(e){handle(res,e)}
+})
+router.get('/document-templates/options', modulePermission('document_templates'), async (_req,res) => {
+  try {res.json({insurances:await knex('insurance_providers').select('id','name').orderBy('name')})}
+  catch(e){handle(res,e)}
+})
 router.get('/guide-processes/:id/preparation-options', modulePermission('guide_processes'), async (req,res) => {
   try {
       const treatment=await knex('guide_processes').where({id:id(req.params.id)}).whereNull('deleted_at').first();

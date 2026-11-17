@@ -5,6 +5,13 @@ import { userHome } from '@/utils/userHome'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/paciente/:code', component: () => import('@/views/Patients/PatientPreview.vue'), meta: { public: true, title: 'Meu cuidado' } },
+    { path: '/central-de-guias/tratamentos/:id/visao-paciente', component: () => import('@/views/Patients/PatientAccessRedirect.vue'), meta: { title: 'App do paciente', module: 'guide_processes' } },
+    { path: '/agendar-avaliacao', component: () => import('@/views/Public/EvaluationBooking.vue'), meta: { public: true, title: 'Agendar avaliação' } },
+    { path: '/configuracoes/agendamento-online', component: () => import('@/views/Configuracoes/EvaluationBookingSettings.vue'), meta: { admin: true, title: 'Agendamento online' } },
+    { path: '/indicadores', redirect: '/indicadores/paineis' },
+    { path: '/indicadores/paineis', component: () => import('@/views/Indicators/IndicatorPanels.vue'), meta: { title: 'Painéis de indicadores', module: 'indicator_panels' } },
+    { path: '/indicadores/analise-critica', component: () => import('@/views/Indicators/CriticalAnalysis.vue'), meta: { title: 'Análise crítica', module: 'indicator_analysis' } },
     { path: '/eventos', redirect: '/eventos/confraternizacao-2026' },
     { path: '/eventos/confraternizacao-2026', component: () => import('@/views/Events/EventConfirmations.vue'), meta: { title: 'Confraternização 2026', module: 'events' } },
     { path: '/confraternizacao', component: () => import('@/views/Public/YearEndEvent.vue'), meta: { public: true, title: 'Confraternização de fim de ano' } },
@@ -75,6 +82,8 @@ const router = createRouter({
       component: () => import('@/views/Physio/PhysioFaceLogin.vue'),
       meta: { public: true, title: 'Entrar no modo fisioterapeuta' },
     },
+    { path: '/modo-fisio/visualizar/:professionalId', component: () => import('@/views/Physio/PhysioMode.vue'), meta: { title: 'Visão do fisioterapeuta', admin: true, physioPreview: true } },
+    { path: '/modo-fisio/visualizar/:professionalId/atendimentos/:id', component: () => import('@/views/Physio/PhysioAppointment.vue'), meta: { title: 'Visão do atendimento', admin: true, physioPreview: true } },
     {
       path: '/modo-fisio',
       component: () => import('@/views/Physio/PhysioMode.vue'),

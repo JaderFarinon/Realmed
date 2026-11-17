@@ -23,9 +23,7 @@ async function main() {
     fs.writeFileSync(envPath, Object.entries(env).map(([k,v])=>`${k}=${JSON.stringify(String(v))}`).join('\n'), {mode:0o600});
     process.env.DOTENV_CONFIG_PATH = envPath; process.chdir(temp);
     db = dependency('knex')({client:'mysql2',connection:{...connection,database:name}});
-    for (const file of ['001_create_people.js','002_create_users.js','20250520000031_create_user_permissions.js','20260916000001_add_stenci_users.js','20261014000001_create_inventory.js']) {
-      await require(path.join(root,'backend/migrations',file)).up(db);
-    }
+    await db.migrate.latest({directory:path.join(root, 'backend/migrations')});
     const [person] = await db('people').insert({full_name:'Verification admin'});
     const [actor] = await db('users').insert({username:'verify-admin',person_id:person,role:'admin',status:'active'});
     const express = dependency('express'), jwt = dependency('jsonwebtoken');

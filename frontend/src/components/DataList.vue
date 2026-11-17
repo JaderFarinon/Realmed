@@ -47,8 +47,8 @@
           :class="rowClass?.(item)"
           @click="select(item, $event)"
           @dblclick="doubleClick(item, $event)"
-          @keydown.enter.prevent="select(item, $event)"
-          @keydown.space.prevent="select(item, $event)"
+          @keydown.enter="selectByKeyboard(item, $event)"
+          @keydown.space="selectByKeyboard(item, $event)"
         >
           <td
             v-for="column in columns"
@@ -154,6 +154,11 @@ function select(item: any, event: Event) {
   )
     return
   emit('update:selected', props.selected?.[props.rowKey] === item[props.rowKey] ? null : item)
+}
+function selectByKeyboard(item: any, event: KeyboardEvent) {
+  if (!props.selectable || props.loading || (event.target as HTMLElement).closest('a,button,input,select,textarea')) return
+  event.preventDefault()
+  select(item, event)
 }
 function doubleClick(item: any, event: MouseEvent) {
   if (
