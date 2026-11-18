@@ -81,6 +81,12 @@ function normalizeDay(branchId, date, snapshots, now = new Date()) {
             e.type === "session" &&
             String(e.code || "").replace(/\D/g, "") !== "50000144",
         ),
+        bundle_current: Number.isSafeInteger(Number(row.bundle?.current)) && Number(row.bundle.current) > 0
+          ? Number(row.bundle.current)
+          : null,
+        bundle_total: Number.isSafeInteger(Number(row.bundle?.total)) && Number(row.bundle.total) > 0
+          ? Number(row.bundle.total)
+          : null,
         expenses: JSON.stringify(row.expenses || []),
         collected_at: now,
       };
@@ -95,6 +101,8 @@ function normalizeDay(branchId, date, snapshots, now = new Date()) {
         previous.is_evaluation ||= value.is_evaluation;
         previous.is_session ||= value.is_session;
         previous.is_physiotherapy ||= value.is_physiotherapy;
+        if (value.bundle_current != null) previous.bundle_current = value.bundle_current;
+        if (value.bundle_total != null) previous.bundle_total = value.bundle_total;
         if (value.patient_demographics) previous.patient_demographics = JSON.stringify({...JSON.parse(value.patient_demographics),...JSON.parse(previous.patient_demographics || '{}')});
         previous.schedule_memberships = JSON.stringify(
           [

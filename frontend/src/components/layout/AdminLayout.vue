@@ -19,6 +19,7 @@
         <MenuGroup id="events" label="Eventos" :active="route.path.startsWith('/eventos/')">
           <RouterLink to="/eventos/confraternizacao-2026" class="menu-link sub">Confraternização 2026</RouterLink>
         </MenuGroup>
+        <RouterLink to="/atendimento-whatsapp" class="menu-link">Atendimento WhatsApp</RouterLink>
         <MenuGroup id="catalog" label="Cadastros" :active="route.path.startsWith('/cadastros/')">
           <RouterLink to="/cadastros/convenios" class="menu-link sub">Convênios</RouterLink>
           <RouterLink to="/cadastros/profissionais" class="menu-link sub">Profissionais</RouterLink>

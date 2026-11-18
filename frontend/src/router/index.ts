@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/indicadores/analise-critica', component: () => import('@/views/Indicators/CriticalAnalysis.vue'), meta: { title: 'Análise crítica', module: 'indicator_analysis' } },
     { path: '/eventos', redirect: '/eventos/confraternizacao-2026' },
     { path: '/eventos/confraternizacao-2026', component: () => import('@/views/Events/EventConfirmations.vue'), meta: { title: 'Confraternização 2026', module: 'events' } },
+    { path: '/atendimento-whatsapp', component: () => import('@/views/WhatsApp/WhatsAppAutomation.vue'), meta: { title: 'Atendimento WhatsApp', module: 'whatsapp_automation' } },
     { path: '/confraternizacao', component: () => import('@/views/Public/YearEndEvent.vue'), meta: { public: true, title: 'Confraternização de fim de ano' } },
     { path: '/', redirect: '/inicio' },
     { path: '/inicio', component: () => import('@/views/Configuracoes/MyProfileView.vue'), meta: { title: 'Realmed' } },

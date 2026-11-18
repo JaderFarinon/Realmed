@@ -6,12 +6,16 @@ function buildAbsenceReport({
   date,
   historyStart,
   rule = "total3",
+  minimumMisses = 3,
   contacts = [],
 }) {
   if (!["total3", "prior3"].includes(rule))
     throw Object.assign(new Error("Regra de faltas inválida."), {
       status: 400,
     });
+  if (!Number.isSafeInteger(Number(minimumMisses)) || Number(minimumMisses) < 1 || Number(minimumMisses) > 30)
+    throw Object.assign(new Error("Quantidade mínima de faltas inválida."), { status: 400 });
+  minimumMisses = Number(minimumMisses);
   const patients = new Map(),
     seen = new Set(),
     phones = new Map(contacts.map((p) => [p.external_id, p.phone || null]));
@@ -60,7 +64,7 @@ function buildAbsenceReport({
       prior = misses.filter((row) => dateText(row.service_date) < date);
     if (
       !today.length ||
-      (rule === "total3" ? misses.length < 3 : misses.length < 4)
+      (rule === "total3" ? misses.length < minimumMisses : misses.length < minimumMisses + 1)
     )
       continue;
     const latest = today[today.length - 1];
@@ -92,6 +96,14 @@ function buildAbsenceReport({
         id: row.external_id,
         date: dateText(row.service_date),
         start_at: row.start_at,
+        source_schedule_id: row.schedule_id || null,
+        schedule_ids: [
+          ...new Set(
+            memberships(row)
+              .map((link) => link.id)
+              .filter(Boolean),
+          ),
+        ],
         agenda: [
           ...new Set(
             memberships(row)
@@ -132,6 +144,7 @@ function buildAbsenceReport({
     date,
     historyStart,
     rule,
+    minimumMisses,
     items,
     total: items.length,
     generatedAt: new Date().toISOString(),

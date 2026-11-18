@@ -24,6 +24,7 @@ export function userHome(user: AuthUser | null, includePhysio = true): string {
     ['professionals', '/cadastros/profissionais'], ['procedures', '/cadastros/procedimentos'],
     ['document_templates', '/cadastros/modelos-documentos'],
     ['events', '/eventos/confraternizacao-2026'],
+    ['whatsapp_automation', '/atendimento-whatsapp'],
     ['indicator_panels', '/indicadores/paineis'],
     ['indicator_analysis', '/indicadores/analise-critica'],
   ]

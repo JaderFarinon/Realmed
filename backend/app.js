@@ -42,6 +42,9 @@ function createApp() {
   const patientPortal = require('./routes/patient-portal').createPatientPortal(require('./routes/guide-center').knex)
   app.use('/api/public/patient-portal', patientPortal.publicRouter)
   app.use('/api/patient-portal', patientPortal.privateRouter)
+  const whatsapp = require('./routes/whatsapp').createWhatsAppRouters({ db: require('./routes/guide-center').knex })
+  app.use('/api/integrations/whatsapp/v1', whatsapp.integrationRouter)
+  app.use('/api/whatsapp', whatsapp.adminRouter)
   const live = require('./services/treatmentLiveUpdates').createTreatmentLiveUpdates()
   app.use(live.observe)
   const config = require('./knexfile')[process.env.NODE_ENV || 'development'] || require('./knexfile').development
@@ -89,6 +92,7 @@ async function start() {
     connection.release()
   }
   require('./services/billingCollectorWorker').startWorker(require('./routes/guide-center').knex)
+  require('./services/whatsappCampaignWorker').startWorker(require('./routes/guide-center').knex)
 
   return createApp().listen(PORT, process.env.HOST || '0.0.0.0', () => {
     console.log(`API disponível na porta ${PORT}`)

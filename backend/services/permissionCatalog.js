@@ -2,6 +2,7 @@ const permissionCatalog = [
   ["indicator_panels", "Indicadores — Painéis"],
   ["indicator_analysis", "Indicadores — Análise crítica"],
   ["events", "Eventos — Confirmações"],
+  ["whatsapp_automation", "WhatsApp — Automação e campanhas"],
   ["guide_billing", "Tratamentos — Faturamento por guia"],
   ["billing_dashboard", "Faturamento — Dashboard analítico"],
   ["billing_reports", "Faturamento — Relatórios"],
