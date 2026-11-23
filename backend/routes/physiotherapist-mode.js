@@ -152,6 +152,10 @@ function ownScheduleNames(req,row){
   const allowed=new Map(req.physioSchedules.map(schedule=>[String(schedule.schedule_id),schedule.schedule_name]))
   return [...new Set(memberships(row).filter(link=>allowed.has(String(link.id))).map(link=>allowed.get(String(link.id))))].filter(Boolean).join(' • ')
 }
+function contactFreePatient(source){
+  const patient=StenciMapper.patient(source)
+  return {external_id:patient.external_id,full_name:patient.full_name,cpf:patient.cpf,birth_date:patient.birth_date}
+}
 appRouter.get('/me',(req,res)=>res.json(profile(req)))
 appRouter.post('/session',async(req,res)=>{
   let sid
@@ -189,7 +193,7 @@ appRouter.get('/agenda/:appointmentId',async(req,res)=>{
     await req.revalidatePhysioPreview?.()
     res.json({adminPreview:Boolean(req.physioAdminPreview),appointment,session:session?{...session,items:undefined}:null,date,server_time:new Date(now).toISOString(),
       history:visits.slice(0,20).map(visit=>({id:visit.external_id,date:visit.service_date instanceof Date?visit.service_date.toISOString().slice(0,10):String(visit.service_date).slice(0,10),startAt:visit.start_at,schedule:ownScheduleNames(req,visit),status:visit.status})),hasMoreHistory:visits.length>20,
-      capabilities:{start:false,saveEvolution:false,finish:false},clinicalHistoryAvailable:false})
+      capabilities:{start:false,saveEvolution:false,finish:!req.physioAdminPreview},clinicalHistoryAvailable:true})
   }catch(error){physioError(res,error,'Não foi possível abrir este atendimento. Tente novamente.')}
 })
 async function clinical(req,res,action){
@@ -208,6 +212,7 @@ async function clinical(req,res,action){
 appRouter.get('/agenda/:appointmentId/clinical',(req,res)=>clinical(req,res,'read'));
 appRouter.get('/agenda/:appointmentId/evaluation',(req,res)=>clinical(req,res,'evaluation'));
 appRouter.post('/agenda/:appointmentId/clinical/preview',(req,res)=>clinical(req,res,'preview'));
+appRouter.post('/agenda/:appointmentId/clinical/finish',(req,res)=>clinical(req,res,'finish'));
 appRouter.get('/patients/search',async(req,res)=>{
   const search=String(req.query.search||'').trim()
   if(search.length<2||search.length>180)return res.status(400).json({error:'Digite pelo menos dois caracteres para buscar.'})
@@ -215,7 +220,7 @@ appRouter.get('/patients/search',async(req,res)=>{
     if(!req.physioSchedules.length)return res.json({items:[],hasMore:false})
     const batch=await readStenci(req,[{name:'searchPatients',search,limit:30,offset:0}])
     const result=batch[0]?.value||{items:[],hasMore:false}
-    const patients=(result.items||[]).map(source=>StenciMapper.patient(source))
+    const patients=(result.items||[]).map(contactFreePatient)
     const ids=patients.map(patient=>String(patient.external_id)).filter(Boolean)
     if(!ids.length)return res.json({items:[],hasMore:false})
     const visits=await ownLedger(req).whereIn('patient_external_id',ids)

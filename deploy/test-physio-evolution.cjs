@@ -1,8 +1,8 @@
-// Disposable localhost database and synthetic Stenci responses. No clinical writes.
+// Disposable localhost database and synthetic Stenci responses. No real clinical writes.
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backend/node_modules',name));
 (async()=>{
- const env=dep('dotenv').parse(fs.readFileSync(path.join(root,'backend/.env'))),connection={host:env.DB_HOST,port:Number(env.DB_PORT),user:env.DB_USER,password:env.DB_PASS};
+ const env=dep('dotenv').parse(fs.readFileSync(path.join(root,'backend/.env'))),connection={host:env.DB_HOST,port:Number(env.DB_PORT),user:env.DB_USER,password:env.DB_PASS};process.env.JWT_SECRET=env.JWT_SECRET||'synthetic-test-secret';
  assert.ok(['localhost','127.0.0.1','::1'].includes(connection.host));
  const name='realmed_evolution_verify_'+Date.now(),temp=fs.mkdtempSync(path.join(os.tmpdir(),'realmed-evolution-')),admin=await dep('mysql2/promise').createConnection(connection);let db,created=false;
  try{
@@ -19,13 +19,13 @@ const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backen
   const [otherId]=await db('patients').insert({external_source:'STENCI',external_id:'patient-b',full_name:'Paciente Teste',birth_date:'1980-01-01',phone:''});
   const [guideId]=await db('guide_processes').insert({patient_id:patientId,created_by:userId}),[otherGuide]=await db('guide_processes').insert({patient_id:otherId,created_by:userId});
   await db('physiotherapy_evaluations').insert({guide_process_id:guideId,status:'COMPLETED',chief_complaint:'Sintoma sintético para consulta',responsible_name:'Avaliador teste',evaluation_date:date,created_by:userId,updated_by:userId});
-  const session={mode:'physio-shared',userId,professionalId,stenciUserId:'shared-test'};let validSession=true,current=Date.parse(date+'T13:20:00-03:00'),reads=0,logins=0,logouts=0,clockCalls=0,expire=false;
+  const session={mode:'physio-shared',userId,professionalId,stenciUserId:'shared-test'};let validSession=true,current=Date.parse(date+'T13:20:00-03:00'),reads=0,logins=0,logouts=0,clockCalls=0,expire=false,creates=0,updates=0,remote=null;
   const progress={current:10,total:10,final:true};
   const store={get:()=>validSession?session:null,getCredentials:()=>({username:'shared',password:'synthetic'})};
-  const serviceFactory=()=>({authenticateUser:async()=>{logins++;return{stenci_user_id:'shared-test'}},logout:async()=>{logouts++},physioRead:async options=>{assert.equal(options.scheduleId,scheduleId);reads++;return{slots:[{startDate:date+'T13:00:00-03:00'},{startDate:date+'T13:01:00-03:00'}],items:[{id:'appointment-a',patient_id:'patient-a',patient_name:'Paciente Teste',startDate:date+'T13:00:00-03:00',status:'confirmed',session_progress:progress}]}}});
+  const serviceFactory=()=>({authenticateUser:async()=>{logins++;return{stenci_user_id:'shared-test'}},logout:async()=>{logouts++},physioRead:async options=>{assert.equal(options.scheduleId,scheduleId);reads++;return{slots:[{startDate:date+'T13:00:00-03:00'},{startDate:date+'T13:01:00-03:00'}],items:[{id:'appointment-a',patient_id:'patient-a',patient_name:'Paciente Teste',startDate:date+'T13:00:00-03:00',status:'confirmed',session_progress:progress}]}},physioAppointment:async()=>({id:'appointment-a',patient:{id:'patient-a'},schedule:{id:scheduleId},insurance:{id:'insurance-a'}}),physioDefaultTemplate:async()=>({id:'template-a'}),physioCreateRecord:async body=>{creates++;assert.equal(body.professionalId,'shared-test');return remote={id:'record-a',patientId:'patient-a',status:'pending',startDate:body.startDate,events:[{type:'status',value:'pending'}]}},physioReadRecord:async()=>remote,physioUpdateRecord:async(_id,body)=>{updates++;assert.match(body.anamnesis.inputs.content,/Fisio Teste/);assert.match(body.anamnesis.inputs.content,/CREFITO/);return remote={...remote,...body,patientId:'patient-a',events:[...remote.events,{type:'status',value:body.status}]}}});
   const clinical=require(path.join(root,'backend/services/physioClinical')).createClinicalService({db,sessionStore:store,serviceFactory,configFactory:()=>({branchId:'test'}),now:()=>{clockCalls++;return expire&&clockCalls>1?Date.parse(date+'T13:45:00-03:00'):current}});
   const run=(action='read',body={},overrides={})=>clinical.run({sid:'test',userId,professionalId,date,appointmentId:'appointment-a',action,body,...overrides});
-  const view=await run();assert.equal(view.writeEnabled,false);assert.equal(view.progress.final,true);assert.equal(view.professional.name,'Fisio Teste');assert.equal(logins,logouts);
+  const view=await run();assert.equal(view.writeEnabled,true);assert.equal(view.progress.final,true);assert.equal(view.professional.name,'Fisio Teste');assert.equal(logins,logouts);
   const options=await run('evaluation');assert.deepEqual(options.options.map(v=>v.id),[guideId]);
   const evaluation=await run('evaluation',{processId:guideId});assert.equal(evaluation.evaluation.chief_complaint,'Sintoma sintético para consulta');
   await assert.rejects(()=>run('evaluation',{processId:otherGuide}),{status:404});
@@ -33,7 +33,11 @@ const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backen
   const answers=Object.fromEntries(['arrival','findings','procedures','response','events','guidance','plan','comparison','goals','limitations','outcome'].map(k=>[k,'Dado sintético '+k]));answers.painBefore='3';answers.painAfter='2';
   const preview=await run('preview',{answers,expectedProgress:JSON.stringify(progress),professional_name:'Spoofed'});assert.match(preview.signedText,/Fisio Teste/);assert.ok(!preview.signedText.includes('Spoofed'));assert.match(preview.text,/Sessão 10\/10/);
   await assert.rejects(()=>run('preview',{answers,expectedProgress:'null'}),{code:'PHYSIO_SESSION_PROGRESS_CHANGED'});
-  for(const action of ['start','save','finish'])await assert.rejects(()=>run(action,{text:'Test'}),{code:'PHYSIO_CLINICAL_CONTRACT_PENDING'});
+  for(const action of ['start','save'])await assert.rejects(()=>run(action,{text:'Test'}),{code:'PHYSIO_CLINICAL_CONTRACT_PENDING'});
+  const finished=await run('finish',{text:preview.text,expectedProgress:JSON.stringify(progress)});assert.equal(finished.finished,true);assert.equal(creates,1);assert.equal(updates,2);
+  const stored=await db('physio_evolutions').where({appointment_external_id:'appointment-a'}).first();assert.equal(stored.state,'FINISHED');assert.equal(stored.stenci_record_id,'record-a');assert.equal(stored.snapshot_envelope.includes('Dado sintético'),false);
+  const completedView=await run();assert.match(completedView.evolution.snapshot.text,/Fisio Teste/);await run('finish',{text:preview.text,expectedProgress:JSON.stringify(progress)});assert.equal(creates,1);assert.equal(updates,2);
+  await assert.rejects(()=>run('finish',{text:preview.text+' alterado',expectedProgress:JSON.stringify(progress)}),{code:'PHYSIO_EVOLUTION_IMMUTABLE'});
   await assert.rejects(()=>run('read',{}, {appointmentId:'other'}),{status:404});
   current=Date.parse(date+'T13:45:00-03:00');await assert.rejects(()=>run(),{code:'PHYSIO_OUTSIDE_SESSION'});
   current=Date.parse(date+'T13:20:00-03:00');expire=true;clockCalls=0;await assert.rejects(()=>run('evaluation',{processId:guideId}),{code:'PHYSIO_OUTSIDE_SESSION'});expire=false;
@@ -50,11 +54,12 @@ const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backen
   assert.match((await adminRun('preview',{answers,expectedProgress:JSON.stringify(progress)})).signedText,/Fisio Teste/);
   await assert.rejects(()=>adminRun('evaluation',{processId:otherGuide}),{status:404});
   await assert.rejects(()=>adminRun('read',{}, {appointmentId:'other'}),{status:404});
-  for(const action of ['start','save','finish'])await assert.rejects(()=>adminRun(action,{text:'Test'}),{code:'PHYSIO_CLINICAL_CONTRACT_PENDING'});
+  for(const action of ['start','save'])await assert.rejects(()=>adminRun(action,{text:'Test'}),{code:'PHYSIO_CLINICAL_CONTRACT_PENDING'});
+  await assert.rejects(()=>adminRun('finish',{text:'Test',expectedProgress:JSON.stringify(progress)}),{code:'PHYSIO_PREVIEW_READ_ONLY'});
   await db('users').where({id:adminId}).update({role:'user'});await assert.rejects(()=>adminRun(),{code:'PHYSIO_PREVIEW_UNAVAILABLE'});
   await db('users').where({id:adminId}).update({role:'admin'});await db('professionals').where({id:professionalId}).update({active:0});await assert.rejects(()=>adminRun(),{code:'PHYSIO_PREVIEW_UNAVAILABLE'});
   assert.equal(logins,logouts);
   console.log('PASS administrative clinical preview: time exception, selected professional, patient/cycle scope, role/status revalidation, no writes.');
-  console.log('PASS clinical preparation: counter, final questionnaire, server authorship, patient evaluation isolation, draft excluded, revoked link, before/after session guard, no write contracts enabled, login/logoff. Reads: '+reads);
+  console.log('PASS clinical evolution: counter, questionnaire, individual server signature, immutable/idempotent Stenci finalization, encrypted snapshot, evaluation isolation and session guards. Reads: '+reads);
  }finally{if(db)await db.destroy();if(created)await admin.query('DROP DATABASE ??',[name]);await admin.end();fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error.message);process.exitCode=1});

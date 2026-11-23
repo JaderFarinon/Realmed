@@ -15,7 +15,7 @@ Decisão corrigida em 13/11/2026: a equipe deve abrir a mesma página que o paci
 
 Interface para celular com Início, Agenda, Avaliação e Evolução. Mostra nome, convênio, fisioterapeuta e sessões registradas. Seleciona inicialmente o ciclo não excluído mais recente e permite consultar os demais ciclos do mesmo paciente. Nunca inferir alta, melhora ou conclusão clínica apenas pelas contagens.
 
-Avaliação somente COMPLETED, vinculada ao ciclo escolhido; continuidades exibem seu snapshot inicial. Rascunhos e metadados administrativos não são enviados. Evoluções por atendimento e relatório final permanecem indisponíveis até integrar suas consultas reais.
+Avaliação somente COMPLETED, vinculada ao ciclo escolhido; continuidades exibem seu snapshot inicial. Rascunhos e metadados administrativos não são enviados. Desde 19/11/2026, cada evolução confirmada como `finished` pelo fluxo do tablet aparece nesta aba com data/sessão, texto final e assinatura textual do fisioterapeuta, para consulta pelo paciente e apresentação ao seu médico. O app permite imprimir/salvar em PDF. Nunca expor rascunho, pedido incerto ou evolução de outro paciente. O conteúdo vem de snapshot cifrado gravado apenas após confirmação remota; a conta compartilhada não é usada pela rota pública e nada clínico é persistido no navegador.
 
 Agenda: horários já coletados em `billing_stenci_appointments`, por ID externo Stenci explícito e unidade configurada. Não cruzar por nomes nem inventar associação entre agendamento e guia. Pode incluir outros tratamentos do paciente, com até 20 futuros e 20 anteriores; informar cobertura e última atualização da coleta. Ausência de registros não significa ausência de atendimentos. Sem novas consultas/gravações Stenci.
 

@@ -10,11 +10,17 @@ Validação: deploy/test-physio-shared-access.cjs e deploy/test-physio-evolution
 
 # Modo Fisioterapeuta
 
-## Prévia de evolução, contador Stenci e avaliação — 12/11/2026
+## Pacientes sem informações de contato — 19/11/2026
 
-Ver [EVOLUCAO_FISIOTERAPEUTICA.md](EVOLUCAO_FISIOTERAPEUTICA.md). Agenda/detalhe mostram bundle.current/total; igualdade identifica a última sessão prevista. Questionário diário e reavaliação final geram texto revisável com identificação profissional do vínculo autenticado. Ver Avaliação consulta a avaliação local concluída do paciente/ciclo, em leitura. Rascunho apenas na memória, sem envio. O HAR recebido confirma criação/salvamento/finalização, mas não a retomada do objeto completo; esses comandos permanecem indisponíveis até a captura complementar. A regra anterior de campos clínicos inteiramente desabilitados passa a permitir somente preparação/prévia, preservando vínculo/horário e ausência de persistência clínica.
+O modo fisioterapeuta e sua visualização administrativa não expõem telefone, celular, e-mail, endereço, WhatsApp ou qualquer outro meio de contato do paciente. A restrição é aplicada na API antes da resposta, e não apenas ocultada na interface. Agenda, busca de pacientes e detalhe do atendimento mantêm somente identificação assistencial mínima, convênio, horários, serviços e histórico operacional necessário ao atendimento. Os contratos Stenci podem retornar dados adicionais, mas eles são descartados na projeção específica deste modo. Outros módulos administrativos com permissões próprias não são alterados.
+
+## Prévia de evolução, contador Stenci e avaliação — 19/11/2026
+
+Ver [EVOLUCAO_FISIOTERAPEUTICA.md](EVOLUCAO_FISIOTERAPEUTICA.md). Agenda/detalhe mostram bundle.current/total; igualdade identifica a última sessão prevista. No tablet, o questionário usa três perguntas fechadas por etapa e avança automaticamente após três escolhas, com retorno sempre disponível. São três etapas na sessão rotineira e uma quarta reavaliação na última sessão prevista. A versão final é determinística, abre para edição e recebe no servidor nome/CREFITO/UF do fisioterapeuta autenticado, embora a conexão Stenci seja compartilhada. Confirmar cria e finaliza um prontuário imutável no Stenci; duplo envio reutiliza a associação única do agendamento. Somente após `finished` o snapshot cifrado fica disponível em consulta e no app do paciente. Rascunho permanece apenas na memória.
 
 ## Sessões com encaixes isolados — 12/11/2026
+
+Atualizado em 19/11/2026: os horários/posições retornados pelo calendário servem exclusivamente para detectar os limites das sessões. A lista de pacientes é independente e reúne todos os agendamentos retornados pelo atendimento cujo início esteja dentro da janela detectada, inclusive encaixes e quantidades acima de seis. Esses pacientes adicionais não criam, encurtam ou estendem sessões; o número de posições usado para reconhecer um bloco não é limite de pacientes. `/v1/calendar` continua sendo a fonte das posições e `/v1/calendar/attendances`, restrito à mesma agenda/data e associado por agendamento/paciente/agenda, completa a lista de pacientes.
 
 Os limites passam a considerar blocos de ao menos duas posições distintas consecutivas de um minuto, da mesma agenda/data, incluindo vagas efetivamente retornadas. Horários isolados entre esses blocos são encaixes dentro da janela e não criam uma divisão. A sessão termina no início do próximo bloco consecutivo; o último bloco estima seu fim pelo intervalo entre os dois últimos blocos, ou 45 minutos quando não há intervalo conhecido. Encaixes não participam desse cálculo.
 
@@ -62,7 +68,7 @@ Paleta da legenda enviada pelo usuário: scheduled/agendado #F1E87A; cancelament
 
 Toque no paciente abre `/modo-fisio/atendimentos/:id?date=...`. GET `/api/physio/agenda/:appointmentId` consulta exclusivamente agendas vinculadas e rejeita IDs externos ao recorte; retorna identificação, nascimento informado, convênio, grupo/posição, serviços e até 20 atendimentos operacionais próprios. Esse histórico não é evolução clínica. Alergias não consultadas são identificadas como tal.
 
-Tela tablet com nome destacado, resumo, ficha Anamnese/evolução e histórico. A pedido do usuário, preparar a interface enquanto ele envia o HAR de gravação. Iniciar atendimento, salvar rascunho, finalizar e campos clínicos ficam indisponíveis, com indicação permanente de consulta. Não criar cronômetro, estado clínico ou sucesso fictício. Não escrever no Stenci, banco Realmed ou armazenamento clínico no navegador. Os dados de evolução, alergias e comandos de gravação dependem dos próximos contratos. Voltar/avançar usa navegador; data da agenda preservada na URL. Troca rápida de data cancela/descarta respostas anteriores, sem ciclo de recarga.
+Tela tablet com nome destacado, resumo, ficha Anamnese/evolução e histórico. O questionário prepara a evolução em memória; Confirmar e finalizar cria e encerra o prontuário no Stenci com assinatura do fisioterapeuta individual. Não há cronômetro, pausa, exclusão ou salvamento intermediário fictício. Somente o texto confirmado como `finished` recebe snapshot cifrado no Realmed para consulta; nada clínico é gravado no armazenamento do navegador. Alergias e demais comandos continuam dependentes de contratos próprios. Voltar/avançar usa navegador; data da agenda preservada na URL. Troca rápida de data cancela/descarta respostas anteriores, sem ciclo de recarga.
 
 Testes: `backend/test/physio-agenda.test.js`, `deploy/test-physio-shared-access.cjs` e `frontend/scripts/verify-physio-agenda.cjs`, cobrindo intervalos variáveis, vagas intermediárias, último grupo, horários UTC, duplicidade, cores, escopo no servidor, dispositivos e ausência de gravações.
 
@@ -126,7 +132,7 @@ Para desenvolver o fluxo de login e a montagem das telas antes de configurar a c
 
 ## Operações Stenci ainda pendentes de contrato
 
-Este modo não inventa contratos para ler/gravar evolução, finalizar atendimento ou alterar o status de agenda. Não exibir essas ações como concluídas até receber e implementar os endpoints e respectivos corpos/respostas fornecidos pelo usuário.
+Evolução textual agora usa os contratos confirmados de criar, atualizar, finalizar, listar e consultar prontuários. Continuam pendentes contratos para pausar/apagar prontuário, alergias, outros comandos clínicos e alterações independentes do status da agenda; não inventar essas operações.
 
 ## Configuração de ambiente
 

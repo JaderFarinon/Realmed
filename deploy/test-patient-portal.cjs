@@ -8,17 +8,20 @@ const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backen
   await admin.query('CREATE DATABASE ??',[name]);created=true;
   const envPath=path.join(temp,'.env');fs.writeFileSync(envPath,Object.entries({...env,DB_NAME:name,NODE_ENV:'test',JWT_SECRET:'synthetic-portal-test',STENCI_BRANCH_ID:'test-branch',PERMISSIONS_ENABLED:'true'}).map(([k,v])=>k+'='+JSON.stringify(String(v))).join('\n'));process.env.DOTENV_CONFIG_PATH=envPath;
   db=dep('knex')({client:'mysql2',connection:{...connection,database:name}});await db.migrate.latest({directory:path.join(root,'backend/migrations')});pool=require(path.join(root,'backend/db'));
-  const [person]=await db('people').insert({full_name:'Equipe Teste'}),[user]=await db('users').insert({username:'patient-portal',person_id:person,role:'user',status:'active'});
+  const [person]=await db('people').insert({full_name:'Equipe Teste'}),[user]=await db('users').insert({username:'patient-portal',person_id:person,role:'user',status:'active'}),[professional]=await db('professionals').insert({full_name:'Fisio Teste',type:'PHYSIOTHERAPIST',council:'CREFITO',council_number:'TEST-1',state:'PR'});
   const [patient]=await db('patients').insert({full_name:'Paciente Sintético',external_source:'STENCI',external_id:'patient-a'}),[other]=await db('patients').insert({full_name:'Outro Paciente',external_source:'STENCI',external_id:'patient-b'});
   const [guide]=await db('guide_processes').insert({patient_id:patient,created_by:user}),[continuation]=await db('guide_processes').insert({patient_id:patient,created_by:user,continuation_of_id:guide,treatment_root_id:guide,guide_number:2}),[otherGuide]=await db('guide_processes').insert({patient_id:other,created_by:user});
   await db('physiotherapy_evaluations').insert([{guide_process_id:guide,status:'COMPLETED',chief_complaint:'Avaliação sintética',created_by:user,updated_by:user},{guide_process_id:continuation,status:'DRAFT',chief_complaint:'DRAFT PRIVATE',created_by:user,updated_by:user},{guide_process_id:otherGuide,status:'COMPLETED',chief_complaint:'OTHER PRIVATE',created_by:user,updated_by:user}]);
+  const snapshotService=require(path.join(root,'backend/services/physioEvolutionSnapshot')),snapshotRow={branch_id:'test-branch',patient_external_id:'patient-a',stenci_record_id:'record-a'};
+  const snapshot=snapshotService.seal({text:'Evolução sintética finalizada\n\nFisioterapeuta responsável: Fisio Teste\nCREFITO: TEST-1 — PR',progress:{current:1,total:10,final:false},professional:{name:'Fisio Teste',crefito:'TEST-1',state:'PR'}},snapshotRow);
+  await db('physio_evolutions').insert({...snapshotRow,appointment_external_id:'appointment-a',schedule_external_id:'schedule-a',professional_id:professional,created_by:user,stenci_template_id:'template-a',state:'FINISHED',content_hash:'a'.repeat(64),snapshot_envelope:snapshot,service_date:'2026-11-12',finalized_at:new Date()});
   const {patientAccess,patientPortal}=require(path.join(root,'backend/services/patientPortal'));
   const links=await Promise.all([patientAccess(db,guide,user),patientAccess(db,continuation,user),patientAccess(db,guide,user)]);
   assert.equal(new Set(links.map(v=>v.path)).size,1,'Stable per patient across cycles/concurrency');
   const code=links[0].path.split('/').pop();assert.equal(code.length,43);assert.equal(Number((await db('patient_portal_access').count({n:'*'}).first()).n),1);
   const persisted=await db('patient_portal_access').first();assert.ok(!JSON.stringify(persisted).includes(code));
   assert.equal(Number((await db('guide_process_history').where({action:'PATIENT_PORTAL_ACCESS_CREATED'}).count({n:'*'}).first()).n),1);
-  const view=await patientPortal(db,code);assert.equal(view.treatment.id,continuation);assert.equal(view.evaluation,null);assert.equal(view.treatments.length,2);assert.equal(view.preview,false);
+  const view=await patientPortal(db,code);assert.equal(view.treatment.id,continuation);assert.equal(view.evaluation,null);assert.equal(view.treatments.length,2);assert.equal(view.preview,false);assert.equal(view.evolutions.length,1);assert.match(view.evolutions[0].text,/Fisio Teste/);assert.equal(JSON.stringify(await db('physio_evolutions').first()).includes('Evolução sintética'),false);
   assert.equal((await patientPortal(db,code,guide)).evaluation.chief_complaint,'Avaliação sintética');
   await assert.rejects(patientPortal(db,code,otherGuide),e=>e.status===404);await assert.rejects(patientPortal(db,'bad'),e=>e.status===404);
   assert.notEqual((await patientAccess(db,otherGuide,user)).path,links[0].path);
@@ -32,6 +35,6 @@ const root=path.resolve(__dirname,'..'),dep=name=>require(path.join(root,'backen
   await db('guide_processes').where({id:continuation}).update({deleted_at:new Date()});assert.equal((await patientPortal(db,code)).treatment.id,guide);await assert.rejects(patientPortal(db,code,continuation),e=>e.status===404);
   await db('patient_portal_access').where({patient_id:patient}).update({revoked_at:new Date()});assert.equal((await post('/public/view',{code})).status,404);await assert.rejects(patientAccess(db,guide,user),e=>e.status===410);
   assert.equal(Number((await db('treatment_edit_locks').count({n:'*'}).first()).n),0);assert.equal(Number((await db('guide_processes').count({n:'*'}).first()).n),3);
-  console.log('PASS patient app: same stable link across concurrent requests/continuations, encrypted at rest, audit without code, anonymous access, exact patient scope, draft/deletion/revocation, view permission/current role, no clinical writes or edit locks.');
+  console.log('PASS patient app: stable link, finalized encrypted evolution with individual signature, audit without code, anonymous exact-patient scope, draft/deletion/revocation and no edit locks.');
  }finally{if(server)await new Promise(resolve=>server.close(resolve));if(pool)await pool.end();if(db)await db.destroy();if(created)await admin.query('DROP DATABASE ??',[name]);await admin.end();assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir())+path.sep+'realmed-patient-portal-'));fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error.message);process.exitCode=1});

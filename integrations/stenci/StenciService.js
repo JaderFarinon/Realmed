@@ -48,6 +48,11 @@ class StenciService {
   async physioRead(options) {
     return require('./physioRead').physioRead(this.client, options);
   }
+  physioAppointment(appointmentId) { return require('./physioClinical').appointment(this.client, appointmentId); }
+  physioDefaultTemplate() { return require('./physioClinical').defaultTemplate(this.client); }
+  physioCreateRecord(body) { return require('./physioClinical').createRecord(this.client, body); }
+  physioUpdateRecord(recordId, body) { return require('./physioClinical').updateRecord(this.client, recordId, body); }
+  physioReadRecord(recordId) { return require('./physioClinical').readRecord(this.client, recordId); }
   async listInsurancePlans() {
     return this.list("/v1/insurance-plans", {
       limit: 0,

@@ -1,5 +1,6 @@
 const { serialize } = require('./evaluationValidation');
 const { localStart } = require('./physiotherapyRotation');
+const { listForPatient } = require('./physioEvolutionSnapshot');
 const evaluationFields = [
   'evaluation_date', 'responsible_name', 'responsible_crefito', 'chief_complaint',
   'functional_limitations', 'physical_exam', 'pain_score', 'pain_location',
@@ -58,6 +59,7 @@ async function readPatientPreview(db, input, { now = Date.now(), branchId = proc
     const upcoming = mapped.filter(item => item.upcoming).sort((a, b) => key(a).localeCompare(key(b)));
     const history = mapped.filter(item => !item.upcoming).sort((a, b) => key(b).localeCompare(key(a)));
     const dateOnly = value => !value ? null : value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+    const evolutions = linked ? await listForPatient(trx, branchId, process.external_id) : [];
     return {
       preview: true, serverNow: new Date(now).toISOString(), patient: { name: process.full_name },
       treatment: {
@@ -68,9 +70,10 @@ async function readPatientPreview(db, input, { now = Date.now(), branchId = proc
         status: process.treatment_status,
       },
       evaluation: evaluationForPatient(evaluation),
+      evolutions,
       agenda: { linked, upcoming: upcoming.slice(0, 20), history: history.slice(0, 20), limited: appointments.length > 500 || upcoming.length > 20 || history.length > 20,
         coverage: coverage?.from ? { from: dateOnly(coverage.from), to: dateOnly(coverage.to), updatedAt: coverage.updatedAt } : null },
-      capabilities: { evolutions: false, dischargeReport: false, publicAccess: false, booking: false },
+      capabilities: { evolutions: true, dischargeReport: false, publicAccess: false, booking: false },
     };
   });
 }

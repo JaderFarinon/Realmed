@@ -30,12 +30,23 @@ function groupSessions(snapshots, date) {
   const sessions = [];
   for (const snapshot of snapshots) {
     const rows = snapshot.items || [];
-    const minutes = [...new Set([...(snapshot.slots || []), ...rows].map(row => localStart(row.startDate)).filter(start => start?.date === date).map(start => start.minute))].sort((a, b) => a - b);
+    // Calendar positions delimit sessions. Patient rows are a separate source:
+    // fit-ins inside a detected window must be displayed without creating a new
+    // boundary merely because six or more extra appointments are consecutive.
+    const boundaryRows = snapshot.slots?.length ? snapshot.slots : rows;
+    const minutes = [...new Set(boundaryRows.map(row => localStart(row.startDate)).filter(start => start?.date === date).map(start => start.minute))].sort((a, b) => a - b);
     const groups = [];
     for (const minute of minutes) {
       const previous = groups[groups.length - 1];
       if (!previous || minute > previous.last + 1) groups.push({ start: minute, last: minute });
       else previous.last = minute;
+    }
+    if (snapshot.slots?.length) {
+      const boundaryMinutes = new Set(minutes);
+      for (const minute of [...new Set(rows.map(row => localStart(row.startDate)).filter(start => start?.date === date).map(start => start.minute))]) {
+        if (!boundaryMinutes.has(minute)) groups.push({ start: minute, last: minute });
+      }
+      groups.sort((a, b) => a.start - b.start);
     }
     sessionWindows(groups).forEach(group => {
       const end = group.end;

@@ -28,7 +28,7 @@ async function main(){
           return{slots,items:slots.slice(2).map((slot,index)=>({...slot,id:'fit-test-'+index,patient_id:'patient-fit-'+index,patient_name:'Paciente fictício '+index,status:'scheduled',expenses:[]}))};
         }
         return{slots:Array.from({length:6},(_,i)=>({startDate:op.date+`T12:0${i}:00Z`})),items:[{id:'today-'+op.scheduleId,patient_id:op.scheduleId===scheduleA?'patient-new':'patient-b',patient_name:op.scheduleId===scheduleA?'Paciente novo A':'Paciente B',startDate:op.date+'T12:05:00Z',status:'scheduled',expenses:[]}]}},
-      searchPatients:async()=>({items:[{id:'patient-a',name:'Paciente A'},{id:'patient-b',name:'Paciente B'},{id:'patient-new',name:'Paciente novo A'}],hasMore:false}),
+      searchPatients:async()=>({items:[{id:'patient-a',name:'Paciente A',cellphone:'11999999999',email:'paciente-a@example.test',addresses:[{street:'Rua privada A'}]},{id:'patient-b',name:'Paciente B',phone:'11888888888',email:'paciente-b@example.test'},{id:'patient-new',name:'Paciente novo A',cellphone:'11777777777',addresses:[{street:'Rua privada B'}]}],hasMore:false}),
     });
     const shared=require(path.join(root,'backend/services/physioStenciSession')),createShared=shared.createPhysioSession;
     shared.createPhysioSession=options=>createShared({...options,env:{STENCI_FISIO_USERNAME:'shared-test',STENCI_FISIO_PASSWORD:'shared-test-password'},configFactory,serviceFactory});
@@ -76,11 +76,13 @@ async function main(){
     await db('billing_stenci_appointments').insert({...visit,external_id:'visit-shared',patient_external_id:'patient-a',schedule_id:scheduleB,schedule_name:'Agenda B',schedule_memberships:JSON.stringify([{id:scheduleB,name:'Agenda B'},{id:scheduleA,name:'Agenda A'}])});
     const patients=await call('GET','/physio/patients/search?search=Paciente',undefined,token);
     assert.deepEqual(patients.items.map(p=>p.external_id).sort(),['patient-a','patient-new']);assert.deepEqual(patients.items[0].appointments.map(a=>a.schedule),['Agenda A','Agenda A']);
+    assert.ok(!JSON.stringify(patients).includes('11999999999'));assert.ok(!JSON.stringify(patients).includes('@example.test'));assert.ok(!JSON.stringify(patients).includes('Rua privada'));
+    for(const patient of patients.items)assert.deepEqual(Object.keys(patient).sort(),['appointments','birth_date','cpf','external_id','full_name']);
     const production=await call('GET','/physio/production?start=2026-11-01&end=2026-11-30',undefined,token);assert.equal(production.totals.appointments,2);
     assert.equal(agenda.sessions.length,1);assert.equal(agenda.sessions[0].start_time,'09:00');assert.equal(agenda.sessions[0].end_time,'09:45');
     await db('billing_stenci_appointments').insert({...visit,external_id:'private-patient-new',patient_external_id:'patient-new',schedule_id:scheduleB,schedule_name:'Agenda B'});
     const detail=await call('GET',`/physio/agenda/today-${scheduleA}?date=2026-11-11`,undefined,token);
-    assert.equal(detail.appointment.patient_id,'patient-new');assert.deepEqual(detail.history,[]);assert.deepEqual(detail.capabilities,{start:false,saveEvolution:false,finish:false});assert.equal(detail.clinicalHistoryAvailable,false);
+    assert.equal(detail.appointment.patient_id,'patient-new');assert.deepEqual(detail.history,[]);assert.deepEqual(detail.capabilities,{start:false,saveEvolution:false,finish:true});assert.equal(detail.clinicalHistoryAvailable,true);
     assert.equal(detail.server_time,'2026-11-11T12:00:00.000Z');assert.equal(detail.session.end_minute,585);
     accessNow=Date.parse('2026-11-11T11:59:59.999Z');
     const outside=await call('GET',`/physio/agenda/today-${scheduleA}?date=2026-11-11&now=2026-11-11T12:15:00Z&server_time=2026-11-11T12:15:00Z`,undefined,token,409);

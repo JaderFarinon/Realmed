@@ -52,6 +52,16 @@ test('16:33 fit-in belongs to the 16:15 block and does not close attendance at 1
  assert.equal(sessionAccess(sessions[1],date,Date.parse(at('17:00'))),'current');
 });
 
+test('patient source can exceed six without creating session boundaries',()=>{
+ const boundary=['13:00','13:01','13:02','13:03','13:04','13:05','13:45','13:46','13:47','13:48','13:49','13:50'];
+ const base=boundary.slice(0,6).map((time,index)=>appointment('base-'+index,time));
+ const fits=['13:12','13:13','13:14','13:15','13:16','13:17','13:18'].map((time,index)=>appointment('fit-'+index,time));
+ const next=appointment('next','13:45');
+ const sessions=groupSessions([snapshot(boundary,[...base,...fits,next])],date);
+ assert.deepEqual(sessions.map(s=>[s.start_time,s.end_time,s.items.length]),[['13:00','13:45',13],['13:45','14:30',1]]);
+ assert.deepEqual(sessions[0].items.map(item=>item.id),[...base,...fits].map(item=>item.id));
+});
+
 test('isolated appointments never change the final estimate from consecutive blocks',()=>{
  for(const [previous,expected,source] of [[['15:30','15:31'],'17:00','previous_interval'],[['15:15','15:16'],'17:15','previous_interval'],[[],'17:00','default_45']]){
   const slots=[...previous,'16:15','16:16','16:17','16:18','16:19','16:20'];
